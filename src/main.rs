@@ -102,19 +102,14 @@ fn execute_code(code: &str) -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn execute_code_with_interpreter(interpreter: &mut Interpreter, code: &str) -> Result<(), Box<dyn std::error::Error>> {
-    // Лексический анализ
     let mut lexer = Lexer::new(code.to_string());
     let tokens = lexer.tokenize();
-
-    // Синтаксический анализ
+    
     let mut parser = GoidaParser::new(tokens);
     let program = parser.parse().map_err(|e| match e {
         ParseError::UnexpectedToken(msg) => format!("Синтаксическая ошибка: {}", msg),
-        ParseError::UnexpectedEndOfFile => "Неожиданный конец файла".to_string(),
-        ParseError::InvalidSyntax(msg) => format!("Неверный синтаксис: {}", msg),
     })?;
-
-    // Выполнение
+    
     interpreter.interpret(program).map_err(|e| match e {
         RuntimeError::UndefinedVariable(name) => format!("Неопределенная переменная: {}", name),
         RuntimeError::UndefinedFunction(name) => format!("Неопределенная функция: {}", name),

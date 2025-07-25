@@ -1,58 +1,58 @@
 #[derive(Debug, Clone, PartialEq)]
 pub enum Token {
     // Ключевые слова
-    Пусть,      // let
-    Если,       // if
-    Иначе,      // else
-    Пока,       // while
-    Для,        // for
-    Функция,    // function
-    Вернуть,    // return
-    Число,      // int/number type
-    Текст,      // string type
-    Логический, // bool type
-    Истина,     // true
-    Ложь,       // false
-    Печать,     // print
-    Ввод,       // input
-    
+    Let,      // let
+    If,       // if
+    Else,     // else
+    While,    // while
+    For,      // for
+    Function, // function
+    Return,   // return
+    Number,   // int/number type
+    Text,     // string type
+    Boolean,  // bool type
+    True,     // true
+    False,    // false
+    Print,    // print
+    Input,    // input
+
     // Литералы
-    ЧисловойЛитерал(i64),
-    ТекстовыйЛитерал(String),
-    Идентификатор(String),
-    
+    NumericalLiteral(i64),
+    TextLiteral(String),
+    Identifier(String),
+
     // Операторы
-    Плюс,           // +
-    Минус,          // -
-    Умножить,       // *
-    Разделить,      // /
-    Остаток,        // %
-    Равно,          // ==
-    НеРавно,        // !=
-    Больше,         // >
-    Меньше,         // <
-    БольшеРавно,    // >=
-    МеньшеРавно,    // <=
-    И,              // &&
-    Или,            // ||
-    Не,             // !
-    Присвоить,      // =
-    
+    Plus,      // +
+    Minus,     // -
+    Multiply,  // *
+    Divide,    // /
+    Remainder, // %
+    Equal,     // ==
+    Unequal,   // !=
+    More,      // >
+    Less,      // <
+    MoreEqual, // >=
+    LessEqual, // <=
+    And,       // &&
+    Or,        // ||
+    Not,       // !
+    Assign,    // =
+
     // Пунктуация
-    ЛеваяСкобка,    // (
-    ПраваяСкобка,   // )
-    ЛеваяФигурная,  // {
-    ПраваяФигурная, // }
-    ЛеваяКвадратная, // [
-    ПраваяКвадратная, // ]
-    ТочкаСЗапятой,  // ;
-    Запятая,        // ,
-    Точка,          // .
-    Двоеточие,      // :
-    
+    LeftParentheses,  // (
+    RightParentheses, // )
+    LeftBrace,        // {
+    RightBrace,       // }
+    LeftBracket,      // [
+    RightBracket,     // ]
+    SemicolonPoint,   // ;
+    Comma,            // ,
+    Point,            // .
+    Colon,            // :
+
     // Специальные
-    КонецФайла,
-    НоваяСтрока,
+    EndFile,
+    NewLine,
 }
 
 pub struct Lexer {
@@ -65,23 +65,23 @@ impl Lexer {
     pub fn new(input: String) -> Self {
         let chars: Vec<char> = input.chars().collect();
         let current_char = chars.get(0).copied();
-        
+
         Lexer {
             input: chars,
             position: 0,
             current_char,
         }
     }
-    
+
     fn advance(&mut self) {
         self.position += 1;
         self.current_char = self.input.get(self.position).copied();
     }
-    
+
     fn peek(&self) -> Option<char> {
         self.input.get(self.position + 1).copied()
     }
-    
+
     fn skip_whitespace(&mut self) {
         while let Some(ch) = self.current_char {
             if ch.is_whitespace() && ch != '\n' {
@@ -91,10 +91,10 @@ impl Lexer {
             }
         }
     }
-    
+
     fn read_number(&mut self) -> Token {
         let mut number = String::new();
-        
+
         while let Some(ch) = self.current_char {
             if ch.is_ascii_digit() {
                 number.push(ch);
@@ -103,17 +103,17 @@ impl Lexer {
                 break;
             }
         }
-        
-        Token::ЧисловойЛитерал(number.parse().unwrap_or(0))
+
+        Token::NumericalLiteral(number.parse().unwrap_or(0))
     }
-    
+
     fn read_string(&mut self) -> Token {
         let mut string = String::new();
-        self.advance(); // Пропускаем открывающую кавычку
-        
+        self.advance();
+
         while let Some(ch) = self.current_char {
             if ch == '"' {
-                self.advance(); // Пропускаем закрывающую кавычку
+                self.advance();
                 break;
             }
             if ch == '\\' {
@@ -132,13 +132,13 @@ impl Lexer {
             }
             self.advance();
         }
-        
-        Token::ТекстовыйЛитерал(string)
+
+        Token::TextLiteral(string)
     }
-    
+
     fn read_identifier(&mut self) -> Token {
         let mut identifier = String::new();
-        
+
         while let Some(ch) = self.current_char {
             if ch.is_alphabetic() || ch == '_' || ch.is_numeric() {
                 identifier.push(ch);
@@ -147,72 +147,70 @@ impl Lexer {
                 break;
             }
         }
-        
-        // Проверяем ключевые слова
+
         match identifier.as_str() {
-            "пусть" => Token::Пусть,
-            "если" => Token::Если,
-            "иначе" => Token::Иначе,
-            "пока" => Token::Пока,
-            "для" => Token::Для,
-            "функция" => Token::Функция,
-            "вернуть" => Token::Вернуть,
-            "число" => Token::Число,
-            "текст" => Token::Текст,
-            "логический" => Token::Логический,
-            "истина" => Token::Истина,
-            "ложь" => Token::Ложь,
-            "печать" => Token::Печать,
-            "ввод" => Token::Ввод,
-            _ => Token::Идентификатор(identifier),
+            "пусть" => Token::Let,
+            "если" => Token::If,
+            "иначе" => Token::Else,
+            "пока" => Token::While,
+            "для" => Token::For,
+            "функция" => Token::Function,
+            "вернуть" => Token::Return,
+            "число" => Token::Number,
+            "текст" => Token::Text,
+            "логический" => Token::Boolean,
+            "истина" => Token::True,
+            "ложь" => Token::False,
+            "печать" => Token::Print,
+            "ввод" => Token::Input,
+            _ => Token::Identifier(identifier),
         }
     }
-    
+
     pub fn next_token(&mut self) -> Token {
         loop {
             match self.current_char {
-                None => return Token::КонецФайла,
-                
+                None => return Token::EndFile,
+
                 Some(ch) if ch.is_whitespace() && ch != '\n' => {
                     self.skip_whitespace();
                     continue;
                 }
-                
+
                 Some('\n') => {
                     self.advance();
-                    return Token::НоваяСтрока;
+                    return Token::NewLine;
                 }
-                
+
                 Some(ch) if ch.is_ascii_digit() => {
                     return self.read_number();
                 }
-                
+
                 Some('"') => {
                     return self.read_string();
                 }
-                
+
                 Some(ch) if ch.is_alphabetic() || ch == '_' => {
                     return self.read_identifier();
                 }
-                
+
                 Some('+') => {
                     self.advance();
-                    return Token::Плюс;
+                    return Token::Plus;
                 }
-                
+
                 Some('-') => {
                     self.advance();
-                    return Token::Минус;
+                    return Token::Minus;
                 }
-                
+
                 Some('*') => {
                     self.advance();
-                    return Token::Умножить;
+                    return Token::Multiply;
                 }
-                
+
                 Some('/') => {
                     if self.peek() == Some('/') {
-                        // Однострочный комментарий
                         self.advance();
                         self.advance();
                         while let Some(ch) = self.current_char {
@@ -224,155 +222,155 @@ impl Lexer {
                         continue;
                     } else {
                         self.advance();
-                        return Token::Разделить;
+                        return Token::Divide;
                     }
                 }
-                
+
                 Some('%') => {
                     self.advance();
-                    return Token::Остаток;
+                    return Token::Remainder;
                 }
-                
+
                 Some('=') => {
                     if self.peek() == Some('=') {
                         self.advance();
                         self.advance();
-                        return Token::Равно;
+                        return Token::Equal;
                     } else {
                         self.advance();
-                        return Token::Присвоить;
+                        return Token::Assign;
                     }
                 }
-                
+
                 Some('!') => {
                     if self.peek() == Some('=') {
                         self.advance();
                         self.advance();
-                        return Token::НеРавно;
+                        return Token::Unequal;
                     } else {
                         self.advance();
-                        return Token::Не;
+                        return Token::Not;
                     }
                 }
-                
+
                 Some('>') => {
                     if self.peek() == Some('=') {
                         self.advance();
                         self.advance();
-                        return Token::БольшеРавно;
+                        return Token::MoreEqual;
                     } else {
                         self.advance();
-                        return Token::Больше;
+                        return Token::More;
                     }
                 }
-                
+
                 Some('<') => {
                     if self.peek() == Some('=') {
                         self.advance();
                         self.advance();
-                        return Token::МеньшеРавно;
+                        return Token::LessEqual;
                     } else {
                         self.advance();
-                        return Token::Меньше;
+                        return Token::Less;
                     }
                 }
-                
+
                 Some('&') => {
                     if self.peek() == Some('&') {
                         self.advance();
                         self.advance();
-                        return Token::И;
+                        return Token::And;
                     } else {
                         self.advance();
-                        continue; // Пропускаем одиночный &
+                        continue;
                     }
                 }
-                
+
                 Some('|') => {
                     if self.peek() == Some('|') {
                         self.advance();
                         self.advance();
-                        return Token::Или;
+                        return Token::Or;
                     } else {
                         self.advance();
-                        continue; // Пропускаем одиночный |
+                        continue;
                     }
                 }
-                
+
                 Some('(') => {
                     self.advance();
-                    return Token::ЛеваяСкобка;
+                    return Token::LeftParentheses;
                 }
-                
+
                 Some(')') => {
                     self.advance();
-                    return Token::ПраваяСкобка;
+                    return Token::RightParentheses;
                 }
-                
+
                 Some('{') => {
                     self.advance();
-                    return Token::ЛеваяФигурная;
+                    return Token::LeftBrace;
                 }
-                
+
                 Some('}') => {
                     self.advance();
-                    return Token::ПраваяФигурная;
+                    return Token::RightBrace;
                 }
-                
+
                 Some('[') => {
                     self.advance();
-                    return Token::ЛеваяКвадратная;
+                    return Token::LeftBracket;
                 }
-                
+
                 Some(']') => {
                     self.advance();
-                    return Token::ПраваяКвадратная;
+                    return Token::RightBracket;
                 }
-                
+
                 Some(';') => {
                     self.advance();
-                    return Token::ТочкаСЗапятой;
+                    return Token::SemicolonPoint;
                 }
-                
+
                 Some(',') => {
                     self.advance();
-                    return Token::Запятая;
+                    return Token::Comma;
                 }
-                
+
                 Some('.') => {
                     self.advance();
-                    return Token::Точка;
+                    return Token::Point;
                 }
-                
+
                 Some(':') => {
                     self.advance();
-                    return Token::Двоеточие;
+                    return Token::Colon;
                 }
-                
+
                 Some(_) => {
                     self.advance();
-                    continue; // Пропускаем неизвестные символы
+                    continue;
                 }
             }
         }
     }
-    
+
     pub fn tokenize(&mut self) -> Vec<Token> {
         let mut tokens = Vec::new();
-        
+
         loop {
             let token = self.next_token();
-            let is_eof = matches!(token, Token::КонецФайла);
-            
-            if !matches!(token, Token::НоваяСтрока) {
+            let is_eof = matches!(token, Token::EndFile);
+
+            if !matches!(token, Token::NewLine) {
                 tokens.push(token);
             }
-            
+
             if is_eof {
                 break;
             }
         }
-        
+
         tokens
     }
 }

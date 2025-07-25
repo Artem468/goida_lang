@@ -1,106 +1,106 @@
 #[derive(Debug, Clone, PartialEq)]
 pub enum DataType {
-    Число,
-    Текст,
-    Логический,
+    Number,
+    Text,
+    Boolean,
 }
 
 #[derive(Debug, Clone)]
 pub enum Expression {
-    Число(i64),
-    Текст(String),
-    Логический(bool),
-    Идентификатор(String),
-    БинарнаяОперация {
-        левый: Box<Expression>,
-        оператор: BinaryOperator,
-        правый: Box<Expression>,
+    Number(i64),
+    Text(String),
+    Boolean(bool),
+    Identifier(String),
+    BinaryOperation {
+        left: Box<Expression>,
+        operator: BinaryOperator,
+        right: Box<Expression>,
     },
-    УнарнаяОперация {
-        оператор: UnaryOperator,
-        операнд: Box<Expression>,
+    UnaryOperation {
+        operator: UnaryOperator,
+        operand: Box<Expression>,
     },
-    ВызовФункции {
-        имя: String,
-        аргументы: Vec<Expression>,
+    CallingFunction {
+        name: String,
+        arguments: Vec<Expression>,
     },
-    ИндексДоступ {
-        объект: Box<Expression>,
-        индекс: Box<Expression>,
+    AccessIndex {
+        object: Box<Expression>,
+        index: Box<Expression>,
     },
 }
 
 #[derive(Debug, Clone)]
 pub enum BinaryOperator {
-    Плюс,
-    Минус,
-    Умножить,
-    Разделить,
-    Остаток,
-    Равно,
-    НеРавно,
-    Больше,
-    Меньше,
-    БольшеРавно,
-    МеньшеРавно,
-    И,
-    Или,
+    Plus,
+    Minus,
+    Multiply,
+    Divide,
+    Remainder,
+    Equal,
+    Unequal,
+    More,
+    Less,
+    MoreEqual,
+    LessEqual,
+    And,
+    Or,
 }
 
 #[derive(Debug, Clone)]
 pub enum UnaryOperator {
-    Минус,
-    Не,
+    Negative,
+    Not,
 }
 
 #[derive(Debug, Clone)]
 pub enum Statement {
-    Объявление {
-        имя: String,
-        тип: Option<DataType>,
-        значение: Option<Expression>,
+    Declaration {
+        name: String,
+        type_of: Option<DataType>,
+        value: Option<Expression>,
     },
-    Присваивание {
-        имя: String,
-        значение: Expression,
+    Assignment {
+        name: String,
+        value: Expression,
     },
-    Если {
-        условие: Expression,
-        тело: Vec<Statement>,
-        иначе: Option<Vec<Statement>>,
+    If {
+        condition: Expression,
+        body: Vec<Statement>,
+        another: Option<Vec<Statement>>,
     },
-    Пока {
-        условие: Expression,
-        тело: Vec<Statement>,
+    While {
+        condition: Expression,
+        body: Vec<Statement>,
     },
-    Для {
-        переменная: String,
-        начало: Expression,
-        конец: Expression,
-        тело: Vec<Statement>,
+    For {
+        variable: String,
+        start: Expression,
+        end: Expression,
+        body: Vec<Statement>,
     },
-    Возврат(Option<Expression>),
-    Выражение(Expression),
-    Печать(Expression),
-    Блок(Vec<Statement>),
+    Return(Option<Expression>),
+    Expression(Expression),
+    Print(Expression),
+    Block(Vec<Statement>),
 }
 
 #[derive(Debug, Clone)]
 pub struct Function {
-    pub имя: String,
-    pub параметры: Vec<Parameter>,
-    pub возвращаемый_тип: Option<DataType>,
-    pub тело: Vec<Statement>,
+    pub name: String,
+    pub parameters: Vec<Parameter>,
+    pub return_type: Option<DataType>,
+    pub body: Vec<Statement>,
 }
 
 #[derive(Debug, Clone)]
 pub struct Parameter {
-    pub имя: String,
-    pub тип: DataType,
+    pub name: String,
+    pub type_of: DataType,
 }
 
 #[derive(Debug, Clone)]
 pub struct Program {
-    pub функции: Vec<Function>,
-    pub операторы: Vec<Statement>,
+    pub functions: Vec<Function>,
+    pub operators: Vec<Statement>,
 }
