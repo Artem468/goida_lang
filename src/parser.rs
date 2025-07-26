@@ -21,9 +21,7 @@ impl Parser {
     }
 
     fn peek_token(&self) -> &Token {
-        self.tokens
-            .get(self.current + 1)
-            .unwrap_or(&Token::EndFile)
+        self.tokens.get(self.current + 1).unwrap_or(&Token::EndFile)
     }
 
     fn advance(&mut self) -> &Token {
@@ -49,12 +47,16 @@ impl Parser {
     pub fn parse(&mut self) -> Result<Program, ParseError> {
         let mut functions = Vec::new();
         let mut operators = Vec::new();
-
+        let mut imports = Vec::new();
+        
         while !matches!(self.current_token(), Token::EndFile) {
             match self.current_token() {
                 Token::Function => {
                     functions.push(self.parse_function()?);
                 }
+                Token::Import => {
+                    imports.push(self.parse_import()?)
+                },
                 _ => {
                     operators.push(self.parse_statement()?);
                 }
@@ -64,6 +66,7 @@ impl Parser {
         Ok(Program {
             functions,
             operators,
+            imports
         })
     }
 
@@ -129,9 +132,39 @@ impl Parser {
             parameters,
             return_type,
             body,
+            module: None
         })
     }
 
+    fn parse_import(&mut self) -> Result<Import, ParseError> {
+        self.expect(Token::Import)?;
+
+        let mut files = Vec::new();
+
+        loop {
+            match self.current_token() {
+                Token::TextLiteral(filename) => {
+                    files.push(filename.clone());
+                    self.advance();
+                }
+                _ => {
+                    return Err(ParseError::UnexpectedToken(
+                        "Ожидалось имя файла в кавычках".to_string(),
+                    ))
+                }
+            }
+
+            if matches!(self.current_token(), Token::Comma) {
+                self.advance();
+            } else {
+                break;
+            }
+        }
+
+        self.expect_semicolon()?;
+
+        Ok(Import { files })
+    }
     fn parse_type(&mut self) -> Result<DataType, ParseError> {
         match self.current_token() {
             Token::Number => {
@@ -284,9 +317,7 @@ impl Parser {
 
         let body = self.parse_block()?;
 
-        Ok(Statement::While {
-            condition, body
-        })
+        Ok(Statement::While { condition, body })
     }
 
     fn parse_for_statement(&mut self) -> Result<Statement, ParseError> {
@@ -514,8 +545,23 @@ impl Parser {
                 self.advance();
                 Ok(Expression::Boolean(false))
             }
-            Token::Identifier(name) => {
+            Token::Identifier(mut name) => {
                 self.advance();
+
+                // Поддержка составных имён: module.function.subfunction
+                while matches!(self.current_token(), Token::Point) {
+                    self.advance(); // пропускаем точку
+                    if let Token::Identifier(next_part) = self.current_token() {
+                        name = format!("{}.{}", name, next_part);
+                        self.advance();
+                    } else {
+                        return Err(ParseError::UnexpectedToken(
+                            "Ожидался идентификатор после точки".to_string(),
+                        ));
+                    }
+                }
+
+                // Если это вызов функции
                 if matches!(self.current_token(), Token::LeftParentheses) {
                     self.advance();
                     let mut arguments = Vec::new();
@@ -528,14 +574,12 @@ impl Parser {
                     }
 
                     self.expect(Token::RightParentheses)?;
-                    Ok(Expression::CallingFunction {
-                        name,
-                        arguments,
-                    })
+                    Ok(Expression::CallingFunction { name, arguments })
                 } else {
                     Ok(Expression::Identifier(name))
                 }
             }
+
             Token::LeftParentheses => {
                 self.advance();
                 let expr = self.parse_expression()?;

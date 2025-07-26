@@ -15,6 +15,7 @@ pub enum Token {
     False,    // false
     Print,    // print
     Input,    // input
+    Import,   // import
 
     // Литералы
     NumericalLiteral(i64),
@@ -163,6 +164,7 @@ impl Lexer {
             "ложь" => Token::False,
             "печать" => Token::Print,
             "ввод" => Token::Input,
+            "подключить" => Token::Import,
             _ => Token::Identifier(identifier),
         }
     }

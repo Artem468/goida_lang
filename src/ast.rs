@@ -27,7 +27,7 @@ pub enum Expression {
     AccessIndex {
         object: Box<Expression>,
         index: Box<Expression>,
-    },
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -83,6 +83,7 @@ pub enum Statement {
     Expression(Expression),
     Print(Expression),
     Block(Vec<Statement>),
+
 }
 
 #[derive(Debug, Clone)]
@@ -91,6 +92,12 @@ pub struct Function {
     pub parameters: Vec<Parameter>,
     pub return_type: Option<DataType>,
     pub body: Vec<Statement>,
+    pub module: Option<String>
+}
+
+#[derive(Debug, Clone)]
+pub struct Import {
+    pub files: Vec<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -103,4 +110,5 @@ pub struct Parameter {
 pub struct Program {
     pub functions: Vec<Function>,
     pub operators: Vec<Statement>,
+    pub imports: Vec<Import>
 }
