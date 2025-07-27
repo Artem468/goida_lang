@@ -24,6 +24,9 @@ pub enum Expression {
         name: String,
         arguments: Vec<Expression>,
     },
+    Input {
+        argument: Box<Expression>,
+    },
     AccessIndex {
         object: Box<Expression>,
         index: Box<Expression>,
@@ -82,6 +85,7 @@ pub enum Statement {
     Return(Option<Expression>),
     Expression(Expression),
     Print(Expression),
+    Input(Expression),
     Block(Vec<Statement>),
 
 }

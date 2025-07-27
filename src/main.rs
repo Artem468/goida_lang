@@ -7,9 +7,9 @@ use clap::{Parser, Subcommand};
 use std::{env, fs};
 use std::io::{self, Write};
 use std::path::PathBuf;
-use lexer::Lexer;
-use parser::{Parser as GoidaParser, ParseError};
-use interpreter::{Interpreter, RuntimeError};
+use lexer::prelude::LexerStructs::Lexer;
+use parser::prelude::ParserStructs::{Parser as GoidaParser, ParseError};
+use interpreter::prelude::InterpreterStructs::{Interpreter, RuntimeError};
 
 #[derive(Parser)]
 #[command(name = "goida")]

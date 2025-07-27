@@ -1,15 +1,6 @@
 use crate::ast::*;
-use crate::lexer::Token;
-
-pub struct Parser {
-    tokens: Vec<Token>,
-    current: usize,
-}
-
-#[derive(Debug)]
-pub enum ParseError {
-    UnexpectedToken(String),
-}
+use crate::lexer::structs::Token;
+use crate::parser::structs::{ParseError, Parser};
 
 impl Parser {
     pub fn new(tokens: Vec<Token>) -> Self {
@@ -48,15 +39,13 @@ impl Parser {
         let mut functions = Vec::new();
         let mut operators = Vec::new();
         let mut imports = Vec::new();
-        
+
         while !matches!(self.current_token(), Token::EndFile) {
             match self.current_token() {
                 Token::Function => {
                     functions.push(self.parse_function()?);
                 }
-                Token::Import => {
-                    imports.push(self.parse_import()?)
-                },
+                Token::Import => imports.push(self.parse_import()?),
                 _ => {
                     operators.push(self.parse_statement()?);
                 }
@@ -66,7 +55,7 @@ impl Parser {
         Ok(Program {
             functions,
             operators,
-            imports
+            imports,
         })
     }
 
@@ -132,7 +121,7 @@ impl Parser {
             parameters,
             return_type,
             body,
-            module: None
+            module: None,
         })
     }
 
@@ -205,6 +194,7 @@ impl Parser {
             Token::For => self.parse_for_statement(),
             Token::Return => self.parse_return_statement(),
             Token::Print => self.parse_print_statement(),
+            Token::Input => self.parse_input_statement(),
             Token::LeftBrace => {
                 let block = self.parse_block()?;
                 Ok(Statement::Block(block))
@@ -265,7 +255,6 @@ impl Parser {
             value,
         })
     }
-
     fn parse_assignment(&mut self) -> Result<Statement, ParseError> {
         let name = match self.current_token() {
             Token::Identifier(name) => {
@@ -374,6 +363,16 @@ impl Parser {
         self.expect_semicolon()?;
 
         Ok(Statement::Print(expression))
+    }
+
+    fn parse_input_statement(&mut self) -> Result<Statement, ParseError> {
+        self.expect(Token::Input)?;
+        self.expect(Token::LeftParentheses)?;
+        let expression = self.parse_expression()?;
+        self.expect(Token::RightParentheses)?;
+        self.expect_semicolon()?;
+
+        Ok(Statement::Input(expression))
     }
 
     fn parse_expression(&mut self) -> Result<Expression, ParseError> {
@@ -550,7 +549,7 @@ impl Parser {
 
                 // Поддержка составных имён: module.function.subfunction
                 while matches!(self.current_token(), Token::Point) {
-                    self.advance(); // пропускаем точку
+                    self.advance();
                     if let Token::Identifier(next_part) = self.current_token() {
                         name = format!("{}.{}", name, next_part);
                         self.advance();
@@ -561,7 +560,6 @@ impl Parser {
                     }
                 }
 
-                // Если это вызов функции
                 if matches!(self.current_token(), Token::LeftParentheses) {
                     self.advance();
                     let mut arguments = Vec::new();
@@ -579,31 +577,22 @@ impl Parser {
                     Ok(Expression::Identifier(name))
                 }
             }
-
+            Token::Input => {
+                self.advance();
+                self.expect(Token::LeftParentheses)?;
+                let expression = self.parse_expression()?;
+                self.expect(Token::RightParentheses)?;
+                Ok(Expression::Input {
+                    argument: Box::from(expression),
+                })
+            }
             Token::LeftParentheses => {
                 self.advance();
                 let expr = self.parse_expression()?;
                 self.expect(Token::RightParentheses)?;
                 Ok(expr)
             }
-            Token::Input => {
-                self.advance();
-                self.expect(Token::LeftParentheses)?;
-                let mut arguments = Vec::new();
 
-                while !matches!(self.current_token(), Token::RightParentheses) {
-                    arguments.push(self.parse_expression()?);
-                    if matches!(self.current_token(), Token::Comma) {
-                        self.advance();
-                    }
-                }
-
-                self.expect(Token::RightParentheses)?;
-                Ok(Expression::CallingFunction {
-                    name: "ввод".to_string(),
-                    arguments,
-                })
-            }
             _ => Err(ParseError::UnexpectedToken(format!(
                 "Неожиданный токен: {:?}",
                 self.current_token()

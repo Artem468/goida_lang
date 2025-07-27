@@ -1,142 +1,12 @@
-use crate::ast::*;
-use crate::lexer;
-use crate::parser::Parser;
+use crate::ast::{BinaryOperator, Expression, Function, Program, Statement, UnaryOperator};
+use crate::interpreter::prelude::InterpreterStructs::{
+    Environment, Interpreter, Module, RuntimeError, Value,
+};
+use crate::lexer::structs::Lexer;
+use crate::parser::structs::Parser;
 use std::collections::HashMap;
-use std::fmt;
-use std::io::{self, Write};
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum Value {
-    Number(i64),
-    Text(String),
-    Boolean(bool),
-    Empty,
-}
-
-impl Value {
-    fn to_string(&self) -> String {
-        match self {
-            Value::Number(n) => n.to_string(),
-            Value::Text(s) => s.clone(),
-            Value::Boolean(b) => {
-                if *b {
-                    "истина".to_string()
-                } else {
-                    "ложь".to_string()
-                }
-            }
-            Value::Empty => "пустота".to_string(),
-        }
-    }
-
-    fn is_truthy(&self) -> bool {
-        match self {
-            Value::Boolean(b) => *b,
-            Value::Number(n) => *n != 0,
-            Value::Text(s) => !s.is_empty(),
-            Value::Empty => false,
-        }
-    }
-}
-
-impl fmt::Display for Value {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            Value::Number(data) => {
-                write!(f, "{data}")
-            }
-            Value::Text(data) => {
-                write!(f, "{data}")
-            }
-            Value::Boolean(data) => {
-                write!(f, "{data}")
-            }
-            Value::Empty => {
-                write!(f, "")
-            }
-        }
-    }
-}
-
-#[derive(Debug)]
-pub enum RuntimeError {
-    UndefinedVariable(String),
-    UndefinedFunction(String),
-    TypeMismatch(String),
-    DivisionByZero,
-    InvalidOperation(String),
-    Return(Value),
-    IOError(String),
-    ParseError(String),
-}
-
-#[derive(Debug, Clone)]
-pub struct Environment {
-    variables: HashMap<String, Value>,
-    parent: Option<Box<Environment>>,
-}
-
-impl Environment {
-    fn new() -> Self {
-        Environment {
-            variables: HashMap::new(),
-            parent: None,
-        }
-    }
-
-    fn with_parent(parent: Environment) -> Self {
-        Environment {
-            variables: HashMap::new(),
-            parent: Some(Box::new(parent)),
-        }
-    }
-    pub fn pop(self) -> Environment {
-        match self.parent {
-            Some(parent_box) => *parent_box,
-            None => self, // если нет родителя, возвращаем себя
-        }
-    }
-
-    fn define(&mut self, name: String, value: Value) {
-        self.variables.insert(name, value);
-    }
-
-    fn get(&self, name: &str) -> Option<Value> {
-        if let Some(value) = self.variables.get(name) {
-            Some(value.clone())
-        } else if let Some(parent) = &self.parent {
-            parent.get(name)
-        } else {
-            None
-        }
-    }
-
-    fn set(&mut self, name: &str, value: Value) -> Result<(), RuntimeError> {
-        if self.variables.contains_key(name) {
-            self.variables.insert(name.to_string(), value);
-            Ok(())
-        } else if let Some(parent) = &mut self.parent {
-            parent.set(name, value)
-        } else {
-            // Если переменная не найдена, создаем ее в текущей области
-            self.variables.insert(name.to_string(), value);
-            Ok(())
-        }
-    }
-}
-#[derive(Debug)]
-pub struct Interpreter {
-    environment: Environment,
-    functions: HashMap<String, Function>,
-    modules: HashMap<String, Module>,
-    current_dir: std::path::PathBuf,
-}
-
-#[derive(Debug)]
-struct Module {
-    functions: HashMap<String, Function>,
-    environment: Environment,
-}
+use std::io;
+use std::io::Write;
 
 impl Interpreter {
     pub fn new(dir: std::path::PathBuf) -> Self {
@@ -164,12 +34,9 @@ impl Interpreter {
                             ))
                         })?;
                 let code = std::fs::read_to_string(&full_path).map_err(|err| {
-                    RuntimeError::IOError(format!(
-                        "{} | {err}",
-                        full_path.display()
-                    ))
+                    RuntimeError::IOError(format!("{} | {err}", full_path.display()))
                 })?;
-                let tokens = lexer::Lexer::new(code).tokenize();
+                let tokens = Lexer::new(code).tokenize();
                 let program = Parser::new(tokens).parse().map_err(|err| {
                     RuntimeError::ParseError(format!(
                         "Ошибка парсинга модуля {}: {err:?}",
@@ -183,9 +50,9 @@ impl Interpreter {
                         .unwrap_or(&self.current_dir)
                         .to_path_buf(),
                 );
-                
+
                 sub_interpreter.interpret(program)?;
-                
+
                 let mut namespaced_functions = HashMap::new();
                 for (name, mut func) in sub_interpreter.functions {
                     let qualified = format!("{}", name);
@@ -198,7 +65,7 @@ impl Interpreter {
                     let qualified = format!("{}", name);
                     namespaced_variables.insert(qualified, value);
                 }
-                
+
                 let module = Module {
                     functions: namespaced_functions.clone(),
                     environment: Environment {
@@ -206,7 +73,7 @@ impl Interpreter {
                         parent: None,
                     },
                 };
-                
+
                 self.modules.insert(file_stem.to_string(), module);
             }
         }
@@ -214,7 +81,7 @@ impl Interpreter {
         for function in program.functions {
             self.functions.insert(function.name.clone(), function);
         }
-        
+
         for statement in program.operators {
             match self.execute_statement(&statement) {
                 Err(RuntimeError::Return(_)) => {}
@@ -329,6 +196,12 @@ impl Interpreter {
                 Ok(())
             }
 
+            Statement::Input(expr) => {
+                let value = self.evaluate_expression(expr)?;
+                self.input_function(value)?;
+                Ok(())
+            }
+
             Statement::Block(statements) => {
                 let parent_env = self.environment.clone();
                 self.environment = Environment::with_parent(parent_env);
@@ -417,22 +290,6 @@ impl Interpreter {
             }
 
             Expression::CallingFunction { name, arguments } => {
-                if name == "ввод" {
-                    if arguments.len() > 1 {
-                        return Err(RuntimeError::InvalidOperation(format!(
-                            "Функция {} ожидает 0 или 1 аргумент, получено {}",
-                            name,
-                            arguments.len()
-                        )));
-                    }
-
-                    let arg_value = match arguments.get(0) {
-                        Some(expr) => self.evaluate_expression(expr)?,
-                        None => Value::Text(String::new()),
-                    };
-                    return self.input_function(arg_value);
-                }
-
                 if let Some(dot_index) = name.find('.') {
                     let module_name = &name[..dot_index];
                     let func_name = &name[dot_index + 1..];
@@ -453,7 +310,7 @@ impl Interpreter {
                         )))
                     };
                 }
-                
+
                 if let Some(function) = self.functions.get(name).cloned() {
                     return self.call_function(function, arguments.clone());
                 }
@@ -465,6 +322,10 @@ impl Interpreter {
                 Err(RuntimeError::UndefinedFunction(name.clone()))
             }
 
+            Expression::Input { argument } => {
+                let data = self.evaluate_expression(argument)?;
+                self.input_function(data)
+            }
 
             Expression::AccessIndex {
                 object: _,
