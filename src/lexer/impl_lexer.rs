@@ -1,4 +1,4 @@
-use crate::lexer::structs::{Lexer, Token};
+use crate::lexer::structs::{Lexer, Span, Token, TokenInfo};
 
 impl Lexer {
     pub fn new(input: String) -> Self {
@@ -9,10 +9,19 @@ impl Lexer {
             input: chars,
             position: 0,
             current_char,
+            current_line: 0,
+            current_column: 0,
         }
     }
 
     fn advance(&mut self) {
+        if let Some('\n') = self.current_char {
+            self.current_line += 1;
+            self.current_column = 1;
+        } else {
+            self.current_column += 1;
+        }
+
         self.position += 1;
         self.current_char = self.input.get(self.position).copied();
     }
@@ -107,10 +116,10 @@ impl Lexer {
         }
     }
 
-    pub fn next_token(&mut self) -> Token {
+    pub fn next_token(&mut self) -> TokenInfo {
         loop {
-            match self.current_char {
-                None => return Token::EndFile,
+            let token = match self.current_char {
+                None => Token::EndFile,
 
                 Some(ch) if ch.is_whitespace() && ch != '\n' => {
                     self.skip_whitespace();
@@ -119,34 +128,34 @@ impl Lexer {
 
                 Some('\n') => {
                     self.advance();
-                    return Token::NewLine;
+                    Token::NewLine
                 }
 
                 Some(ch) if ch.is_ascii_digit() => {
-                    return self.read_number();
+                    self.read_number()
                 }
 
                 Some('"') => {
-                    return self.read_string();
+                    self.read_string()
                 }
 
                 Some(ch) if ch.is_alphabetic() || ch == '_' => {
-                    return self.read_identifier();
+                    self.read_identifier()
                 }
 
                 Some('+') => {
                     self.advance();
-                    return Token::Plus;
+                    Token::Plus
                 }
 
                 Some('-') => {
                     self.advance();
-                    return Token::Minus;
+                    Token::Minus
                 }
 
                 Some('*') => {
                     self.advance();
-                    return Token::Multiply;
+                    Token::Multiply
                 }
 
                 Some('/') => {
@@ -162,23 +171,23 @@ impl Lexer {
                         continue;
                     } else {
                         self.advance();
-                        return Token::Divide;
+                        Token::Divide
                     }
                 }
 
                 Some('%') => {
                     self.advance();
-                    return Token::Remainder;
+                    Token::Remainder
                 }
 
                 Some('=') => {
                     if self.peek() == Some('=') {
                         self.advance();
                         self.advance();
-                        return Token::Equal;
+                        Token::Equal
                     } else {
                         self.advance();
-                        return Token::Assign;
+                        Token::Assign
                     }
                 }
 
@@ -186,10 +195,10 @@ impl Lexer {
                     if self.peek() == Some('=') {
                         self.advance();
                         self.advance();
-                        return Token::Unequal;
+                        Token::Unequal
                     } else {
                         self.advance();
-                        return Token::Not;
+                        Token::Not
                     }
                 }
 
@@ -197,10 +206,10 @@ impl Lexer {
                     if self.peek() == Some('=') {
                         self.advance();
                         self.advance();
-                        return Token::MoreEqual;
+                        Token::MoreEqual
                     } else {
                         self.advance();
-                        return Token::More;
+                        Token::More
                     }
                 }
 
@@ -208,10 +217,10 @@ impl Lexer {
                     if self.peek() == Some('=') {
                         self.advance();
                         self.advance();
-                        return Token::LessEqual;
+                        Token::LessEqual
                     } else {
                         self.advance();
-                        return Token::Less;
+                        Token::Less
                     }
                 }
 
@@ -219,7 +228,7 @@ impl Lexer {
                     if self.peek() == Some('&') {
                         self.advance();
                         self.advance();
-                        return Token::And;
+                        Token::And
                     } else {
                         self.advance();
                         continue;
@@ -230,7 +239,7 @@ impl Lexer {
                     if self.peek() == Some('|') {
                         self.advance();
                         self.advance();
-                        return Token::Or;
+                        Token::Or
                     } else {
                         self.advance();
                         continue;
@@ -239,70 +248,79 @@ impl Lexer {
 
                 Some('(') => {
                     self.advance();
-                    return Token::LeftParentheses;
+                    Token::LeftParentheses
                 }
 
                 Some(')') => {
                     self.advance();
-                    return Token::RightParentheses;
+                    Token::RightParentheses
                 }
 
                 Some('{') => {
                     self.advance();
-                    return Token::LeftBrace;
+                    Token::LeftBrace
                 }
 
                 Some('}') => {
                     self.advance();
-                    return Token::RightBrace;
+                    Token::RightBrace
                 }
 
                 Some('[') => {
                     self.advance();
-                    return Token::LeftBracket;
+                    Token::LeftBracket
                 }
 
                 Some(']') => {
                     self.advance();
-                    return Token::RightBracket;
+                    Token::RightBracket
                 }
 
                 Some(';') => {
                     self.advance();
-                    return Token::SemicolonPoint;
+                    Token::SemicolonPoint
                 }
 
                 Some(',') => {
                     self.advance();
-                    return Token::Comma;
+                    Token::Comma
                 }
 
                 Some('.') => {
                     self.advance();
-                    return Token::Point;
+                    Token::Point
                 }
 
                 Some(':') => {
                     self.advance();
-                    return Token::Colon;
+                    Token::Colon
                 }
 
                 Some(_) => {
                     self.advance();
                     continue;
                 }
+            };
+
+            return TokenInfo {
+                token,
+                span: Span {
+                    line: self.current_line,
+                    column: self.current_column,
+                },
             }
+            
         }
     }
 
-    pub fn tokenize(&mut self) -> Vec<Token> {
+    pub fn tokenize(&mut self) -> Vec<TokenInfo> {
         let mut tokens = Vec::new();
 
         loop {
             let token = self.next_token();
-            let is_eof = matches!(token, Token::EndFile);
+            let is_eof = matches!(token.token, Token::EndFile);
 
-            if !matches!(token, Token::NewLine) {
+            if !matches!(token.token, Token::NewLine) {
                 tokens.push(token);
             }
 

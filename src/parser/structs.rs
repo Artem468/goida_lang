@@ -1,7 +1,7 @@
-use crate::lexer::structs::Token;
+use crate::lexer::structs::{TokenInfo};
 
 pub struct Parser {
-    pub(crate) tokens: Vec<Token>,
+    pub(crate) tokens: Vec<TokenInfo>,
     pub(crate) current: usize,
 }
 

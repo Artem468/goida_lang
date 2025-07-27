@@ -56,8 +56,22 @@ pub enum Token {
     NewLine,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct Span {
+    pub line: usize,    // Номер строки (начиная с 1)
+    pub column: usize,  // Позиция в строке (начиная с 1)
+}
+
+#[derive(Debug, Clone)]
+pub struct TokenInfo {
+    pub token: Token,
+    pub span: Span,
+}
+
 pub struct Lexer {
     pub(crate) input: Vec<char>,
     pub(crate) position: usize,
     pub(crate) current_char: Option<char>,
+    pub(crate) current_line: usize,
+    pub(crate) current_column: usize,
 }
