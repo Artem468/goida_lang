@@ -34,6 +34,7 @@ pub struct Interpreter {
     pub(crate) functions: HashMap<String, Function>,
     pub(crate) modules: HashMap<String, Module>,
     pub(crate) current_dir: std::path::PathBuf,
+    pub(crate) current_module: Option<String>
 }
 
 #[derive(Debug)]

@@ -3,8 +3,8 @@ use crate::lexer::structs::{Span, Token, TokenInfo};
 use crate::parser::structs::{ParseError, Parser};
 
 impl Parser {
-    pub fn new(tokens: Vec<TokenInfo>) -> Self {
-        Parser { tokens, current: 0 }
+    pub fn new(tokens: Vec<TokenInfo>, name: String) -> Self {
+        Parser { tokens, current: 0, name}
     }
 
     fn current_token(&self) -> &TokenInfo {
@@ -65,6 +65,7 @@ impl Parser {
             functions,
             operators,
             imports,
+            name: self.name.clone()
         })
     }
 
@@ -134,7 +135,7 @@ impl Parser {
             parameters,
             return_type,
             body,
-            module: None,
+            module: Some(self.name.clone()),
         })
     }
 

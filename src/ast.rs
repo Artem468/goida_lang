@@ -112,6 +112,7 @@ pub struct Parameter {
 
 #[derive(Debug, Clone)]
 pub struct Program {
+    pub name: String,
     pub functions: Vec<Function>,
     pub operators: Vec<Statement>,
     pub imports: Vec<Import>

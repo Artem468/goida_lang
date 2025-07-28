@@ -15,29 +15,36 @@ impl Interpreter {
             functions: HashMap::new(),
             modules: HashMap::new(),
             current_dir: dir,
+            current_module: None,
+        }
+    }
+
+    fn into_module(self) -> Module {
+        Module {
+            functions: self.functions,
+            environment: self.environment,
         }
     }
 
     pub fn interpret(&mut self, program: Program) -> Result<(), RuntimeError> {
+        self.current_module = Some(program.name.clone());
+
         for import in program.imports {
             for path in import.files {
                 let relative_path = std::path::Path::new(&path);
                 let full_path = self.current_dir.join(relative_path).with_extension("goida");
-                let file_stem =
-                    full_path
-                        .file_stem()
-                        .and_then(|s| s.to_str())
-                        .ok_or_else(|| {
-                            RuntimeError::InvalidOperation(format!(
-                                "Невозможно получить имя модуля из пути: {}",
-                                full_path.display()
-                            ))
-                        })?;
+                let file_stem = full_path.file_stem().and_then(|s| s.to_str()).ok_or_else(|| {
+                    RuntimeError::InvalidOperation(format!(
+                        "Невозможно получить имя модуля из пути: {}",
+                        full_path.display()
+                    ))
+                })?;
                 let code = std::fs::read_to_string(&full_path).map_err(|err| {
                     RuntimeError::IOError(format!("{} | {err}", full_path.display()))
                 })?;
+
                 let tokens = Lexer::new(code).tokenize();
-                let program = Parser::new(tokens).parse().map_err(|err| {
+                let program = Parser::new(tokens, file_stem.to_string()).parse().map_err(|err| {
                     RuntimeError::ParseError(format!(
                         "Ошибка парсинга модуля {}: {err:?}",
                         file_stem
@@ -45,36 +52,10 @@ impl Interpreter {
                 })?;
 
                 let mut sub_interpreter = Interpreter::new(
-                    full_path
-                        .parent()
-                        .unwrap_or(&self.current_dir)
-                        .to_path_buf(),
+                    full_path.parent().unwrap_or(&self.current_dir).to_path_buf(),
                 );
-
                 sub_interpreter.interpret(program)?;
-
-                let mut namespaced_functions = HashMap::new();
-                for (name, mut func) in sub_interpreter.functions {
-                    let qualified = format!("{}", name);
-                    func.module = Some(name);
-                    namespaced_functions.insert(qualified, func);
-                }
-
-                let mut namespaced_variables = HashMap::new();
-                for (name, value) in sub_interpreter.environment.variables {
-                    let qualified = format!("{}", name);
-                    namespaced_variables.insert(qualified, value);
-                }
-
-                let module = Module {
-                    functions: namespaced_functions.clone(),
-                    environment: Environment {
-                        variables: namespaced_variables.clone(),
-                        parent: None,
-                    },
-                };
-
-                self.modules.insert(file_stem.to_string(), module);
+                self.modules.insert(file_stem.to_string(), sub_interpreter.into_module());
             }
         }
 
@@ -136,6 +117,7 @@ impl Interpreter {
             Statement::While { condition, body } => {
                 while self.evaluate_expression(condition)?.is_truthy() {
                     for stmt in body {
+                        self.execute_statement(stmt)?;
                         self.execute_statement(stmt)?;
                     }
                 }
@@ -293,33 +275,26 @@ impl Interpreter {
                 if let Some(dot_index) = name.find('.') {
                     let module_name = &name[..dot_index];
                     let func_name = &name[dot_index + 1..];
-
-                    return if let Some(module) = self.modules.get(module_name) {
+                    if let Some(module) = self.modules.get(module_name) {
                         if let Some(function) = module.functions.get(func_name) {
-                            self.call_function(function.clone(), arguments.clone())
-                        } else {
-                            Err(RuntimeError::UndefinedFunction(format!(
-                                "{}.{}",
-                                module_name, func_name
-                            )))
+                            return self.call_function(function.clone(), arguments.clone());
                         }
+                    }
+                    Err(RuntimeError::UndefinedFunction(name.clone()))
+                } else {
+                    if let Some(function) = self.functions.get(name).cloned() {
+                        self.call_function(function, arguments.clone())
+                    } else if let Some(module_name) = &self.current_module {
+                        if let Some(module) = self.modules.get(module_name) {
+                            if let Some(function) = module.functions.get(name) {
+                                return self.call_function(function.clone(), arguments.clone());
+                            }
+                        }
+                        Err(RuntimeError::UndefinedFunction(name.clone()))
                     } else {
-                        Err(RuntimeError::InvalidOperation(format!(
-                            "Модуль {} не найден",
-                            module_name
-                        )))
-                    };
-                }
-
-                if let Some(function) = self.functions.get(name).cloned() {
-                    return self.call_function(function, arguments.clone());
-                }
-                for (_module_name, module) in &self.modules {
-                    if let Some(function) = module.functions.get(name) {
-                        return self.call_function(function.clone(), arguments.clone());
+                        Err(RuntimeError::UndefinedFunction(name.clone()))
                     }
                 }
-                Err(RuntimeError::UndefinedFunction(name.clone()))
             }
 
             Expression::Input { argument } => {
@@ -341,6 +316,12 @@ impl Interpreter {
         function: Function,
         arguments: Vec<Expression>,
     ) -> Result<Value, RuntimeError> {
+        let prev_module = self.current_module.clone();
+        self.current_module = function.module.clone();
+        let parent_env = self.environment.clone();
+        self.environment = Environment::with_parent(parent_env);
+        
+        
         if arguments.len() != function.parameters.len() {
             return Err(RuntimeError::InvalidOperation(format!(
                 "Функция {} ожидает {} аргументов, получено {}",
@@ -349,11 +330,7 @@ impl Interpreter {
                 arguments.len()
             )));
         }
-
-        // Новый scope
-        let parent_env = self.environment.clone();
-        self.environment = Environment::with_parent(parent_env);
-
+        
         for (param, arg_expr) in function.parameters.iter().zip(arguments.iter()) {
             let arg_value = self.evaluate_expression(arg_expr)?;
             self.environment.define(param.name.clone(), arg_value);
@@ -375,6 +352,7 @@ impl Interpreter {
         }
 
         self.environment = self.environment.clone().pop();
+        self.current_module = prev_module;
         Ok(result)
     }
 

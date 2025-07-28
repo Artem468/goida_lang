@@ -83,7 +83,7 @@ fn run_repl() {
                     continue;
                 }
 
-                if let Err(e) = execute_code_with_interpreter(&mut interpreter, input) {
+                if let Err(e) = execute_code_with_interpreter(&mut interpreter, input, "main") {
                     eprintln!("Ошибка: {}", e);
                 }
             }
@@ -96,16 +96,22 @@ fn run_repl() {
 }
 
 fn execute_code(code: &str, filename: &str) -> Result<(), Box<dyn std::error::Error>> {
-    let _path = std::path::PathBuf::from(filename); 
+    let _path = std::path::PathBuf::from(filename);
+    let file_stem = _path.file_stem().and_then(|s| s.to_str()).ok_or_else(|| {
+        RuntimeError::InvalidOperation(format!(
+            "Невозможно получить имя модуля из пути: {}",
+            _path.display()
+        ))
+    }).unwrap();
     let mut interpreter = Interpreter::new(PathBuf::from(_path.parent().unwrap()));
-    execute_code_with_interpreter(&mut interpreter, code)
+    execute_code_with_interpreter(&mut interpreter, code, file_stem)
 }
 
-fn execute_code_with_interpreter(interpreter: &mut Interpreter, code: &str) -> Result<(), Box<dyn std::error::Error>> {
+fn execute_code_with_interpreter(interpreter: &mut Interpreter, code: &str, filename: &str) -> Result<(), Box<dyn std::error::Error>> {
     let mut lexer = Lexer::new(code.to_string());
     let tokens = lexer.tokenize();
 
-    let mut parser = GoidaParser::new(tokens);
+    let mut parser = GoidaParser::new(tokens, filename.to_string());
     let program = parser.parse().map_err(|e| match e {
         ParseError::UnexpectedToken(msg) => format!("Синтаксическая ошибка: {}", msg),
     })?;
