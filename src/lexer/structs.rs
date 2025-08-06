@@ -11,11 +11,18 @@ pub enum Token {
     Number,   // int/number type
     Text,     // string type
     Boolean,  // bool type
+    List,     // список
+    Dict,     // словарь
     True,     // true
     False,    // false
     Print,    // print
     Input,    // input
     Import,   // import
+    Push,     // добавить (в список)
+    Pop,      // удалить последний (из списка)
+    Remove,   // удалить по индексу/ключу
+    Size,     // размер
+    Contains, // содержит
 
     // Литералы
     NumericalLiteral(i64),

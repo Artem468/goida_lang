@@ -1,3 +1,0 @@
-подключить "functions";
-
-печать(functions.а);

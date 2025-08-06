@@ -184,6 +184,22 @@ impl Parser {
                 self.advance();
                 Ok(DataType::Boolean)
             }
+            Token::List => {
+                self.advance();
+                self.expect(Token::LeftBracket)?;
+                let element_type = self.parse_type()?;
+                self.expect(Token::RightBracket)?;
+                Ok(DataType::List(Box::new(element_type)))
+            }
+            Token::Dict => {
+                self.advance();
+                self.expect(Token::LeftBracket)?;
+                let key_type = self.parse_type()?;
+                self.expect(Token::Comma)?;
+                let value_type = self.parse_type()?;
+                self.expect(Token::RightBracket)?;
+                Ok(DataType::Dict(Box::new(key_type), Box::new(value_type)))
+            }
             _ => Err(ParseError::UnexpectedToken(format!(
                 "Ожидался тип данных (строка: {}, столбец: {})",
                 self.current_token().span.line,
@@ -218,13 +234,39 @@ impl Parser {
                 Ok(Statement::Block(block))
             }
             Token::Identifier(_) => {
-                if matches!(self.peek_token().token, Token::Assign) {
-                    self.parse_assignment()
-                } else {
-                    let expr = self.parse_expression()?;
-                    self.expect_semicolon()?;
-                    Ok(Statement::Expression(expr))
+                let mut lookahead = 1;
+                let mut has_index_access = false;
+                
+                while lookahead < self.tokens.len() {
+                    let token = &self.tokens[self.current + lookahead].token;
+                    match token {
+                        Token::LeftBracket => {
+                            has_index_access = true;
+                            lookahead += 1;
+                            let mut bracket_count = 1;
+                            while bracket_count > 0 && self.current + lookahead < self.tokens.len() {
+                                match &self.tokens[self.current + lookahead].token {
+                                    Token::LeftBracket => bracket_count += 1,
+                                    Token::RightBracket => bracket_count -= 1,
+                                    _ => {}
+                                }
+                                lookahead += 1;
+                            }
+                        }
+                        Token::Assign => {
+                            if has_index_access {
+                                return self.parse_index_assignment();
+                            } else {
+                                return self.parse_assignment();
+                            }
+                        }
+                        _ => break,
+                    }
                 }
+                
+                let expr = self.parse_expression()?;
+                self.expect_semicolon()?;
+                Ok(Statement::Expression(expr))
             }
             _ => {
                 let expr = self.parse_expression()?;
@@ -296,6 +338,27 @@ impl Parser {
         self.expect_semicolon()?;
 
         Ok(Statement::Assignment { name, value })
+    }
+
+    fn parse_index_assignment(&mut self) -> Result<Statement, ParseError> {
+        let object_expr = self.parse_primary()?;
+        
+        let (object, index) = match object_expr {
+            Expression::AccessIndex { object, index } => (*object, *index),
+            _ => return Err(ParseError::UnexpectedToken(
+                "Ожидался доступ по индексу перед присваиванием".to_string(),
+            )),
+        };
+        
+        self.expect(Token::Assign)?;
+        let value = self.parse_expression()?;
+        self.expect_semicolon()?;
+        
+        Ok(Statement::IndexAssignment {
+            object,
+            index,
+            value,
+        })
     }
 
     fn parse_if_statement(&mut self) -> Result<Statement, ParseError> {
@@ -570,8 +633,7 @@ impl Parser {
             }
             Token::Identifier(mut name) => {
                 self.advance();
-
-                // Поддержка составных имён: module.function.subfunction
+                
                 while matches!(self.current_token().token, Token::Point) {
                     self.advance();
                     if let Token::Identifier(next_part) = &self.current_token().token {
@@ -586,6 +648,123 @@ impl Parser {
                     }
                 }
 
+                if matches!(self.current_token().token, Token::LeftParentheses) {
+                    self.advance();
+                    let mut arguments = Vec::new();
+
+                    while !matches!(self.current_token().token, Token::RightParentheses) {
+                        arguments.push(self.parse_expression()?);
+                        if matches!(self.current_token().token, Token::Comma) {
+                            self.advance();
+                        }
+                    }
+
+                    self.expect(Token::RightParentheses)?;
+                    Ok(Expression::CallingFunction { name, arguments })
+                } else if matches!(self.current_token().token, Token::LeftBracket) {
+                    let mut expr = Expression::Identifier(name);
+                    while matches!(self.current_token().token, Token::LeftBracket) {
+                        self.advance();
+                        let index = self.parse_expression()?;
+                        self.expect(Token::RightBracket)?;
+                        expr = Expression::AccessIndex {
+                            object: Box::new(expr),
+                            index: Box::new(index),
+                        };
+                    }
+                    Ok(expr)
+                } else {
+                    Ok(Expression::Identifier(name))
+                }
+            }
+            Token::Size => {
+                let name = "размер".to_string();
+                self.advance();
+                
+                if matches!(self.current_token().token, Token::LeftParentheses) {
+                    self.advance();
+                    let mut arguments = Vec::new();
+
+                    while !matches!(self.current_token().token, Token::RightParentheses) {
+                        arguments.push(self.parse_expression()?);
+                        if matches!(self.current_token().token, Token::Comma) {
+                            self.advance();
+                        }
+                    }
+
+                    self.expect(Token::RightParentheses)?;
+                    Ok(Expression::CallingFunction { name, arguments })
+                } else {
+                    Ok(Expression::Identifier(name))
+                }
+            }
+            Token::Push => {
+                let name = "добавить".to_string();
+                self.advance();
+                
+                if matches!(self.current_token().token, Token::LeftParentheses) {
+                    self.advance();
+                    let mut arguments = Vec::new();
+
+                    while !matches!(self.current_token().token, Token::RightParentheses) {
+                        arguments.push(self.parse_expression()?);
+                        if matches!(self.current_token().token, Token::Comma) {
+                            self.advance();
+                        }
+                    }
+
+                    self.expect(Token::RightParentheses)?;
+                    Ok(Expression::CallingFunction { name, arguments })
+                } else {
+                    Ok(Expression::Identifier(name))
+                }
+            }
+            Token::Pop => {
+                let name = "извлечь".to_string();
+                self.advance();
+                
+                if matches!(self.current_token().token, Token::LeftParentheses) {
+                    self.advance();
+                    let mut arguments = Vec::new();
+
+                    while !matches!(self.current_token().token, Token::RightParentheses) {
+                        arguments.push(self.parse_expression()?);
+                        if matches!(self.current_token().token, Token::Comma) {
+                            self.advance();
+                        }
+                    }
+
+                    self.expect(Token::RightParentheses)?;
+                    Ok(Expression::CallingFunction { name, arguments })
+                } else {
+                    Ok(Expression::Identifier(name))
+                }
+            }
+            Token::Remove => {
+                let name = "удалить".to_string();
+                self.advance();
+                
+                if matches!(self.current_token().token, Token::LeftParentheses) {
+                    self.advance();
+                    let mut arguments = Vec::new();
+
+                    while !matches!(self.current_token().token, Token::RightParentheses) {
+                        arguments.push(self.parse_expression()?);
+                        if matches!(self.current_token().token, Token::Comma) {
+                            self.advance();
+                        }
+                    }
+
+                    self.expect(Token::RightParentheses)?;
+                    Ok(Expression::CallingFunction { name, arguments })
+                } else {
+                    Ok(Expression::Identifier(name))
+                }
+            }
+            Token::Contains => {
+                let name = "содержит".to_string();
+                self.advance();
+                
                 if matches!(self.current_token().token, Token::LeftParentheses) {
                     self.advance();
                     let mut arguments = Vec::new();
@@ -619,6 +798,38 @@ impl Parser {
                 let expr = self.parse_expression()?;
                 self.expect(Token::RightParentheses)?;
                 Ok(expr)
+            }
+            Token::LeftBracket => {
+                self.advance();
+                let mut elements = Vec::new();
+                
+                while !matches!(self.current_token().token, Token::RightBracket) {
+                    elements.push(self.parse_expression()?);
+                    if matches!(self.current_token().token, Token::Comma) {
+                        self.advance();
+                    }
+                }
+                
+                self.expect(Token::RightBracket)?;
+                Ok(Expression::List(elements))
+            }
+            Token::LeftBrace => {
+                self.advance();
+                let mut pairs = Vec::new();
+                
+                while !matches!(self.current_token().token, Token::RightBrace) {
+                    let key = self.parse_expression()?;
+                    self.expect(Token::Colon)?;
+                    let value = self.parse_expression()?;
+                    pairs.push((key, value));
+                    
+                    if matches!(self.current_token().token, Token::Comma) {
+                        self.advance();
+                    }
+                }
+                
+                self.expect(Token::RightBrace)?;
+                Ok(Expression::Dict(pairs))
             }
 
             _ => Err(ParseError::UnexpectedToken(format!(

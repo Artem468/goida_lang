@@ -107,11 +107,18 @@ impl Lexer {
             "число" => Token::Number,
             "текст" => Token::Text,
             "логический" => Token::Boolean,
+            "список" => Token::List,
+            "словарь" => Token::Dict,
             "истина" => Token::True,
             "ложь" => Token::False,
             "печать" => Token::Print,
             "ввод" => Token::Input,
             "подключить" => Token::Import,
+            "добавить" => Token::Push,
+            "извлечь" => Token::Pop,
+            "удалить" => Token::Remove,
+            "размер" => Token::Size,
+            "содержит" => Token::Contains,
             _ => Token::Identifier(identifier),
         }
     }

@@ -18,7 +18,7 @@ impl Environment {
     pub fn pop(self) -> Environment {
         match self.parent {
             Some(parent_box) => *parent_box,
-            None => self, // если нет родителя, возвращаем себя
+            None => self
         }
     }
 
@@ -43,7 +43,6 @@ impl Environment {
         } else if let Some(parent) = &mut self.parent {
             parent.set(name, value)
         } else {
-            // Если переменная не найдена, создаем ее в текущей области
             self.variables.insert(name.to_string(), value);
             Ok(())
         }

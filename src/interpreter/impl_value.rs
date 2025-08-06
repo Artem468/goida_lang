@@ -2,7 +2,7 @@ use std::fmt;
 use crate::interpreter::structs::Value;
 
 impl Value {
-    fn to_string(&self) -> String {
+    pub fn to_string(&self) -> String {
         match self {
             Value::Number(n) => n.to_string(),
             Value::Text(s) => s.clone(),
@@ -13,6 +13,30 @@ impl Value {
                     "ложь".to_string()
                 }
             }
+            Value::List(items) => {
+                let mut result = String::from("[");
+                for (i, item) in items.iter().enumerate() {
+                    if i > 0 {
+                        result.push_str(", ");
+                    }
+                    result.push_str(&item.to_string());
+                }
+                result.push(']');
+                result
+            }
+            Value::Dict(map) => {
+                let mut result = String::from("{");
+                let mut first = true;
+                for (key, value) in map {
+                    if !first {
+                        result.push_str(", ");
+                    }
+                    result.push_str(&format!("{}: {}", key, value.to_string()));
+                    first = false;
+                }
+                result.push('}');
+                result
+            }
             Value::Empty => "пустота".to_string(),
         }
     }
@@ -22,6 +46,8 @@ impl Value {
             Value::Boolean(b) => *b,
             Value::Number(n) => *n != 0,
             Value::Text(s) => !s.is_empty(),
+            Value::List(items) => !items.is_empty(),
+            Value::Dict(map) => !map.is_empty(),
             Value::Empty => false,
         }
     }
@@ -39,6 +65,9 @@ impl fmt::Display for Value {
             }
             Value::Boolean(data) => {
                 write!(f, "{data}")
+            }
+            Value::List(_) | Value::Dict(_) => {
+                write!(f, "{}", self.to_string())
             }
             Value::Empty => {
                 write!(f, "")

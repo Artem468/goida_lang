@@ -1,11 +1,15 @@
 use std::collections::HashMap;
 use crate::ast::Function;
 
+use std::collections::HashMap as StdHashMap;
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum Value {
     Number(i64),
     Text(String),
     Boolean(bool),
+    List(Vec<Value>),
+    Dict(StdHashMap<String, Value>),
     Empty,
 }
 

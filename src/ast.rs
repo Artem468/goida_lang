@@ -3,6 +3,8 @@ pub enum DataType {
     Number,
     Text,
     Boolean,
+    List(Box<DataType>),
+    Dict(Box<DataType>, Box<DataType>),
 }
 
 #[derive(Debug, Clone)]
@@ -10,6 +12,8 @@ pub enum Expression {
     Number(i64),
     Text(String),
     Boolean(bool),
+    List(Vec<Expression>),
+    Dict(Vec<(Expression, Expression)>),
     Identifier(String),
     BinaryOperation {
         left: Box<Expression>,
@@ -65,6 +69,11 @@ pub enum Statement {
     },
     Assignment {
         name: String,
+        value: Expression,
+    },
+    IndexAssignment {
+        object: Expression,
+        index: Expression,
         value: Expression,
     },
     If {

@@ -56,7 +56,7 @@ fn test_all_examples() {
 #[test]
 fn test_specific_examples() {
     let test_cases = vec![
-        ("examples/hello.goida", "Привет, мир!"),
+        ("examples/bubble_sort.goida", "Привет, мир!"),
         ("examples/simple.goida", "42"),
     ];
     
