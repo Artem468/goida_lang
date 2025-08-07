@@ -381,7 +381,3 @@ cargo run -- repl
 ```bash
 cargo test
 ```
-
-## Лицензия
-
-MIT License
