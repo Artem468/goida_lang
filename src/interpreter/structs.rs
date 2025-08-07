@@ -1,11 +1,12 @@
 use std::collections::HashMap;
-use crate::ast::Function;
+use crate::ast::{Function, Program};
 
 use std::collections::HashMap as StdHashMap;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Value {
     Number(i64),
+    Float(f64),
     Text(String),
     Boolean(bool),
     List(Vec<Value>),
@@ -41,8 +42,9 @@ pub struct Interpreter {
     pub(crate) current_module: Option<String>
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Module {
     pub(crate) functions: HashMap<String, Function>,
     pub(crate) environment: Environment,
+    pub(crate) program: Program,
 }

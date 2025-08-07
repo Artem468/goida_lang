@@ -5,6 +5,7 @@ impl Value {
     pub fn to_string(&self) -> String {
         match self {
             Value::Number(n) => n.to_string(),
+            Value::Float(n) => n.to_string(),
             Value::Text(s) => s.clone(),
             Value::Boolean(b) => {
                 if *b {
@@ -45,6 +46,7 @@ impl Value {
         match self {
             Value::Boolean(b) => *b,
             Value::Number(n) => *n != 0,
+            Value::Float(n) => *n != 0.0,
             Value::Text(s) => !s.is_empty(),
             Value::List(items) => !items.is_empty(),
             Value::Dict(map) => !map.is_empty(),
@@ -58,6 +60,9 @@ impl fmt::Display for Value {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Value::Number(data) => {
+                write!(f, "{data}")
+            }
+            Value::Float(data) => {
                 write!(f, "{data}")
             }
             Value::Text(data) => {

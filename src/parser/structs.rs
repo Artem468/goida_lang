@@ -1,7 +1,8 @@
-use crate::lexer::structs::{TokenInfo};
+use crate::lexer::structs::TokenInfo;
+use crate::ast::*;
 
 pub struct Parser {
-    pub(crate) name: String,
+    pub(crate) program: Program,
     pub(crate) tokens: Vec<TokenInfo>,
     pub(crate) current: usize,
 }
@@ -9,4 +10,6 @@ pub struct Parser {
 #[derive(Debug)]
 pub enum ParseError {
     UnexpectedToken(String),
+    InternalError(String),
+    TypeError(String),
 }

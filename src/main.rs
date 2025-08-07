@@ -111,9 +111,11 @@ fn execute_code_with_interpreter(interpreter: &mut Interpreter, code: &str, file
     let mut lexer = Lexer::new(code.to_string());
     let tokens = lexer.tokenize();
 
-    let mut parser = GoidaParser::new(tokens, filename.to_string());
+    let parser = GoidaParser::new(tokens, filename.to_string());
     let program = parser.parse().map_err(|e| match e {
         ParseError::UnexpectedToken(msg) => format!("Синтаксическая ошибка: {}", msg),
+        ParseError::InternalError(msg) => format!("Внутренняя ошибка парсера: {}", msg),
+        ParseError::TypeError(msg) => format!("Ошибка типа: {}", msg),
     })?;
     
     interpreter.interpret(program).map_err(|e| match e {

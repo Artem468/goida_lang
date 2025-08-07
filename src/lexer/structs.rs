@@ -1,31 +1,35 @@
+use crate::ast::Span;
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum Token {
     // Ключевые слова
-    Let,      // let
-    If,       // if
-    Else,     // else
-    While,    // while
-    For,      // for
-    Function, // function
-    Return,   // return
-    Number,   // int/number type
-    Text,     // string type
-    Boolean,  // bool type
+    Let,      // пусть
+    If,       // если
+    Else,     // иначе
+    While,    // пока
+    For,      // для
+    Function, // функция
+    Return,   // вернуть
+    Number,   // число
+    Float,    // дробь
+    Text,     // текст
+    Boolean,  // логический
     List,     // список
     Dict,     // словарь
-    True,     // true
-    False,    // false
-    Print,    // print
-    Input,    // input
-    Import,   // import
-    Push,     // добавить (в список)
-    Pop,      // удалить последний (из списка)
-    Remove,   // удалить по индексу/ключу
-    Size,     // размер
+    True,     // истина
+    False,    // ложь
+    Print,    // печать
+    Input,    // ввод
+    Import,   // подключить
+    Push,     // добавить
+    Pop,      // извлечь
+    Remove,   // удалить
+    Size,     // длина
     Contains, // содержит
 
     // Литералы
     NumericalLiteral(i64),
+    FloatLiteral(f64),
     TextLiteral(String),
     Identifier(String),
 
@@ -63,12 +67,6 @@ pub enum Token {
     NewLine,
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct Span {
-    pub line: usize,    // Номер строки (начиная с 1)
-    pub column: usize,  // Позиция в строке (начиная с 1)
-}
-
 #[derive(Debug, Clone)]
 pub struct TokenInfo {
     pub token: Token,
@@ -79,6 +77,6 @@ pub struct Lexer {
     pub(crate) input: Vec<char>,
     pub(crate) position: usize,
     pub(crate) current_char: Option<char>,
-    pub(crate) current_line: usize,
-    pub(crate) current_column: usize,
+    pub(crate) current_line: u32,
+    pub(crate) current_column: u32,
 }

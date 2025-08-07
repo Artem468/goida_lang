@@ -1,4 +1,5 @@
-use crate::lexer::structs::{Lexer, Span, Token, TokenInfo};
+use crate::lexer::structs::{Lexer, Token, TokenInfo};
+use crate::ast::{Span, SourceLocation};
 
 impl Lexer {
     pub fn new(input: String) -> Self {
@@ -117,7 +118,7 @@ impl Lexer {
             "добавить" => Token::Push,
             "извлечь" => Token::Pop,
             "удалить" => Token::Remove,
-            "размер" => Token::Size,
+            "длина" => Token::Size,
             "содержит" => Token::Contains,
             _ => Token::Identifier(identifier),
         }
@@ -312,8 +313,16 @@ impl Lexer {
             return TokenInfo {
                 token,
                 span: Span {
-                    line: self.current_line,
-                    column: self.current_column,
+                    start: SourceLocation {
+                        line: self.current_line,
+                        column: self.current_column,
+                        offset: self.position as u32,
+                    },
+                    end: SourceLocation {
+                        line: self.current_line,
+                        column: self.current_column,
+                        offset: self.position as u32,
+                    },
                 },
             }
             
