@@ -1,0 +1,56 @@
+name: Linux CI/CD
+
+on:
+    push:
+        branches:
+            - master
+        paths:
+            - '**/*.rs'
+            - 'Cargo.toml'
+            - 'Cargo.lock'
+    pull_request:
+        branches:
+            - master
+        paths:
+            - '**/*.rs'
+            - 'Cargo.toml'
+            - 'Cargo.lock'
+    workflow_dispatch:
+
+env:
+    CARGO_TERM_COLOR: always
+
+jobs:
+    build-linux:
+        runs-on: ubuntu-latest
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@v4
+
+            - name: Setup Git authentication for Cargo
+              run: |
+                  git config --global url."https://x-access-token:${{ secrets.GH_TOKEN }}@github.com/".insteadOf "https://github.com/"
+
+            - name: Install Rust
+              uses: dtolnay/rust-toolchain@stable
+
+            - name: Cache cargo dependencies
+              uses: actions/cache@v3
+              with:
+                  path: ~/.cargo/registry
+                  key: cargo-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+                  restore-keys: |
+                      cargo-${{ runner.os }}-
+
+            - name: Build release binary
+              run: |
+                  cargo build --release --features docs
+
+            - name: Upload Linux artifact
+              uses: actions/upload-artifact@v4
+              with:
+                  name: linux-binary
+                  path: |
+                      target/release/goida
+                      target/release/*.rlib
+                      target/release/*.d

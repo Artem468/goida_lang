@@ -2,6 +2,13 @@
 
 Русскоязычный язык программирования с синтаксисом, похожим на C.
 
+## Сборки
+
+[![CI Status](https://github.com/Artem468/goida_lang/actions/workflows/linux_build.yml/badge.svg)](https://github.com/Artem468/goida_lang/actions/workflows/linux_build.yml)
+
+[![CI Status](https://github.com/Artem468/goida_lang/actions/workflows/windows_build.yml/badge.svg)](https://github.com/Artem468/goida_lang/actions/workflows/windows_build.yml)
+
+
 ## Особенности
 
 - **Русский синтаксис**: Все ключевые слова и операторы на русском языке
