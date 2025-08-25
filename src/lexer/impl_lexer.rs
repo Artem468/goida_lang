@@ -115,11 +115,6 @@ impl Lexer {
             "печать" => Token::Print,
             "ввод" => Token::Input,
             "подключить" => Token::Import,
-            "добавить" => Token::Push,
-            "извлечь" => Token::Pop,
-            "удалить" => Token::Remove,
-            "длина" => Token::Size,
-            "содержит" => Token::Contains,
             _ => Token::Identifier(identifier),
         }
     }

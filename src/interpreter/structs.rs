@@ -1,16 +1,12 @@
 use std::collections::HashMap;
 use crate::ast::{Function, Program};
 
-use std::collections::HashMap as StdHashMap;
-
 #[derive(Debug, Clone, PartialEq)]
 pub enum Value {
     Number(i64),
     Float(f64),
     Text(String),
     Boolean(bool),
-    List(Vec<Value>),
-    Dict(StdHashMap<String, Value>),
     Empty,
 }
 
@@ -31,7 +27,6 @@ pub struct Environment {
     pub(crate) variables: HashMap<String, Value>,
     pub(crate) parent: Option<Box<Environment>>,
 }
-
 
 #[derive(Debug)]
 pub struct Interpreter {

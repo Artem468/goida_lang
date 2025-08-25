@@ -907,22 +907,6 @@ impl Parser {
                     span
                 ))
             }
-            Token::Size | Token::Push | Token::Pop | Token::Remove | Token::Contains => {
-                let name = match self.current_token().token {
-                    Token::Size => "длина",
-                    Token::Push => "добавить",
-                    Token::Pop => "извлечь",
-                    Token::Remove => "удалить",
-                    Token::Contains => "содержит",
-                    _ => unreachable!(),
-                };
-                let symbol = self.program.arena.intern_string(name);
-                self.advance();
-                Ok(self.program.arena.add_expression(
-                    ExpressionKind::Identifier(symbol),
-                    span
-                ))
-            }
             _ => Err(ParseError::UnexpectedToken(format!(
                 "Неожиданный токен: {:?} в позиции {}:{}",
                 self.current_token().token,
