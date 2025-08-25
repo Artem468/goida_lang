@@ -43,17 +43,34 @@ impl Lexer {
 
     fn read_number(&mut self) -> Token {
         let mut number = String::new();
+        let mut has_dot = false;
 
         while let Some(ch) = self.current_char {
             if ch.is_ascii_digit() {
                 number.push(ch);
                 self.advance();
+            } else if ch == '.' && !has_dot {
+                if let Some(next) = self.peek() {
+                    if next.is_ascii_digit() {
+                        has_dot = true;
+                        number.push(ch);
+                        self.advance();
+                    } else {
+                        break;
+                    }
+                } else {
+                    break;
+                }
             } else {
                 break;
             }
         }
 
-        Token::NumericalLiteral(number.parse().unwrap_or(0))
+        if has_dot {
+            Token::FloatLiteral(number.parse::<f64>().unwrap_or(0.0))
+        } else {
+            Token::NumericalLiteral(number.parse::<i64>().unwrap_or(0))
+        }
     }
 
     fn read_string(&mut self) -> Token {
@@ -106,6 +123,7 @@ impl Lexer {
             "функция" => Token::Function,
             "вернуть" => Token::Return,
             "число" => Token::Number,
+            "дробь" => Token::Float,
             "текст" => Token::Text,
             "логический" => Token::Boolean,
             "список" => Token::List,
@@ -320,7 +338,7 @@ impl Lexer {
                     },
                 },
             }
-            
+
         }
     }
 
