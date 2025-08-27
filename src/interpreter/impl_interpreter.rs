@@ -291,15 +291,7 @@ impl Interpreter {
             ExpressionKind::Index { object: _, index: _ } => {
                 Err(RuntimeError::InvalidOperation("Индексный доступ отключён".to_string()))
             }
-
-            ExpressionKind::List(_) => {
-                Err(RuntimeError::InvalidOperation("Списки отключены".to_string()))
-            }
-
-            ExpressionKind::Dict(_) => {
-                Err(RuntimeError::InvalidOperation("Словари отключены".to_string()))
-            }
-
+            
             ExpressionKind::Input(arg_id) => {
                 let data = self.evaluate_expression(*arg_id, program)?;
                 self.input_function(data)

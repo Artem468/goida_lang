@@ -869,44 +869,6 @@ impl Parser {
                 self.expect(Token::RightParentheses)?;
                 Ok(expr)
             }
-            Token::LeftBracket => {
-                self.advance();
-                let mut elements = Vec::new();
-
-                while !matches!(self.current_token().token, Token::RightBracket) {
-                    elements.push(self.parse_expression()?);
-                    if matches!(self.current_token().token, Token::Comma) {
-                        self.advance();
-                    }
-                }
-
-                self.expect(Token::RightBracket)?;
-                Ok(self.program.arena.add_expression(
-                    ExpressionKind::List(elements),
-                    span
-                ))
-            }
-            Token::LeftBrace => {
-                self.advance();
-                let mut pairs = Vec::new();
-
-                while !matches!(self.current_token().token, Token::RightBrace) {
-                    let key = self.parse_expression()?;
-                    self.expect(Token::Colon)?;
-                    let value = self.parse_expression()?;
-                    pairs.push((key, value));
-
-                    if matches!(self.current_token().token, Token::Comma) {
-                        self.advance();
-                    }
-                }
-
-                self.expect(Token::RightBrace)?;
-                Ok(self.program.arena.add_expression(
-                    ExpressionKind::Dict(pairs),
-                    span
-                ))
-            }
             _ => Err(ParseError::UnexpectedToken(format!(
                 "Неожиданный токен: {:?} в позиции {}:{}",
                 self.current_token().token,

@@ -156,8 +156,6 @@ pub enum ExpressionKind {
         object: ExprId,
         index: ExprId,
     },
-    List(Vec<ExprId>),
-    Dict(Vec<(ExprId, ExprId)>),
     Input(ExprId),
 }
 
