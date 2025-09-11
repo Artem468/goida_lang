@@ -43,6 +43,7 @@ pub enum DataType {
         params: Vec<DataType>,
         return_type: Box<DataType>,
     },
+    Object(Symbol),
     Generic(Symbol),
     Unit,
 }
@@ -157,6 +158,21 @@ pub enum ExpressionKind {
         index: ExprId,
     },
     Input(ExprId),
+    
+    PropertyAccess {
+        object: ExprId,
+        property: Symbol,
+    },
+    MethodCall {
+        object: ExprId,
+        method: Symbol,
+        args: Vec<ExprId>,
+    },
+    ObjectCreation {
+        class_name: Symbol,
+        args: Vec<ExprId>,
+    },
+    This,
 }
 
 #[derive(Debug, Clone)]
@@ -189,18 +205,33 @@ pub enum BinaryOperator {
 impl BinaryOperator {
     pub fn precedence(self) -> u8 {
         match self {
-            Self::Assign => 1,
             Self::Or => 2,
             Self::And => 3,
             Self::Eq | Self::Ne => 4,
             Self::Lt | Self::Le | Self::Gt | Self::Ge => 5,
             Self::Add | Self::Sub => 6,
             Self::Mul | Self::Div | Self::Mod => 7,
+            Self::Assign => 1,
         }
     }
 
     pub fn is_left_associative(self) -> bool {
-        !matches!(self, Self::Assign)
+        matches!(
+            self,
+            Self::Add
+                | Self::Sub
+                | Self::Mul
+                | Self::Div
+                | Self::Mod
+                | Self::Eq
+                | Self::Ne
+                | Self::Lt
+                | Self::Le
+                | Self::Gt
+                | Self::Ge
+                | Self::And
+                | Self::Or
+        )
     }
 }
 
@@ -246,9 +277,16 @@ pub enum StatementKind {
     Return(Option<ExprId>),
     Print(ExprId),
     Input(ExprId),
+    
+    ClassDefinition(ClassDefinition),
+    PropertyAssign {
+        object: ExprId,
+        property: Symbol,
+        value: ExprId,
+    },
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Function {
     pub name: Symbol,
     pub params: Vec<Parameter>,
@@ -258,7 +296,7 @@ pub struct Function {
     pub module: Option<Symbol>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Parameter {
     pub name: Symbol,
     pub param_type: TypeId,
@@ -271,10 +309,45 @@ pub struct Import {
     pub span: Span,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub enum FieldVisibility {
+    Private,
+    Public,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ClassField {
+    pub name: Symbol,
+    pub field_type: Option<TypeId>,
+    pub visibility: FieldVisibility,
+    pub default_value: Option<ExprId>,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ClassMethod {
+    pub name: Symbol,
+    pub params: Vec<Parameter>,
+    pub return_type: Option<TypeId>,
+    pub body: StmtId,
+    pub visibility: FieldVisibility,
+    pub is_constructor: bool, 
+    pub span: Span,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ClassDefinition {
+    pub name: Symbol,
+    pub fields: Vec<ClassField>,
+    pub methods: Vec<ClassMethod>,
+    pub span: Span,
+}
+
 #[derive(Debug, Clone)]
 pub struct Program {
     pub name: Symbol,
     pub functions: Vec<Function>,
+    pub classes: Vec<ClassDefinition>, 
     pub statements: Vec<StmtId>,
     pub imports: Vec<Import>,
     pub arena: AstArena,
@@ -288,6 +361,7 @@ impl Program {
         Self {
             name: name_symbol,
             functions: Vec::new(),
+            classes: Vec::new(), 
             statements: Vec::new(),
             imports: Vec::new(),
             arena,

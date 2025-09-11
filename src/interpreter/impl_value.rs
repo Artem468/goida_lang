@@ -14,6 +14,7 @@ impl Value {
                     "ложь".to_string()
                 }
             }
+            Value::Object(obj) => format!("Объект {}", obj.borrow().class_name), 
             Value::Empty => "пустота".to_string(),
         }
     }
@@ -24,6 +25,7 @@ impl Value {
             Value::Number(n) => *n != 0,
             Value::Float(n) => *n != 0.0,
             Value::Text(s) => !s.is_empty(),
+            Value::Object(_) => true,
             Value::Empty => false,
         }
     }
@@ -43,6 +45,9 @@ impl fmt::Display for Value {
             }
             Value::Boolean(data) => {
                 write!(f, "{data}")
+            }
+            Value::Object(obj) => {
+                write!(f, "[Объект {}]", obj.borrow().class_name) 
             }
             Value::Empty => {
                 write!(f, "")

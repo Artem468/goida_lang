@@ -13,6 +13,7 @@ impl Interpreter {
         Interpreter {
             environment: Environment::new(),
             functions: HashMap::new(),
+            classes: HashMap::new(),
             modules: HashMap::new(),
             current_dir: dir,
             current_module: None,
@@ -61,7 +62,11 @@ impl Interpreter {
                 self.modules.insert(file_stem.to_string(), sub_interpreter.into_module(program));
             }
         }
-
+        
+        for class_def in &program.classes {
+            self.register_class(class_def, &program)?;
+        }
+        
         for function in &program.functions {
             let func_name = program.arena.resolve_symbol(function.name).unwrap().to_string();
             self.functions.insert(func_name, function.clone());
@@ -187,6 +192,46 @@ impl Interpreter {
                 self.input_function(value)?;
                 Ok(())
             }
+            
+            
+            StatementKind::ClassDefinition(_) => {
+                
+                Ok(())
+            }
+            
+            StatementKind::PropertyAssign { object, property, value } => {
+                
+                let property_name = program.arena.resolve_symbol(*property).unwrap().to_string();
+                let obj_expr = program.arena.get_expression(*object).unwrap();
+                let is_external = !matches!(obj_expr.kind, ExpressionKind::This);
+                
+                let obj_value = self.evaluate_expression(*object, program)?;
+                let new_value = self.evaluate_expression(*value, program)?;
+                
+                if let Value::Object(instance_ref) = obj_value {
+                    
+                    {
+                        let instance = instance_ref.borrow();
+                        if !instance.is_field_accessible(&property_name, is_external) {
+                            return Err(RuntimeError::InvalidOperation(
+                                format!("Поле '{}' недоступно для записи", property_name)
+                            ));
+                        }
+                    } 
+                    
+                    
+                    {
+                        let mut instance_mut = instance_ref.borrow_mut();
+                        instance_mut.set_field(property_name, new_value);
+                    } 
+                    
+                    Ok(())
+                } else {
+                    Err(RuntimeError::TypeMismatch(
+                        format!("Попытка присвоения свойства не-объектному типу: {:?}", obj_value)
+                    ))
+                }
+            }
         }
     }
 
@@ -295,6 +340,185 @@ impl Interpreter {
             ExpressionKind::Input(arg_id) => {
                 let data = self.evaluate_expression(*arg_id, program)?;
                 self.input_function(data)
+            }
+            
+            
+            ExpressionKind::PropertyAccess { object, property } => {
+                let obj_expr = program.arena.get_expression(*object).unwrap();
+                
+                
+                if let ExpressionKind::Identifier(module_symbol) = obj_expr.kind {
+                    let module_name = program.arena.resolve_symbol(module_symbol).unwrap();
+                    let property_name = program.arena.resolve_symbol(*property).unwrap().to_string();
+                    
+                    
+                    if let Some(module_env) = self.modules.get(module_name) {
+                        return module_env.environment.get(&property_name).ok_or_else(|| {
+                            RuntimeError::UndefinedVariable(format!("{}.{}", module_name, property_name))
+                        });
+                    }
+                }
+                
+                
+                let obj_result = self.evaluate_expression(*object, program);
+                
+                match obj_result {
+                    Ok(Value::Object(instance_ref)) => {
+                        let property_name = program.arena.resolve_symbol(*property).unwrap().to_string();
+                        let instance = instance_ref.borrow();
+                        
+                        
+                        let is_external = !matches!(obj_expr.kind, ExpressionKind::This);
+                        
+                        
+                        if !instance.is_field_accessible(&property_name, is_external) {
+                            return Err(RuntimeError::InvalidOperation(
+                                format!("Поле '{}' недоступно для чтения", property_name)
+                            ));
+                        }
+                        
+                        if let Some(value) = instance.get_field(&property_name) {
+                            Ok(value.clone())
+                        } else {
+                            Ok(Value::Empty) 
+                        }
+                    }
+                    _ => {
+                        
+                        if let ExpressionKind::Identifier(symbol) = obj_expr.kind {
+                            let name = program.arena.resolve_symbol(symbol).unwrap();
+                            Err(RuntimeError::InvalidOperation(format!(
+                                "Модуль '{}' не найден",
+                                name
+                            )))
+                        } else {
+                            Err(RuntimeError::InvalidOperation(
+                                "Попытка доступа к свойству не-объектного типа".to_string()
+                            ))
+                        }
+                    }
+                }
+            }
+            
+            ExpressionKind::MethodCall { object, method, args } => {
+                let obj_expr = program.arena.get_expression(*object).unwrap();
+                let method_name = program.arena.resolve_symbol(*method).unwrap().to_string();
+                
+                
+                if let ExpressionKind::Identifier(module_symbol) = obj_expr.kind {
+                    let module_name = program.arena.resolve_symbol(module_symbol).unwrap();
+                    
+                    
+                    if let Some(module_env) = self.modules.get(module_name).cloned() {
+                        if let Some(function) = module_env.functions.get(&method_name) {
+                            
+                            
+                            let mut arguments = Vec::new();
+                            for &arg_id in args {
+                                arguments.push(self.evaluate_expression(arg_id, program)?);
+                            }
+                            
+                            
+                            return self.call_function(function.clone(), arguments, &module_env.program);
+                        } else {
+                            return Err(RuntimeError::UndefinedFunction(
+                                format!("Функция '{}.{}' не найдена в модуле", module_name, method_name)
+                            ));
+                        }
+                    }
+                }
+                
+                
+                let obj_result = self.evaluate_expression(*object, program);
+                
+                match obj_result {
+                    Ok(Value::Object(instance_ref)) => {
+                        let instance = instance_ref.borrow();
+                        
+                        
+                        let is_external = !matches!(obj_expr.kind, ExpressionKind::This);
+                        
+                        
+                        if !instance.is_method_accessible(&method_name, is_external) {
+                            return Err(RuntimeError::InvalidOperation(
+                                format!("Метод '{}' недоступен для вызова", method_name)
+                            ));
+                        }
+                        
+                        if let Some(method) = instance.get_method(&method_name) {
+                            let method = method.clone();
+                            drop(instance); 
+                            
+                            
+                            let mut arguments = Vec::new();
+                            for &arg_id in args {
+                                arguments.push(self.evaluate_expression(arg_id, program)?);
+                            }
+                            
+                            
+                            self.call_method(method, arguments, Value::Object(instance_ref), program)
+                        } else {
+                            Err(RuntimeError::UndefinedFunction(
+                                format!("Метод '{}' не найден в классе '{}'", method_name, instance.class_name)
+                            ))
+                        }
+                    }
+                    _ => {
+                        
+                        if let ExpressionKind::Identifier(symbol) = obj_expr.kind {
+                            let name = program.arena.resolve_symbol(symbol).unwrap();
+                            Err(RuntimeError::InvalidOperation(format!(
+                                "Модуль '{}' не найден",
+                                name
+                            )))
+                        } else {
+                            Err(RuntimeError::TypeMismatch(
+                                "Попытка вызова метода не-объектного типа".to_string()
+                            ))
+                        }
+                    }
+                }
+            }
+            
+            ExpressionKind::ObjectCreation { class_name, args } => {
+                let class_name_str = program.arena.resolve_symbol(*class_name).unwrap().to_string();
+                
+                if let Some(class) = self.classes.get(&class_name_str).cloned() {
+                    
+                    let mut arguments = Vec::new();
+                    for &arg_id in args {
+                        arguments.push(self.evaluate_expression(arg_id, program)?);
+                    }
+                    
+                    
+                    let instance = class.create_instance();
+                    let instance_ref = std::rc::Rc::new(std::cell::RefCell::new(instance));
+                    
+                    
+                    if let Some(constructor) = {
+                        
+                        let temp_borrow = instance_ref.borrow();
+                        temp_borrow.get_constructor().cloned()
+                    } {
+                        
+                        self.call_method(constructor, arguments, Value::Object(instance_ref.clone()), program)?;
+                    }
+                    
+                    Ok(Value::Object(instance_ref))
+                } else {
+                    Err(RuntimeError::UndefinedVariable(
+                        format!("Класс '{}' не найден", class_name_str)
+                    ))
+                }
+            }
+            
+            ExpressionKind::This => {
+                
+                self.environment
+                    .get("this")
+                    .ok_or_else(|| RuntimeError::InvalidOperation(
+                        "'это' можно использовать только внутри методов класса".to_string()
+                    ))
             }
         }
     }
@@ -488,5 +712,99 @@ impl Interpreter {
                 "Сравнение применимо только к числам".to_string(),
             )),
         }
+    }
+    
+    
+    
+    /// Регистрируем класс в интерпретаторе
+    fn register_class(&mut self, class_def: &crate::ast::ClassDefinition, program: &Program) -> Result<(), RuntimeError> {
+        use crate::interpreter::structs::{Class};
+        use std::rc::Rc;
+        
+        let class_name = program.arena.resolve_symbol(class_def.name).unwrap().to_string();
+        let mut class = Class::new(class_name.clone());
+        
+        
+        for field in &class_def.fields {
+            let field_name = program.arena.resolve_symbol(field.name).unwrap().to_string();
+            let default_value = if let Some(default_expr) = field.default_value {
+                Some(self.evaluate_expression(default_expr, program)?)
+            } else {
+                None
+            };
+            class.add_field(field_name, field.visibility.clone(), default_value);
+        }
+        
+        
+        for method in &class_def.methods {
+            let method_name = program.arena.resolve_symbol(method.name).unwrap().to_string();
+            
+            
+            let function = crate::ast::Function {
+                name: method.name,
+                params: method.params.clone(),
+                return_type: method.return_type,
+                body: method.body,
+                span: method.span,
+                module: Some(program.name),
+            };
+            
+            if method.is_constructor {
+                class.set_constructor(function);
+            } else {
+                class.add_method(method_name, method.visibility.clone(), function);
+            }
+        }
+        
+        self.classes.insert(class_name, Rc::new(class));
+        Ok(())
+    }
+    
+    /// Вызываем метод с контекстом объекта
+    fn call_method(&mut self, method: Function, arguments: Vec<Value>, this_obj: Value, program: &Program) -> Result<Value, RuntimeError> {
+        let prev_module = self.current_module.clone();
+        let module_name = if let Some(module_symbol) = method.module {
+            Some(program.arena.resolve_symbol(module_symbol).unwrap().to_string())
+        } else {
+            None
+        };
+        self.current_module = module_name;
+        
+        let parent_env = self.environment.clone();
+        self.environment = Environment::with_parent(parent_env);
+        
+        
+        self.environment.define("this".to_string(), this_obj);
+        
+        if arguments.len() != method.params.len() {
+            return Err(RuntimeError::InvalidOperation(format!(
+                "Метод {} ожидает {} аргументов, получено {}",
+                program.arena.resolve_symbol(method.name).unwrap(),
+                method.params.len(),
+                arguments.len()
+            )));
+        }
+        
+        for (param, arg_value) in method.params.iter().zip(arguments.iter()) {
+            let param_name = program.arena.resolve_symbol(param.name).unwrap().to_string();
+            self.environment.define(param_name, arg_value.clone());
+        }
+        
+        let mut result = Value::Empty;
+        match self.execute_statement(method.body, program) {
+            Ok(()) => {}
+            Err(RuntimeError::Return(val)) => {
+                result = val;
+            }
+            Err(e) => {
+                self.environment = self.environment.clone().pop();
+                self.current_module = prev_module;
+                return Err(e);
+            }
+        }
+        
+        self.environment = self.environment.clone().pop();
+        self.current_module = prev_module;
+        Ok(result)
     }
 }

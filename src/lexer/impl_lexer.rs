@@ -133,6 +133,12 @@ impl Lexer {
             "печать" => Token::Print,
             "ввод" => Token::Input,
             "подключить" => Token::Import,
+            "класс" => Token::Class,
+            "новый" => Token::New,
+            "приватный" => Token::Private,
+            "публичный" => Token::Public,
+            "конструктор" => Token::Constructor,
+            "это" => Token::This,
             _ => Token::Identifier(identifier),
         }
     }
