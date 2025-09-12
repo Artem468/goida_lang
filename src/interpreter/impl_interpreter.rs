@@ -13,6 +13,7 @@ impl Interpreter {
         Interpreter {
             environment: Environment::new(),
             functions: HashMap::new(),
+            classes: HashMap::new(),
             modules: HashMap::new(),
             current_dir: dir,
             current_module: None,
@@ -22,6 +23,7 @@ impl Interpreter {
     fn into_module(self, program: Program) -> Module {
         Module {
             functions: self.functions,
+            classes: self.classes,
             environment: self.environment,
             program,
         }
@@ -61,7 +63,11 @@ impl Interpreter {
                 self.modules.insert(file_stem.to_string(), sub_interpreter.into_module(program));
             }
         }
-
+        
+        for class_def in &program.classes {
+            self.register_class(class_def, &program)?;
+        }
+        
         for function in &program.functions {
             let func_name = program.arena.resolve_symbol(function.name).unwrap().to_string();
             self.functions.insert(func_name, function.clone());
@@ -104,8 +110,8 @@ impl Interpreter {
                 Ok(())
             }
 
-            StatementKind::IndexAssign { object, index, value } => {
-                self.execute_index_assignment(*object, *index, *value, program)
+            StatementKind::IndexAssign { object: _, index: _, value: _, } => {
+                Err(RuntimeError::InvalidOperation("Индексный доступ отключён".to_string()))
             }
 
             StatementKind::If { condition, then_body, else_body } => {
@@ -186,6 +192,46 @@ impl Interpreter {
                 let value = self.evaluate_expression(*expr_id, program)?;
                 self.input_function(value)?;
                 Ok(())
+            }
+            
+            
+            StatementKind::ClassDefinition(_) => {
+                
+                Ok(())
+            }
+            
+            StatementKind::PropertyAssign { object, property, value } => {
+                
+                let property_name = program.arena.resolve_symbol(*property).unwrap().to_string();
+                let obj_expr = program.arena.get_expression(*object).unwrap();
+                let is_external = !matches!(obj_expr.kind, ExpressionKind::This);
+                
+                let obj_value = self.evaluate_expression(*object, program)?;
+                let new_value = self.evaluate_expression(*value, program)?;
+                
+                if let Value::Object(instance_ref) = obj_value {
+                    
+                    {
+                        let instance = instance_ref.borrow();
+                        if !instance.is_field_accessible(&property_name, is_external) {
+                            return Err(RuntimeError::InvalidOperation(
+                                format!("Поле '{}' недоступно для записи", property_name)
+                            ));
+                        }
+                    } 
+                    
+                    
+                    {
+                        let mut instance_mut = instance_ref.borrow_mut();
+                        instance_mut.set_field(property_name, new_value);
+                    } 
+                    
+                    Ok(())
+                } else {
+                    Err(RuntimeError::TypeMismatch(
+                        format!("Попытка присвоения свойства не-объектному типу: {:?}", obj_value)
+                    ))
+                }
             }
         }
     }
@@ -280,10 +326,6 @@ impl Interpreter {
                     )),
                 };
 
-                if self.is_mutable_builtin(&func_name) {
-                    return self.call_mutable_builtin(&func_name, args, program);
-                }
-
                 let mut arguments = Vec::new();
                 for &arg_id in args {
                     arguments.push(self.evaluate_expression(arg_id, program)?);
@@ -292,90 +334,248 @@ impl Interpreter {
                 self.call_function_by_name(&func_name, arguments, program)
             }
 
-            ExpressionKind::Index { object, index } => {
-                let obj_value = self.evaluate_expression(*object, program)?;
-                let idx_value = self.evaluate_expression(*index, program)?;
-
-                match obj_value {
-                    Value::List(items) => {
-                        match idx_value {
-                            Value::Number(n) => {
-                                let index = n as usize;
-                                if index < items.len() {
-                                    Ok(items[index].clone())
-                                } else {
-                                    Err(RuntimeError::InvalidOperation(format!(
-                                        "Индекс {} выходит за границы списка длины {}",
-                                        index, items.len()
-                                    )))
-                                }
-                            }
-                            _ => Err(RuntimeError::TypeMismatch(
-                                "Индекс списка должен быть числом".to_string(),
-                            ))
-                        }
-                    }
-                    Value::Dict(map) => {
-                        let key_str = match idx_value {
-                            Value::Text(s) => s,
-                            Value::Number(n) => n.to_string(),
-                            Value::Boolean(b) => (if b { "истина" } else { "ложь" }).to_string(),
-                            _ => return Err(RuntimeError::TypeMismatch(
-                                "Ключ словаря должен быть текстом, числом или логическим значением".to_string(),
-                            )),
-                        };
-
-                        map.get(&key_str).cloned().ok_or_else(|| {
-                            RuntimeError::InvalidOperation(format!(
-                                "Ключ '{}' не найден в словаре",
-                                key_str
-                            ))
-                        })
-                    }
-                    _ => Err(RuntimeError::TypeMismatch(
-                        "Индексный доступ поддерживается только для списков и словарей".to_string(),
-                    ))
-                }
+            ExpressionKind::Index { object: _, index: _ } => {
+                Err(RuntimeError::InvalidOperation("Индексный доступ отключён".to_string()))
             }
-
-            ExpressionKind::List(elements) => {
-                let mut list_values = Vec::new();
-                for &elem_id in elements {
-                    list_values.push(self.evaluate_expression(elem_id, program)?);
-                }
-                Ok(Value::List(list_values))
-            }
-
-            ExpressionKind::Dict(pairs) => {
-                let mut dict_map = HashMap::new();
-                for &(key_id, value_id) in pairs {
-                    let key = self.evaluate_expression(key_id, program)?;
-                    let value = self.evaluate_expression(value_id, program)?;
-                    let key_str = match key {
-                        Value::Text(s) => s,
-                        Value::Number(n) => n.to_string(),
-                        Value::Boolean(b) => (if b { "истина" } else { "ложь" }).to_string(),
-                        _ => return Err(RuntimeError::TypeMismatch(
-                            "Ключи словаря должны быть текстом, числом или логическим значением".to_string(),
-                        )),
-                    };
-                    dict_map.insert(key_str, value);
-                }
-                Ok(Value::Dict(dict_map))
-            }
-
+            
             ExpressionKind::Input(arg_id) => {
                 let data = self.evaluate_expression(*arg_id, program)?;
                 self.input_function(data)
+            }
+            
+            
+            ExpressionKind::PropertyAccess { object, property } => {
+                let obj_expr = program.arena.get_expression(*object).unwrap();
+                
+                
+                if let ExpressionKind::Identifier(module_symbol) = obj_expr.kind {
+                    let module_name = program.arena.resolve_symbol(module_symbol).unwrap();
+                    let property_name = program.arena.resolve_symbol(*property).unwrap().to_string();
+                    
+                    
+                    if let Some(module_env) = self.modules.get(module_name) {
+                        return module_env.environment.get(&property_name).ok_or_else(|| {
+                            RuntimeError::UndefinedVariable(format!("{}.{}", module_name, property_name))
+                        });
+                    }
+                }
+                
+                
+                let obj_result = self.evaluate_expression(*object, program);
+                
+                match obj_result {
+                    Ok(Value::Object(instance_ref)) => {
+                        let property_name = program.arena.resolve_symbol(*property).unwrap().to_string();
+                        let instance = instance_ref.borrow();
+                        
+                        
+                        let is_external = !matches!(obj_expr.kind, ExpressionKind::This);
+                        
+                        
+                        if !instance.is_field_accessible(&property_name, is_external) {
+                            return Err(RuntimeError::InvalidOperation(
+                                format!("Поле '{}' недоступно для чтения", property_name)
+                            ));
+                        }
+                        
+                        if let Some(value) = instance.get_field(&property_name) {
+                            Ok(value.clone())
+                        } else {
+                            Ok(Value::Empty) 
+                        }
+                    }
+                    _ => {
+                        
+                        if let ExpressionKind::Identifier(symbol) = obj_expr.kind {
+                            let name = program.arena.resolve_symbol(symbol).unwrap();
+                            Err(RuntimeError::InvalidOperation(format!(
+                                "Модуль '{}' не найден",
+                                name
+                            )))
+                        } else {
+                            Err(RuntimeError::InvalidOperation(
+                                "Попытка доступа к свойству не-объектного типа".to_string()
+                            ))
+                        }
+                    }
+                }
+            }
+            
+            ExpressionKind::MethodCall { object, method, args } => {
+                let obj_expr = program.arena.get_expression(*object).unwrap();
+                let method_name = program.arena.resolve_symbol(*method).unwrap().to_string();
+                
+                
+                let obj_result = self.evaluate_expression(*object, program);
+                
+                match obj_result {
+                    Ok(Value::Object(instance_ref)) => {
+                        let instance = instance_ref.borrow();
+                        
+                        let is_external = !matches!(obj_expr.kind, ExpressionKind::This);
+                        
+                        if !instance.is_method_accessible(&method_name, is_external) {
+                            return Err(RuntimeError::InvalidOperation(
+                                format!("Метод '{}' недоступен для вызова", method_name)
+                            ));
+                        }
+                        
+                        if let Some(method) = instance.get_method(&method_name) {
+                            let method = method.clone();
+                            
+                            
+                            
+                            let method_program = {
+                                let mut found_program = program.clone();
+                                for (_module_name, module) in &self.modules {
+                                    if module.classes.contains_key(&instance.class_name) {
+                                        found_program = module.program.clone();
+                                        break;
+                                    }
+                                }
+                                found_program
+                            };
+                            
+                            drop(instance);
+                            
+                            let mut arguments = Vec::new();
+                            for &arg_id in args {
+                                arguments.push(self.evaluate_expression(arg_id, program)?);
+                            }
+                            
+                            self.call_method(method, arguments, Value::Object(instance_ref), &method_program)
+                        } else {
+                            Err(RuntimeError::UndefinedFunction(
+                                format!("Метод '{}' не найден в классе '{}'", method_name, instance.class_name)
+                            ))
+                        }
+                    }
+                    Ok(_) => {
+                        
+                        if let ExpressionKind::Identifier(module_symbol) = obj_expr.kind {
+                            let module_name = program.arena.resolve_symbol(module_symbol).unwrap();
+                            
+                            if let Some(module_env) = self.modules.get(module_name).cloned() {
+                                if let Some(function) = module_env.functions.get(&method_name) {
+                                    let mut arguments = Vec::new();
+                                    for &arg_id in args {
+                                        arguments.push(self.evaluate_expression(arg_id, program)?);
+                                    }
+                                    
+                                    return self.call_function(function.clone(), arguments, &module_env.program);
+                                } else {
+                                    return Err(RuntimeError::UndefinedFunction(
+                                        format!("Функция '{}.{}' не найдена в модуле", module_name, method_name)
+                                    ));
+                                }
+                            }
+                        }
+                        
+                        Err(RuntimeError::TypeMismatch(
+                            "Попытка вызова метода не-объектного типа".to_string()
+                        ))
+                    }
+                    Err(_) => {
+                        
+                        if let ExpressionKind::Identifier(module_symbol) = obj_expr.kind {
+                            let module_name = program.arena.resolve_symbol(module_symbol).unwrap();
+                            
+                            if let Some(module_env) = self.modules.get(module_name).cloned() {
+                                if let Some(function) = module_env.functions.get(&method_name) {
+                                    let mut arguments = Vec::new();
+                                    for &arg_id in args {
+                                        arguments.push(self.evaluate_expression(arg_id, program)?);
+                                    }
+                                    
+                                    return self.call_function(function.clone(), arguments, &module_env.program);
+                                } else {
+                                    return Err(RuntimeError::UndefinedFunction(
+                                        format!("Функция '{}.{}' не найдена в модуле", module_name, method_name)
+                                    ));
+                                }
+                            }
+                            
+                            Err(RuntimeError::InvalidOperation(format!(
+                                "Модуль '{}' не найден",
+                                module_name
+                            )))
+                        } else {
+                            Err(RuntimeError::TypeMismatch(
+                                "Попытка вызова метода не-объектного типа".to_string()
+                            ))
+                        }
+                    }
+                }
+            }
+            
+            ExpressionKind::ObjectCreation { class_name, args } => {
+                let class_name_str = program.arena.resolve_symbol(*class_name).unwrap().to_string();
+                
+                
+                let class = if class_name_str.contains('.') {
+                    let parts: Vec<&str> = class_name_str.split('.').collect();
+                    if parts.len() == 2 {
+                        let module_name = parts[0];
+                        let class_simple_name = parts[1];
+                        
+                        if let Some(module) = self.modules.get(module_name) {
+                            module.classes.get(class_simple_name).cloned()
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    }
+                } else {
+                    
+                    self.classes.get(&class_name_str).cloned()
+                };
+                
+                if let Some(class) = class {
+                    let mut arguments = Vec::new();
+                    for &arg_id in args {
+                        arguments.push(self.evaluate_expression(arg_id, program)?);
+                    }
+                    
+                    let instance = class.create_instance();
+                    let instance_ref = std::rc::Rc::new(std::cell::RefCell::new(instance));
+                    
+                    if let Some(constructor) = {
+                        let temp_borrow = instance_ref.borrow();
+                        temp_borrow.get_constructor().cloned()
+                    } {
+                        
+                        let constructor_program = if class_name_str.contains('.') {
+                            let parts: Vec<&str> = class_name_str.split('.').collect();
+                            let module_name = parts[0];
+                            self.modules.get(module_name).unwrap().program.clone()
+                        } else {
+                            program.clone()
+                        };
+                        
+                        self.call_method(constructor, arguments, Value::Object(instance_ref.clone()), &constructor_program)?;
+                    }
+                    
+                    Ok(Value::Object(instance_ref))
+                } else {
+                    Err(RuntimeError::UndefinedVariable(
+                        format!("Класс '{}' не найден", class_name_str)
+                    ))
+                }
+            }
+            
+            ExpressionKind::This => {
+                
+                self.environment
+                    .get("this")
+                    .ok_or_else(|| RuntimeError::InvalidOperation(
+                        "'это' можно использовать только внутри методов класса".to_string()
+                    ))
             }
         }
     }
 
     fn call_function_by_name(&mut self, name: &str, arguments: Vec<Value>, program: &Program) -> Result<Value, RuntimeError> {
-        if let Ok(result) = self.call_builtin_function(name, &arguments) {
-            return Ok(result);
-        }
-
         if let Some(dot_index) = name.find('.') {
             let module_name = &name[..dot_index];
             let func_name = &name[dot_index + 1..];
@@ -476,10 +676,6 @@ impl Interpreter {
                 if *a { "истина" } else { "ложь" },
                 b
             ))),
-            (Value::Text(a), Value::List(_)) => Ok(Value::Text(format!("{}{}", a, right))),
-            (Value::List(_), Value::Text(b)) => Ok(Value::Text(format!("{}{}", left, b))),
-            (Value::Text(a), Value::Dict(_)) => Ok(Value::Text(format!("{}{}", a, right))),
-            (Value::Dict(_), Value::Text(d)) => Ok(Value::Text(format!("{}{}", left, d))),
             _ => Err(RuntimeError::TypeMismatch(
                 "Неподдерживаемые типы для операции сложения".to_string(),
             )),
@@ -570,381 +766,97 @@ impl Interpreter {
         }
     }
 
-    fn call_builtin_function(&mut self, name: &str, arguments: &[Value]) -> Result<Value, RuntimeError> {
-        match name {
-            "добавить" => self.builtin_push(arguments),
-            "извлечь" => self.builtin_pop(arguments),
-            "удалить" => self.builtin_remove(arguments),
-            "длина" => self.builtin_size(arguments),
-            "содержит" => self.builtin_contains(arguments),
-            _ => Err(RuntimeError::UndefinedFunction(name.to_string())),
+
+
+    /// Регистрируем класс в интерпретаторе
+    fn register_class(&mut self, class_def: &crate::ast::ClassDefinition, program: &Program) -> Result<(), RuntimeError> {
+        use crate::interpreter::structs::{Class};
+        use std::rc::Rc;
+        
+        let class_name = program.arena.resolve_symbol(class_def.name).unwrap().to_string();
+        let mut class = Class::new(class_name.clone());
+        
+        
+        for field in &class_def.fields {
+            let field_name = program.arena.resolve_symbol(field.name).unwrap().to_string();
+            let default_value = if let Some(default_expr) = field.default_value {
+                Some(self.evaluate_expression(default_expr, program)?)
+            } else {
+                None
+            };
+            class.add_field(field_name, field.visibility.clone(), default_value);
         }
-    }
-
-    fn builtin_push(&mut self, arguments: &[Value]) -> Result<Value, RuntimeError> {
-        match arguments.len() {
-            2 => {
-                match &arguments[0] {
-                    Value::List(items) => {
-                        let mut new_list = Vec::with_capacity(items.len() + 1);
-                        new_list.extend_from_slice(items);
-                        new_list.push(arguments[1].clone());
-                        Ok(Value::List(new_list))
-                    }
-                    _ => Err(RuntimeError::TypeMismatch(
-                        "Для добавления элемента первый аргумент должен быть списком".to_string(),
-                    )),
-                }
+        
+        
+        for method in &class_def.methods {
+            let method_name = program.arena.resolve_symbol(method.name).unwrap().to_string();
+            
+            
+            let function = crate::ast::Function {
+                name: method.name,
+                params: method.params.clone(),
+                return_type: method.return_type,
+                body: method.body,
+                span: method.span,
+                module: Some(program.name),
+            };
+            
+            if method.is_constructor {
+                class.set_constructor(function);
+            } else {
+                class.add_method(method_name, method.visibility.clone(), function);
             }
-            3 => {
-                match &arguments[0] {
-                    Value::Dict(map) => {
-                        let key_str = match &arguments[1] {
-                            Value::Text(s) => s.clone(),
-                            Value::Number(n) => n.to_string(),
-                            Value::Boolean(b) => (if *b { "истина" } else { "ложь" }).to_string(),
-                            _ => return Err(RuntimeError::TypeMismatch(
-                                "Ключ словаря должен быть текстом, числом или логическим значением".to_string(),
-                            )),
-                        };
-
-                        let mut new_map = map.clone();
-                        new_map.insert(key_str, arguments[2].clone());
-                        Ok(Value::Dict(new_map))
-                    }
-                    _ => Err(RuntimeError::TypeMismatch(
-                        "Для добавления пары ключ-значение первый аргумент должен быть словарём".to_string(),
-                    )),
-                }
-            }
-            _ => Err(RuntimeError::InvalidOperation(
-                "Функция 'добавить' ожидает 2 аргумента для списков (список, элемент) или 3 для словарей (словарь, ключ, значение)".to_string(),
-            )),
         }
-    }
-
-    fn builtin_pop(&mut self, arguments: &[Value]) -> Result<Value, RuntimeError> {
-        if arguments.len() != 1 {
-            return Err(RuntimeError::InvalidOperation(
-                "Функция 'извлечь' ожидает 1 аргумент: список".to_string(),
-            ));
-        }
-
-        match &arguments[0] {
-            Value::List(items) => {
-                if items.is_empty() {
-                    Err(RuntimeError::InvalidOperation(
-                        "Нельзя извлечь элемент из пустого списка".to_string(),
-                    ))
-                } else {
-                    let mut new_list = items.clone();
-                    let popped = new_list.pop().unwrap();
-                    Ok(popped)
-                }
-            }
-            _ => Err(RuntimeError::TypeMismatch(
-                "Функция 'извлечь' применима только к спискам".to_string(),
-            )),
-        }
-    }
-
-    fn builtin_remove(&mut self, arguments: &[Value]) -> Result<Value, RuntimeError> {
-        if arguments.len() != 2 {
-            return Err(RuntimeError::InvalidOperation(
-                "Функция 'удалить' ожидает 2 аргумента: (список/словарь, индекс/ключ)".to_string(),
-            ));
-        }
-
-        match (&arguments[0], &arguments[1]) {
-            (Value::List(items), Value::Number(index)) => {
-                let idx = *index as usize;
-                if idx >= items.len() {
-                    return Err(RuntimeError::InvalidOperation(format!(
-                        "Индекс {} выходит за границы списка длины {}",
-                        idx, items.len()
-                    )));
-                }
-                let mut new_list = items.clone();
-                let removed = new_list.remove(idx);
-                Ok(removed)
-            }
-            (Value::Dict(map), key) => {
-                let key_str = match key {
-                    Value::Text(s) => s.clone(),
-                    Value::Number(n) => n.to_string(),
-                    Value::Boolean(b) => (if *b { "истина" } else { "ложь" }).to_string(),
-                    _ => return Err(RuntimeError::TypeMismatch(
-                        "Ключ словаря должен быть текстом, числом или логическим значением".to_string(),
-                    )),
-                };
-
-                let mut new_map = map.clone();
-                match new_map.remove(&key_str) {
-                    Some(removed) => Ok(removed),
-                    None => Err(RuntimeError::InvalidOperation(format!(
-                        "Ключ '{}' не найден в словаре",
-                        key_str
-                    ))),
-                }
-            }
-            _ => Err(RuntimeError::TypeMismatch(
-                "Функция 'удалить' применима к спискам (с числовым индексом) и словарям (с ключом)".to_string(),
-            )),
-        }
-    }
-
-    fn builtin_size(&mut self, arguments: &[Value]) -> Result<Value, RuntimeError> {
-        if arguments.len() != 1 {
-            return Err(RuntimeError::InvalidOperation(
-                "Функция 'длина' ожидает 1 аргумент: список или словарь".to_string(),
-            ));
-        }
-
-        match &arguments[0] {
-            Value::List(items) => Ok(Value::Number(items.len() as i64)),
-            Value::Dict(map) => Ok(Value::Number(map.len() as i64)),
-            Value::Text(s) => Ok(Value::Number(s.len() as i64)),
-            _ => Err(RuntimeError::TypeMismatch(
-                "Функция 'длина' применима к спискам, словарям и строкам".to_string(),
-            )),
-        }
-    }
-
-    fn builtin_contains(&mut self, arguments: &[Value]) -> Result<Value, RuntimeError> {
-        if arguments.len() != 2 {
-            return Err(RuntimeError::InvalidOperation(
-                "Функция 'содержит' ожидает 2 аргумента: (список/словарь, элемент/ключ)".to_string(),
-            ));
-        }
-
-        match (&arguments[0], &arguments[1]) {
-            (Value::List(items), element) => Ok(Value::Boolean(items.contains(element))),
-            (Value::Dict(map), element) => {
-                let key_str = match element {
-                    Value::Text(s) => s.clone(),
-                    Value::Number(n) => n.to_string(),
-                    Value::Boolean(b) => (if *b { "истина" } else { "ложь" }).to_string(),
-                    _ => return Err(RuntimeError::TypeMismatch(
-                        "Ключ словаря должен быть текстом, числом или логическим значением".to_string(),
-                    )),
-                };
-                Ok(Value::Boolean(map.contains_key(&key_str)))
-            }
-            _ => Err(RuntimeError::TypeMismatch(
-                "Функция 'содержит' применима только к спискам и словарям".to_string(),
-            )),
-        }
-    }
-
-    fn is_mutable_builtin(&self, name: &str) -> bool {
-        matches!(name, "добавить" | "извлечь" | "удалить")
-    }
-
-    fn call_mutable_builtin(&mut self, name: &str, args: &[ExprId], program: &Program) -> Result<Value, RuntimeError> {
-        match name {
-            "добавить" => {
-                match args.len() {
-                    2 => {
-                        let var_name = self.get_variable_name_from_expr(args[0], program)?;
-                        let element_value = self.evaluate_expression(args[1], program)?;
-
-                        let mut current_value = self.environment.get(&var_name)
-                            .ok_or_else(|| RuntimeError::UndefinedVariable(var_name.clone()))?;
-
-                        match &mut current_value {
-                            Value::List(items) => {
-                                items.push(element_value);
-                                self.environment.set(&var_name, current_value)?;
-                                Ok(Value::Empty)
-                            }
-                            _ => Err(RuntimeError::TypeMismatch(
-                                "Первый аргумент 'добавить' должен быть списком".to_string(),
-                            )),
-                        }
-                    }
-                    3 => {
-                        let var_name = self.get_variable_name_from_expr(args[0], program)?;
-                        let key_value = self.evaluate_expression(args[1], program)?;
-                        let value_to_add = self.evaluate_expression(args[2], program)?;
-
-                        let mut current_value = self.environment.get(&var_name)
-                            .ok_or_else(|| RuntimeError::UndefinedVariable(var_name.clone()))?;
-
-                        match &mut current_value {
-                            Value::Dict(map) => {
-                                let key_str = match key_value {
-                                    Value::Text(s) => s,
-                                    Value::Number(n) => n.to_string(),
-                                    Value::Boolean(b) => (if b { "истина" } else { "ложь" }).to_string(),
-                                    _ => return Err(RuntimeError::TypeMismatch(
-                                        "Ключ словаря должен быть текстом, числом или логическим значением".to_string(),
-                                    )),
-                                };
-
-                                map.insert(key_str, value_to_add);
-                                self.environment.set(&var_name, current_value)?;
-                                Ok(Value::Empty)
-                            }
-                            _ => Err(RuntimeError::TypeMismatch(
-                                "Первый аргумент 'добавить' должен быть словарём для добавления пары ключ-значение".to_string(),
-                            )),
-                        }
-                    }
-                    _ => Err(RuntimeError::InvalidOperation(
-                        "Функция 'добавить' ожидает 2 аргумента для списков или 3 для словарей".to_string(),
-                    )),
-                }
-            }
-            "извлечь" => {
-                if args.len() != 1 {
-                    return Err(RuntimeError::InvalidOperation(
-                        "Функция 'извлечь' ожидает 1 аргумент".to_string(),
-                    ));
-                }
-
-                let var_name = self.get_variable_name_from_expr(args[0], program)?;
-                let mut current_value = self.environment.get(&var_name)
-                    .ok_or_else(|| RuntimeError::UndefinedVariable(var_name.clone()))?;
-
-                match &mut current_value {
-                    Value::List(items) => {
-                        if items.is_empty() {
-                            Err(RuntimeError::InvalidOperation(
-                                "Нельзя извлечь элемент из пустого списка".to_string(),
-                            ))
-                        } else {
-                            let popped = items.pop().unwrap();
-                            self.environment.set(&var_name, current_value)?;
-                            Ok(popped)
-                        }
-                    }
-                    _ => Err(RuntimeError::TypeMismatch(
-                        "Функция 'извлечь' применима только к спискам".to_string(),
-                    )),
-                }
-            }
-            "удалить" => {
-                if args.len() != 2 {
-                    return Err(RuntimeError::InvalidOperation(
-                        "Функция 'удалить' ожидает 2 аргумента".to_string(),
-                    ));
-                }
-
-                let var_name = self.get_variable_name_from_expr(args[0], program)?;
-                let index_or_key = self.evaluate_expression(args[1], program)?;
-
-                let mut current_value = self.environment.get(&var_name)
-                    .ok_or_else(|| RuntimeError::UndefinedVariable(var_name.clone()))?;
-
-                match (&mut current_value, &index_or_key) {
-                    (Value::List(items), Value::Number(index)) => {
-                        let idx = *index as usize;
-                        if idx >= items.len() {
-                            return Err(RuntimeError::InvalidOperation(format!(
-                                "Индекс {} выходит за границы списка длины {}",
-                                idx, items.len()
-                            )));
-                        }
-                        let removed = items.remove(idx);
-                        self.environment.set(&var_name, current_value)?;
-                        Ok(removed)
-                    }
-                    (Value::Dict(map), key) => {
-                        let key_str = match key {
-                            Value::Text(s) => s.clone(),
-                            Value::Number(n) => n.to_string(),
-                            Value::Boolean(b) => (if *b { "истина" } else { "ложь" }).to_string(),
-                            _ => return Err(RuntimeError::TypeMismatch(
-                                "Ключ словаря должен быть текстом, числом или логическим значением".to_string(),
-                            )),
-                        };
-
-                        match map.remove(&key_str) {
-                            Some(removed) => {
-                                self.environment.set(&var_name, current_value)?;
-                                Ok(removed)
-                            }
-                            None => Err(RuntimeError::InvalidOperation(format!(
-                                "Ключ '{}' не найден в словаре",
-                                key_str
-                            ))),
-                        }
-                    }
-                    _ => Err(RuntimeError::TypeMismatch(
-                        "Функция 'удалить' применима к спискам (с числовым индексом) и словарям (с ключом)".to_string(),
-                    )),
-                }
-            }
-            _ => Err(RuntimeError::UndefinedFunction(name.to_string())),
-        }
-    }
-
-    fn get_variable_name_from_expr(&self, expr_id: ExprId, program: &Program) -> Result<String, RuntimeError> {
-        let expr = program.arena.get_expression(expr_id).unwrap();
-        match &expr.kind {
-            ExpressionKind::Identifier(symbol) => {
-                Ok(program.arena.resolve_symbol(*symbol).unwrap().to_string())
-            }
-            _ => Err(RuntimeError::InvalidOperation(
-                "Ожидается имя переменной".to_string(),
-            )),
-        }
-    }
-
-    fn execute_index_assignment(&mut self, object_id: ExprId, index_id: ExprId, value_id: ExprId, program: &Program) -> Result<(), RuntimeError> {
-        let new_value = self.evaluate_expression(value_id, program)?;
-        let index_value = self.evaluate_expression(index_id, program)?;
-
-        let object_expr = program.arena.get_expression(object_id).unwrap();
-        let variable_name = match &object_expr.kind {
-            ExpressionKind::Identifier(symbol) => {
-                program.arena.resolve_symbol(*symbol).unwrap().to_string()
-            }
-            _ => return Err(RuntimeError::InvalidOperation(
-                "Присваивание по индексу возможно только для переменных".to_string(),
-            )),
-        };
-
-        let mut container = self.environment.get(&variable_name)
-            .ok_or_else(|| RuntimeError::UndefinedVariable(variable_name.clone()))?;
-
-        match &mut container {
-            Value::List(ref mut items) => {
-                match index_value {
-                    Value::Number(n) => {
-                        let index = n as usize;
-                        if index < items.len() {
-                            items[index] = new_value;
-                        } else {
-                            return Err(RuntimeError::InvalidOperation(format!(
-                                "Индекс {} выходит за границы списка длины {}",
-                                index, items.len()
-                            )));
-                        }
-                    }
-                    _ => return Err(RuntimeError::TypeMismatch(
-                        "Индекс списка должен быть числом".to_string(),
-                    )),
-                }
-            }
-            Value::Dict(ref mut map) => {
-                let key_str = match index_value {
-                    Value::Text(s) => s,
-                    Value::Number(n) => n.to_string(),
-                    Value::Boolean(b) => (if b { "истина" } else { "ложь" }).to_string(),
-                    _ => return Err(RuntimeError::TypeMismatch(
-                        "Ключ словаря должен быть текстом, числом или логическим значением".to_string(),
-                    )),
-                };
-
-                map.insert(key_str, new_value);
-            }
-            _ => return Err(RuntimeError::TypeMismatch(
-                "Присваивание по индексу поддерживается только для списков и словарей".to_string(),
-            )),
-        }
-
-        self.environment.set(&variable_name, container)?;
+        
+        self.classes.insert(class_name, Rc::new(class));
         Ok(())
+    }
+    
+    /// Вызываем метод с контекстом объекта
+    fn call_method(&mut self, method: Function, arguments: Vec<Value>, this_obj: Value, program: &Program) -> Result<Value, RuntimeError> {
+        let prev_module = self.current_module.clone();
+        let module_name = if let Some(module_symbol) = method.module {
+            Some(program.arena.resolve_symbol(module_symbol).unwrap().to_string())
+        } else {
+            None
+        };
+        self.current_module = module_name;
+        
+        let parent_env = self.environment.clone();
+        self.environment = Environment::with_parent(parent_env);
+        
+        
+        self.environment.define("this".to_string(), this_obj);
+        
+        if arguments.len() != method.params.len() {
+            return Err(RuntimeError::InvalidOperation(format!(
+                "Метод {} ожидает {} аргументов, получено {}",
+                program.arena.resolve_symbol(method.name).unwrap(),
+                method.params.len(),
+                arguments.len()
+            )));
+        }
+        
+        for (param, arg_value) in method.params.iter().zip(arguments.iter()) {
+            let param_name = program.arena.resolve_symbol(param.name).unwrap().to_string();
+            self.environment.define(param_name, arg_value.clone());
+        }
+        
+        let mut result = Value::Empty;
+        match self.execute_statement(method.body, program) {
+            Ok(()) => {}
+            Err(RuntimeError::Return(val)) => {
+                result = val;
+            }
+            Err(e) => {
+                self.environment = self.environment.clone().pop();
+                self.current_module = prev_module;
+                return Err(e);
+            }
+        }
+        
+        self.environment = self.environment.clone().pop();
+        self.current_module = prev_module;
+        Ok(result)
     }
 }

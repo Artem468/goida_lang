@@ -47,6 +47,10 @@ impl Parser {
                     let import = self.parse_import()?;
                     self.program.imports.push(import);
                 }
+                Token::Class => {
+                    let class = self.parse_class()?; 
+                    self.program.classes.push(class);
+                }
                 _ => {
                     let stmt = self.parse_statement()?;
                     self.program.statements.push(stmt);
@@ -219,6 +223,12 @@ impl Parser {
                     value: Box::new(value_type),
                 }
             }
+            Token::Identifier(type_name) => {
+                
+                let symbol = self.program.arena.intern_string(&type_name);
+                self.advance();
+                DataType::Object(symbol)
+            }
             _ => {
                 return Err(ParseError::UnexpectedToken(format!(
                     "Ожидался тип данных в позиции {}:{}",
@@ -260,38 +270,59 @@ impl Parser {
             Token::Print => self.parse_print_statement(),
             Token::Input => self.parse_input_statement(),
             Token::LeftBrace => self.parse_block(),
-            Token::Identifier(_) => {
-                let mut lookahead = 1;
-                let mut has_index_access = false;
-
-                while self.current + lookahead < self.tokens.len() {
-                    let token = &self.tokens[self.current + lookahead].token;
-                    match token {
-                        Token::LeftBracket => {
-                            has_index_access = true;
-                            lookahead += 1;
-                            let mut bracket_count = 1;
-                            while bracket_count > 0 && self.current + lookahead < self.tokens.len() {
-                                match &self.tokens[self.current + lookahead].token {
-                                    Token::LeftBracket => bracket_count += 1,
-                                    Token::RightBracket => bracket_count -= 1,
-                                    _ => {}
-                                }
-                                lookahead += 1;
+            Token::Identifier(_) | Token::This => {
+                
+                let expr = self.parse_expression()?;
+                
+                
+                if matches!(self.current_token().token, Token::Assign) {
+                    self.advance();
+                    let value = self.parse_expression()?;
+                    self.expect_semicolon()?;
+                    
+                    
+                    if let Some(expr_node) = self.program.arena.get_expression(expr) {
+                        match &expr_node.kind {
+                            ExpressionKind::Identifier(name) => {
+                                return Ok(self.program.arena.add_statement(
+                                    StatementKind::Assign { name: *name, value },
+                                    span
+                                ));
+                            }
+                            ExpressionKind::Index { object, index } => {
+                                return Ok(self.program.arena.add_statement(
+                                    StatementKind::IndexAssign { 
+                                        object: *object, 
+                                        index: *index, 
+                                        value 
+                                    },
+                                    span
+                                ));
+                            }
+                            ExpressionKind::PropertyAccess { object, property } => {
+                                return Ok(self.program.arena.add_statement(
+                                    StatementKind::PropertyAssign {
+                                        object: *object,
+                                        property: *property,
+                                        value,
+                                    },
+                                    span
+                                ));
+                            }
+                            _ => {
+                                return Err(ParseError::UnexpectedToken(
+                                    "Недопустимое выражение для назначения".to_string(),
+                                ));
                             }
                         }
-                        Token::Assign => {
-                            if has_index_access {
-                                return self.parse_index_assignment();
-                            } else {
-                                return self.parse_assignment();
-                            }
-                        }
-                        _ => break,
+                    } else {
+                        return Err(ParseError::InternalError(
+                            "Не удалось получить выражение для назначения".to_string(),
+                        ));
                     }
                 }
                 
-                let expr = self.parse_expression()?;
+                
                 self.expect_semicolon()?;
                 Ok(self.program.arena.add_statement(StatementKind::Expression(expr), span))
             }
@@ -346,62 +377,6 @@ impl Parser {
             },
             span
         ))
-    }
-
-    fn parse_assignment(&mut self) -> Result<StmtId, ParseError> {
-        let span = self.current_token().span;
-        
-        let name = match &self.current_token().token {
-            Token::Identifier(name) => {
-                let symbol = self.program.arena.intern_string(name);
-                self.advance();
-                symbol
-            }
-            _ => {
-                return Err(ParseError::UnexpectedToken(format!(
-                    "Ожидался идентификатор переменной в позиции {}:{}",
-                    self.current_token().span.start.line,
-                    self.current_token().span.start.column,
-                )))
-            }
-        };
-
-        self.expect(Token::Assign)?;
-        let value = self.parse_expression()?;
-        self.expect_semicolon()?;
-
-        Ok(self.program.arena.add_statement(
-            StatementKind::Assign { name, value },
-            span
-        ))
-    }
-
-    fn parse_index_assignment(&mut self) -> Result<StmtId, ParseError> {
-        let span = self.current_token().span;
-        let object_expr = self.parse_postfix()?;
-        
-        let (object, index) = self.extract_index_access(object_expr)?;
-
-        self.expect(Token::Assign)?;
-        let value = self.parse_expression()?;
-        self.expect_semicolon()?;
-
-        Ok(self.program.arena.add_statement(
-            StatementKind::IndexAssign { object, index, value },
-            span
-        ))
-    }
-
-    fn extract_index_access(&self, expr_id: ExprId) -> Result<(ExprId, ExprId), ParseError> {
-        let expr = self.program.arena.get_expression(expr_id)
-            .ok_or_else(|| ParseError::InternalError("Не удалось получить выражение".to_string()))?;
-
-        match &expr.kind {
-            ExpressionKind::Index { object, index } => Ok((*object, *index)),
-            _ => Err(ParseError::UnexpectedToken(
-                "Ожидался доступ по индексу перед присваиванием".to_string(),
-            )),
-        }
     }
 
     fn parse_if_statement(&mut self) -> Result<StmtId, ParseError> {
@@ -727,26 +702,46 @@ impl Parser {
                     self.advance();
                     let member_token = self.current_token();
                     if let Token::Identifier(member_name) = member_token.token {
+                        let property_symbol = self.program.arena.intern_string(&member_name);
                         self.advance();
                         
-                        if let Some(expr_node) = self.program.arena.get_expression(expr) {
-                            if let ExpressionKind::Identifier(module_symbol) = expr_node.kind {
-                                let module_name = self.program.arena.resolve_symbol(module_symbol).unwrap();
-                                let full_name = format!("{}.{}", module_name, member_name);
-                                let full_symbol = self.program.arena.intern_string(&full_name);
-                                expr = self.program.arena.add_expression(
-                                    ExpressionKind::Identifier(full_symbol),
-                                    member_token.span
-                                );
-                            } else {
-                                return Err(ParseError::UnexpectedToken(
-                                    "Точечная нотация применима только к идентификаторам".to_string(),
-                                ));
+                        
+                        if matches!(self.current_token().token, Token::LeftParentheses) {
+                            
+                            self.advance();
+                            let mut args = Vec::new();
+                            
+                            while !matches!(self.current_token().token, Token::RightParentheses) {
+                                args.push(self.parse_expression()?);
+                                if matches!(self.current_token().token, Token::Comma) {
+                                    self.advance();
+                                } else if !matches!(self.current_token().token, Token::RightParentheses) {
+                                    return Err(ParseError::UnexpectedToken(
+                                        "Ожидалась запятая или закрывающая скобка".to_string(),
+                                    ));
+                                }
                             }
+                            
+                            self.expect(Token::RightParentheses)?;
+                            
+                            expr = self.program.arena.add_expression(
+                                ExpressionKind::MethodCall {
+                                    object: expr,
+                                    method: property_symbol,
+                                    args,
+                                },
+                                member_token.span
+                            );
                         } else {
-                            return Err(ParseError::InternalError(
-                                "Не удалось получить выражение для точечной нотации".to_string(),
-                            ));
+                            
+                            
+                            expr = self.program.arena.add_expression(
+                                ExpressionKind::PropertyAccess {
+                                    object: expr,
+                                    property: property_symbol,
+                                },
+                                member_token.span
+                            );
                         }
                     } else {
                         return Err(ParseError::UnexpectedToken(
@@ -853,6 +848,17 @@ impl Parser {
                     span
                 ))
             }
+            Token::New => {
+                self.advance();
+                self.parse_object_creation(span)
+            }
+            Token::This => {
+                self.advance();
+                Ok(self.program.arena.add_expression(
+                    ExpressionKind::This,
+                    span
+                ))
+            }
             Token::Input => {
                 self.advance();
                 self.expect(Token::LeftParentheses)?;
@@ -868,60 +874,6 @@ impl Parser {
                 let expr = self.parse_expression()?;
                 self.expect(Token::RightParentheses)?;
                 Ok(expr)
-            }
-            Token::LeftBracket => {
-                self.advance();
-                let mut elements = Vec::new();
-
-                while !matches!(self.current_token().token, Token::RightBracket) {
-                    elements.push(self.parse_expression()?);
-                    if matches!(self.current_token().token, Token::Comma) {
-                        self.advance();
-                    }
-                }
-
-                self.expect(Token::RightBracket)?;
-                Ok(self.program.arena.add_expression(
-                    ExpressionKind::List(elements),
-                    span
-                ))
-            }
-            Token::LeftBrace => {
-                self.advance();
-                let mut pairs = Vec::new();
-
-                while !matches!(self.current_token().token, Token::RightBrace) {
-                    let key = self.parse_expression()?;
-                    self.expect(Token::Colon)?;
-                    let value = self.parse_expression()?;
-                    pairs.push((key, value));
-
-                    if matches!(self.current_token().token, Token::Comma) {
-                        self.advance();
-                    }
-                }
-
-                self.expect(Token::RightBrace)?;
-                Ok(self.program.arena.add_expression(
-                    ExpressionKind::Dict(pairs),
-                    span
-                ))
-            }
-            Token::Size | Token::Push | Token::Pop | Token::Remove | Token::Contains => {
-                let name = match self.current_token().token {
-                    Token::Size => "длина",
-                    Token::Push => "добавить",
-                    Token::Pop => "извлечь",
-                    Token::Remove => "удалить",
-                    Token::Contains => "содержит",
-                    _ => unreachable!(),
-                };
-                let symbol = self.program.arena.intern_string(name);
-                self.advance();
-                Ok(self.program.arena.add_expression(
-                    ExpressionKind::Identifier(symbol),
-                    span
-                ))
             }
             _ => Err(ParseError::UnexpectedToken(format!(
                 "Неожиданный токен: {:?} в позиции {}:{}",
@@ -944,5 +896,260 @@ impl Parser {
                 self.current_token().span.start.column,
             )))
         }
+    }
+
+    
+    
+    /// Парсинг определения класса
+    fn parse_class(&mut self) -> Result<ClassDefinition, ParseError> {
+        self.expect(Token::Class)?;
+        let span = self.current_token().span;
+        
+        
+        let name = match &self.current_token().token {
+            Token::Identifier(name) => {
+                let symbol = self.program.arena.intern_string(name);
+                self.advance();
+                symbol
+            }
+            _ => {
+                return Err(ParseError::UnexpectedToken(format!(
+                    "Ожидался идентификатор класса в позиции {}:{}",
+                    self.current_token().span.start.line,
+                    self.current_token().span.start.column,
+                )))
+            }
+        };
+        
+        self.expect(Token::LeftBrace)?;
+        
+        let mut fields = Vec::new();
+        let mut methods = Vec::new();
+        
+        
+        while !matches!(self.current_token().token, Token::RightBrace | Token::EndFile) {
+            let visibility = self.parse_visibility()?;
+            
+            match self.current_token().token {
+                Token::Function | Token::Constructor => {
+                    let method = self.parse_class_method(visibility)?;
+                    methods.push(method);
+                }
+                Token::Identifier(_) => {
+                    let field = self.parse_class_field(visibility)?;
+                    fields.push(field);
+                }
+                _ => {
+                    return Err(ParseError::UnexpectedToken(format!(
+                        "Неожиданный токен в определении класса: {:?} в позиции {}:{}",
+                        self.current_token().token,
+                        self.current_token().span.start.line,
+                        self.current_token().span.start.column,
+                    )))
+                }
+            }
+        }
+        
+        self.expect(Token::RightBrace)?;
+        
+        Ok(ClassDefinition {
+            name,
+            fields,
+            methods,
+            span,
+        })
+    }
+    
+    /// Парсинг видимости (приватный/публичный)
+    fn parse_visibility(&mut self) -> Result<FieldVisibility, ParseError> {
+        match self.current_token().token {
+            Token::Private => {
+                self.advance();
+                Ok(FieldVisibility::Private)
+            }
+            Token::Public => {
+                self.advance();
+                Ok(FieldVisibility::Public)
+            }
+            _ => Ok(FieldVisibility::Private) 
+        }
+    }
+    
+    /// Парсинг поля класса
+    fn parse_class_field(&mut self, visibility: FieldVisibility) -> Result<ClassField, ParseError> {
+        let span = self.current_token().span;
+        
+        let name = match &self.current_token().token {
+            Token::Identifier(name) => {
+                let symbol = self.program.arena.intern_string(name);
+                self.advance();
+                symbol
+            }
+            _ => {
+                return Err(ParseError::UnexpectedToken(format!(
+                    "Ожидался идентификатор поля в позиции {}:{}",
+                    self.current_token().span.start.line,
+                    self.current_token().span.start.column,
+                )))
+            }
+        };
+        
+        
+        let field_type = if matches!(self.current_token().token, Token::Colon) {
+            self.advance();
+            Some(self.parse_type()?)
+        } else {
+            None
+        };
+        
+        
+        let default_value = if matches!(self.current_token().token, Token::Assign) {
+            self.advance();
+            Some(self.parse_expression()?)
+        } else {
+            None
+        };
+        
+        self.expect_semicolon()?;
+        
+        Ok(ClassField {
+            name,
+            field_type,
+            visibility,
+            default_value,
+            span,
+        })
+    }
+    
+    /// Парсинг метода класса
+    fn parse_class_method(&mut self, visibility: FieldVisibility) -> Result<ClassMethod, ParseError> {
+        let span = self.current_token().span;
+        let is_constructor = matches!(self.current_token().token, Token::Constructor);
+        
+        if is_constructor {
+            self.expect(Token::Constructor)?;
+        } else {
+            self.expect(Token::Function)?;
+        }
+        
+        let name = match &self.current_token().token {
+            Token::Identifier(name) => {
+                let symbol = self.program.arena.intern_string(name);
+                self.advance();
+                symbol
+            }
+            _ => {
+                return Err(ParseError::UnexpectedToken(format!(
+                    "Ожидался идентификатор метода в позиции {}:{}",
+                    self.current_token().span.start.line,
+                    self.current_token().span.start.column,
+                )))
+            }
+        };
+        
+        self.expect(Token::LeftParentheses)?;
+        
+        let mut parameters = Vec::new();
+        while !matches!(self.current_token().token, Token::RightParentheses) {
+            let param = self.parse_parameter()?;
+            parameters.push(param);
+            
+            if matches!(self.current_token().token, Token::Comma) {
+                self.advance();
+            } else if !matches!(self.current_token().token, Token::RightParentheses) {
+                return Err(ParseError::UnexpectedToken(
+                    "Ожидалась запятая или закрывающая скобка".to_string(),
+                ));
+            }
+        }
+        
+        self.expect(Token::RightParentheses)?;
+        
+        let return_type = if matches!(self.current_token().token, Token::Colon) {
+            self.advance();
+            Some(self.parse_type()?)
+        } else {
+            None
+        };
+        
+        let body = self.parse_block()?;
+        
+        Ok(ClassMethod {
+            name,
+            params: parameters,
+            return_type,
+            body,
+            visibility,
+            is_constructor,
+            span,
+        })
+    }
+    
+    /// Парсинг создания объекта (новый Класс(...) или новый модуль.Класс(...))
+    fn parse_object_creation(&mut self, span: Span) -> Result<ExprId, ParseError> {
+        let mut class_name_parts = Vec::new();
+        
+        
+        match &self.current_token().token {
+            Token::Identifier(name) => {
+                class_name_parts.push(name.clone());
+                self.advance();
+            }
+            _ => {
+                return Err(ParseError::UnexpectedToken(format!(
+                    "Ожидался идентификатор класса после 'новый' в позиции {}:{}",
+                    self.current_token().span.start.line,
+                    self.current_token().span.start.column,
+                )))
+            }
+        }
+        
+        
+        while matches!(self.current_token().token, Token::Point) {
+            self.advance(); 
+            
+            match &self.current_token().token {
+                Token::Identifier(name) => {
+                    class_name_parts.push(name.clone());
+                    self.advance();
+                }
+                _ => {
+                    return Err(ParseError::UnexpectedToken(format!(
+                        "Ожидался идентификатор после '.' в позиции {}:{}",
+                        self.current_token().span.start.line,
+                        self.current_token().span.start.column,
+                    )))
+                }
+            }
+        }
+        
+        
+        let full_class_name = class_name_parts.join(".");
+        let class_name = self.program.arena.intern_string(&full_class_name);
+        
+        self.expect(Token::LeftParentheses)?;
+        
+        let mut args = Vec::new();
+        while !matches!(self.current_token().token, Token::RightParentheses) {
+            args.push(self.parse_expression()?);
+            
+            if matches!(self.current_token().token, Token::Comma) {
+                self.advance();
+            } else if !matches!(self.current_token().token, Token::RightParentheses) {
+                return Err(ParseError::UnexpectedToken(
+                    "Ожидалась запятая или закрывающая скобка".to_string(),
+                ));
+            }
+        }
+        
+        self.expect(Token::RightParentheses)?;
+        
+        Ok(self.program.arena.add_expression(
+            ExpressionKind::ObjectCreation {
+                class_name,
+                args,
+            },
+            span
+        ))
     }
 }

@@ -21,11 +21,12 @@ pub enum Token {
     Print,    // печать
     Input,    // ввод
     Import,   // подключить
-    Push,     // добавить
-    Pop,      // извлечь
-    Remove,   // удалить
-    Size,     // длина
-    Contains, // содержит
+    Class,    // класс
+    New,      // новый
+    Private,  // приватный
+    Public,   // публичный
+    Constructor, // конструктор
+    This,     // это
 
     // Литералы
     NumericalLiteral(i64),

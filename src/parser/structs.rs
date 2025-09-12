@@ -1,6 +1,8 @@
 use crate::lexer::structs::TokenInfo;
 use crate::ast::*;
 
+
+#[derive(Debug)]
 pub struct Parser {
     pub(crate) program: Program,
     pub(crate) tokens: Vec<TokenInfo>,

@@ -14,30 +14,7 @@ impl Value {
                     "ложь".to_string()
                 }
             }
-            Value::List(items) => {
-                let mut result = String::from("[");
-                for (i, item) in items.iter().enumerate() {
-                    if i > 0 {
-                        result.push_str(", ");
-                    }
-                    result.push_str(&item.to_string());
-                }
-                result.push(']');
-                result
-            }
-            Value::Dict(map) => {
-                let mut result = String::from("{");
-                let mut first = true;
-                for (key, value) in map {
-                    if !first {
-                        result.push_str(", ");
-                    }
-                    result.push_str(&format!("{}: {}", key, value.to_string()));
-                    first = false;
-                }
-                result.push('}');
-                result
-            }
+            Value::Object(obj) => format!("Объект {}", obj.borrow().class_name), 
             Value::Empty => "пустота".to_string(),
         }
     }
@@ -48,13 +25,11 @@ impl Value {
             Value::Number(n) => *n != 0,
             Value::Float(n) => *n != 0.0,
             Value::Text(s) => !s.is_empty(),
-            Value::List(items) => !items.is_empty(),
-            Value::Dict(map) => !map.is_empty(),
+            Value::Object(_) => true,
             Value::Empty => false,
         }
     }
 }
-
 
 impl fmt::Display for Value {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -71,8 +46,8 @@ impl fmt::Display for Value {
             Value::Boolean(data) => {
                 write!(f, "{data}")
             }
-            Value::List(_) | Value::Dict(_) => {
-                write!(f, "{}", self.to_string())
+            Value::Object(obj) => {
+                write!(f, "[Объект {}]", obj.borrow().class_name) 
             }
             Value::Empty => {
                 write!(f, "")
