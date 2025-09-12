@@ -1085,13 +1085,15 @@ impl Parser {
         })
     }
     
-    /// Парсинг создания объекта (новый Класс(...))
+    /// Парсинг создания объекта (новый Класс(...) или новый модуль.Класс(...))
     fn parse_object_creation(&mut self, span: Span) -> Result<ExprId, ParseError> {
-        let class_name = match &self.current_token().token {
+        let mut class_name_parts = Vec::new();
+        
+        
+        match &self.current_token().token {
             Token::Identifier(name) => {
-                let symbol = self.program.arena.intern_string(name);
+                class_name_parts.push(name.clone());
                 self.advance();
-                symbol
             }
             _ => {
                 return Err(ParseError::UnexpectedToken(format!(
@@ -1100,7 +1102,30 @@ impl Parser {
                     self.current_token().span.start.column,
                 )))
             }
-        };
+        }
+        
+        
+        while matches!(self.current_token().token, Token::Point) {
+            self.advance(); 
+            
+            match &self.current_token().token {
+                Token::Identifier(name) => {
+                    class_name_parts.push(name.clone());
+                    self.advance();
+                }
+                _ => {
+                    return Err(ParseError::UnexpectedToken(format!(
+                        "Ожидался идентификатор после '.' в позиции {}:{}",
+                        self.current_token().span.start.line,
+                        self.current_token().span.start.column,
+                    )))
+                }
+            }
+        }
+        
+        
+        let full_class_name = class_name_parts.join(".");
+        let class_name = self.program.arena.intern_string(&full_class_name);
         
         self.expect(Token::LeftParentheses)?;
         

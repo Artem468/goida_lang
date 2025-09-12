@@ -79,6 +79,7 @@ pub struct Interpreter {
 #[derive(Debug, Clone)]
 pub struct Module {
     pub(crate) functions: HashMap<String, Function>,
+    pub(crate) classes: HashMap<String, Rc<Class>>,
     pub(crate) environment: Environment,
     pub(crate) program: Program,
 }

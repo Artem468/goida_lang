@@ -23,6 +23,7 @@ impl Interpreter {
     fn into_module(self, program: Program) -> Module {
         Module {
             functions: self.functions,
+            classes: self.classes,
             environment: self.environment,
             program,
         }
@@ -405,39 +406,13 @@ impl Interpreter {
                 let method_name = program.arena.resolve_symbol(*method).unwrap().to_string();
                 
                 
-                if let ExpressionKind::Identifier(module_symbol) = obj_expr.kind {
-                    let module_name = program.arena.resolve_symbol(module_symbol).unwrap();
-                    
-                    
-                    if let Some(module_env) = self.modules.get(module_name).cloned() {
-                        if let Some(function) = module_env.functions.get(&method_name) {
-                            
-                            
-                            let mut arguments = Vec::new();
-                            for &arg_id in args {
-                                arguments.push(self.evaluate_expression(arg_id, program)?);
-                            }
-                            
-                            
-                            return self.call_function(function.clone(), arguments, &module_env.program);
-                        } else {
-                            return Err(RuntimeError::UndefinedFunction(
-                                format!("Функция '{}.{}' не найдена в модуле", module_name, method_name)
-                            ));
-                        }
-                    }
-                }
-                
-                
                 let obj_result = self.evaluate_expression(*object, program);
                 
                 match obj_result {
                     Ok(Value::Object(instance_ref)) => {
                         let instance = instance_ref.borrow();
                         
-                        
                         let is_external = !matches!(obj_expr.kind, ExpressionKind::This);
-                        
                         
                         if !instance.is_method_accessible(&method_name, is_external) {
                             return Err(RuntimeError::InvalidOperation(
@@ -447,29 +422,82 @@ impl Interpreter {
                         
                         if let Some(method) = instance.get_method(&method_name) {
                             let method = method.clone();
-                            drop(instance); 
                             
+                            
+                            
+                            let method_program = {
+                                let mut found_program = program.clone();
+                                for (_module_name, module) in &self.modules {
+                                    if module.classes.contains_key(&instance.class_name) {
+                                        found_program = module.program.clone();
+                                        break;
+                                    }
+                                }
+                                found_program
+                            };
+                            
+                            drop(instance);
                             
                             let mut arguments = Vec::new();
                             for &arg_id in args {
                                 arguments.push(self.evaluate_expression(arg_id, program)?);
                             }
                             
-                            
-                            self.call_method(method, arguments, Value::Object(instance_ref), program)
+                            self.call_method(method, arguments, Value::Object(instance_ref), &method_program)
                         } else {
                             Err(RuntimeError::UndefinedFunction(
                                 format!("Метод '{}' не найден в классе '{}'", method_name, instance.class_name)
                             ))
                         }
                     }
-                    _ => {
+                    Ok(_) => {
                         
-                        if let ExpressionKind::Identifier(symbol) = obj_expr.kind {
-                            let name = program.arena.resolve_symbol(symbol).unwrap();
+                        if let ExpressionKind::Identifier(module_symbol) = obj_expr.kind {
+                            let module_name = program.arena.resolve_symbol(module_symbol).unwrap();
+                            
+                            if let Some(module_env) = self.modules.get(module_name).cloned() {
+                                if let Some(function) = module_env.functions.get(&method_name) {
+                                    let mut arguments = Vec::new();
+                                    for &arg_id in args {
+                                        arguments.push(self.evaluate_expression(arg_id, program)?);
+                                    }
+                                    
+                                    return self.call_function(function.clone(), arguments, &module_env.program);
+                                } else {
+                                    return Err(RuntimeError::UndefinedFunction(
+                                        format!("Функция '{}.{}' не найдена в модуле", module_name, method_name)
+                                    ));
+                                }
+                            }
+                        }
+                        
+                        Err(RuntimeError::TypeMismatch(
+                            "Попытка вызова метода не-объектного типа".to_string()
+                        ))
+                    }
+                    Err(_) => {
+                        
+                        if let ExpressionKind::Identifier(module_symbol) = obj_expr.kind {
+                            let module_name = program.arena.resolve_symbol(module_symbol).unwrap();
+                            
+                            if let Some(module_env) = self.modules.get(module_name).cloned() {
+                                if let Some(function) = module_env.functions.get(&method_name) {
+                                    let mut arguments = Vec::new();
+                                    for &arg_id in args {
+                                        arguments.push(self.evaluate_expression(arg_id, program)?);
+                                    }
+                                    
+                                    return self.call_function(function.clone(), arguments, &module_env.program);
+                                } else {
+                                    return Err(RuntimeError::UndefinedFunction(
+                                        format!("Функция '{}.{}' не найдена в модуле", module_name, method_name)
+                                    ));
+                                }
+                            }
+                            
                             Err(RuntimeError::InvalidOperation(format!(
                                 "Модуль '{}' не найден",
-                                name
+                                module_name
                             )))
                         } else {
                             Err(RuntimeError::TypeMismatch(
@@ -483,25 +511,49 @@ impl Interpreter {
             ExpressionKind::ObjectCreation { class_name, args } => {
                 let class_name_str = program.arena.resolve_symbol(*class_name).unwrap().to_string();
                 
-                if let Some(class) = self.classes.get(&class_name_str).cloned() {
+                
+                let class = if class_name_str.contains('.') {
+                    let parts: Vec<&str> = class_name_str.split('.').collect();
+                    if parts.len() == 2 {
+                        let module_name = parts[0];
+                        let class_simple_name = parts[1];
+                        
+                        if let Some(module) = self.modules.get(module_name) {
+                            module.classes.get(class_simple_name).cloned()
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    }
+                } else {
                     
+                    self.classes.get(&class_name_str).cloned()
+                };
+                
+                if let Some(class) = class {
                     let mut arguments = Vec::new();
                     for &arg_id in args {
                         arguments.push(self.evaluate_expression(arg_id, program)?);
                     }
                     
-                    
                     let instance = class.create_instance();
                     let instance_ref = std::rc::Rc::new(std::cell::RefCell::new(instance));
                     
-                    
                     if let Some(constructor) = {
-                        
                         let temp_borrow = instance_ref.borrow();
                         temp_borrow.get_constructor().cloned()
                     } {
                         
-                        self.call_method(constructor, arguments, Value::Object(instance_ref.clone()), program)?;
+                        let constructor_program = if class_name_str.contains('.') {
+                            let parts: Vec<&str> = class_name_str.split('.').collect();
+                            let module_name = parts[0];
+                            self.modules.get(module_name).unwrap().program.clone()
+                        } else {
+                            program.clone()
+                        };
+                        
+                        self.call_method(constructor, arguments, Value::Object(instance_ref.clone()), &constructor_program)?;
                     }
                     
                     Ok(Value::Object(instance_ref))
@@ -713,9 +765,9 @@ impl Interpreter {
             )),
         }
     }
-    
-    
-    
+
+
+
     /// Регистрируем класс в интерпретаторе
     fn register_class(&mut self, class_def: &crate::ast::ClassDefinition, program: &Program) -> Result<(), RuntimeError> {
         use crate::interpreter::structs::{Class};
