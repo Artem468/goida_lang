@@ -10,6 +10,7 @@ use std::path::PathBuf;
 use lexer::prelude::LexerStructs::Lexer;
 use parser::prelude::ParserStructs::{Parser as GoidaParser, ParseError};
 use interpreter::prelude::InterpreterStructs::{Interpreter, RuntimeError};
+use interpreter::prelude::InterpreterTraits::{CoreOperations};
 
 #[derive(Parser)]
 #[command(name = "goida")]

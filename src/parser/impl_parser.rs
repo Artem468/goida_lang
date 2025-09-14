@@ -1,4 +1,4 @@
-use crate::ast::*;
+use crate::ast::prelude::{BinaryOperator, ClassDefinition, ClassField, ClassMethod, DataType, ExprId, ExpressionKind, FieldVisibility, Function, Import, LiteralValue, Parameter, PrimitiveType, Program, Span, StatementKind, StmtId, TypeId, UnaryOperator};
 use crate::lexer::structs::{Token, TokenInfo};
 use crate::parser::structs::{ParseError, Parser};
 

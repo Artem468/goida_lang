@@ -1,5 +1,5 @@
 use crate::lexer::structs::{Lexer, Token, TokenInfo};
-use crate::ast::{Span, SourceLocation};
+use crate::ast::prelude::{Span, SourceLocation};
 
 impl Lexer {
     pub fn new(input: String) -> Self {
