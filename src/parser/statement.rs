@@ -161,7 +161,12 @@ impl Parser {
 
         let else_body = if matches!(self.current_token().token, Token::Else) {
             self.advance();
-            Some(self.parse_block()?)
+
+            if matches!(self.current_token().token, Token::If) {
+                Some(self.parse_if_statement()?)
+            } else {
+                Some(self.parse_block()?)
+            }
         } else {
             None
         };
