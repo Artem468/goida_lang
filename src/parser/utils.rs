@@ -98,6 +98,42 @@ impl Parser {
                 self.advance();
                 DataType::Object(symbol)
             }
+            Token::Function => {
+                self.advance();
+                self.expect(Token::LeftBracket)?;
+                self.expect(Token::LeftParentheses)?;
+                let mut params = Vec::new();
+                if self.current_token().token != Token::RightParentheses {
+                    loop {
+                        let param_type_id = self.parse_type()?;
+                        let param_type = self.program.arena.get_type(param_type_id)
+                            .ok_or_else(|| ParseError::InternalError("Не удалось получить тип параметра".to_string()))?
+                            .clone();
+                        params.push(param_type);
+
+                        if self.current_token().token == Token::Comma {
+                            self.advance();
+                            continue;
+                        } else {
+                            break;
+                        }
+                    }
+                }
+                self.expect(Token::RightParentheses)?;
+                self.expect(Token::Colon)?;
+                
+                let return_type_id = self.parse_type()?;
+                let return_type = self.program.arena.get_type(return_type_id)
+                    .ok_or_else(|| ParseError::InternalError("Не удалось получить возвращаемый тип".to_string()))?
+                    .clone();
+
+                self.expect(Token::RightBracket)?;
+
+                DataType::Function {
+                    params,
+                    return_type: Box::new(return_type),
+                }
+            }
             _ => {
                 return Err(ParseError::UnexpectedToken(format!(
                     "Ожидался тип данных в позиции {}:{}",

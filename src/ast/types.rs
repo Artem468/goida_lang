@@ -15,7 +15,6 @@ pub enum DataType {
         return_type: Box<DataType>,
     },
     Object(Symbol),
-    Generic(Symbol),
     Unit,
 }
 
