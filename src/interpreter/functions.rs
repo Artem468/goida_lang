@@ -68,6 +68,7 @@ impl InterpreterFunctions for Interpreter {
         arguments: Vec<Value>,
         program: &Program,
     ) -> Result<Value, RuntimeError> {
+        // 1. Проверяем доступ через модуль (module.func)
         if let Some(dot_index) = name.find('.') {
             let module_name = &name[..dot_index];
             let func_name = &name[dot_index + 1..];
@@ -76,20 +77,36 @@ impl InterpreterFunctions for Interpreter {
                     return self.call_function(function.clone(), arguments, &module.program);
                 }
             }
-            Err(RuntimeError::UndefinedFunction(name.to_string()))
-        } else {
-            if let Some(function) = self.functions.get(name).cloned() {
-                self.call_function(function, arguments, program)
-            } else if let Some(module_name) = &self.current_module {
-                if let Some(module) = self.modules.get(module_name).cloned() {
-                    if let Some(function) = module.functions.get(name) {
-                        return self.call_function(function.clone(), arguments, &module.program);
-                    }
-                }
-                Err(RuntimeError::UndefinedFunction(name.to_string()))
+            return Err(RuntimeError::UndefinedFunction(name.to_string()));
+        }
+
+        // 2. Сначала ищем в environment
+        if let Some(val) = self.environment.get(name) {
+            if let Value::Function(func) = val {
+                return self.call_function((*func).clone(), arguments, program);
             } else {
-                Err(RuntimeError::UndefinedFunction(name.to_string()))
+                return Err(RuntimeError::InvalidOperation(format!(
+                    "'{}' не является функцией",
+                    name
+                )));
             }
         }
+
+        // 3. Ищем в текущем модуле
+        if let Some(function) = self.functions.get(name).cloned() {
+            return self.call_function(function, arguments, program);
+        }
+
+        if let Some(module_name) = &self.current_module {
+            if let Some(module) = self.modules.get(module_name).cloned() {
+                if let Some(function) = module.functions.get(name) {
+                    return self.call_function(function.clone(), arguments, &module.program);
+                }
+            }
+        }
+
+        // 4. Если нигде не найдено
+        Err(RuntimeError::UndefinedFunction(name.to_string()))
     }
+
 }

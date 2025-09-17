@@ -1,5 +1,5 @@
-use std::fmt;
 use crate::interpreter::structs::Value;
+use std::fmt;
 
 impl Value {
     pub fn to_string(&self) -> String {
@@ -15,6 +15,7 @@ impl Value {
                 }
             }
             Value::Object(obj) => format!("Объект {}", obj.borrow().class_name), 
+            Value::Function(func) => format!("Функция {:?}", func.name),
             Value::Empty => "пустота".to_string(),
         }
     }
@@ -26,6 +27,7 @@ impl Value {
             Value::Float(n) => *n != 0.0,
             Value::Text(s) => !s.is_empty(),
             Value::Object(_) => true,
+            Value::Function(_) => true,
             Value::Empty => false,
         }
     }
@@ -48,6 +50,9 @@ impl fmt::Display for Value {
             }
             Value::Object(obj) => {
                 write!(f, "[Объект {}]", obj.borrow().class_name) 
+            }
+            Value::Function(func) => {
+                write!(f, "[Функция {:?}]", func.name)
             }
             Value::Empty => {
                 write!(f, "")

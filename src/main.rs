@@ -37,7 +37,7 @@ fn main() {
     match &cli.command {
         Some(Commands::Run { file }) => {
             if let Err(e) = run_file(file) {
-                eprintln!("Ошибка: {}", e);
+                eprintln!("{}", e);
                 std::process::exit(1);
             }
         }

@@ -10,7 +10,7 @@ impl Lexer {
             input: chars,
             position: 0,
             current_char,
-            current_line: 0,
+            current_line: 1,
             current_column: 0,
         }
     }

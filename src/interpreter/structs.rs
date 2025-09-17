@@ -11,6 +11,7 @@ pub enum Value {
     Text(String),
     Boolean(bool),
     Object(Rc<RefCell<ClassInstance>>),
+    Function(Rc<Function>),
     Empty,
 }
 

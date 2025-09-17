@@ -1,9 +1,10 @@
-use std::collections::HashMap;
 use crate::ast::prelude::Program;
-use crate::interpreter::structs::{Environment, Interpreter, Module, RuntimeError};
+use crate::interpreter::structs::{Environment, Interpreter, Module, RuntimeError, Value};
 use crate::interpreter::traits::{CoreOperations, InterpreterClasses, StatementExecutor};
 use crate::lexer::structs::Lexer;
 use crate::parser::structs::Parser;
+use std::collections::HashMap;
+use std::rc::Rc;
 
 impl CoreOperations for Interpreter {
     fn new(dir: std::path::PathBuf) -> Self {
@@ -67,6 +68,7 @@ impl CoreOperations for Interpreter {
 
         for function in &program.functions {
             let func_name = program.arena.resolve_symbol(function.name).unwrap().to_string();
+            self.environment.define(func_name.clone(), Value::Function(Rc::new(function.clone())));
             self.functions.insert(func_name, function.clone());
         }
 
