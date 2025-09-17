@@ -10,6 +10,7 @@ use std::path::PathBuf;
 use lexer::prelude::LexerStructs::Lexer;
 use parser::prelude::ParserStructs::{Parser as GoidaParser, ParseError};
 use interpreter::prelude::InterpreterStructs::{Interpreter, RuntimeError};
+use interpreter::prelude::InterpreterTraits::{CoreOperations};
 
 #[derive(Parser)]
 #[command(name = "goida")]
@@ -36,7 +37,7 @@ fn main() {
     match &cli.command {
         Some(Commands::Run { file }) => {
             if let Err(e) = run_file(file) {
-                eprintln!("Ошибка: {}", e);
+                eprintln!("{}", e);
                 std::process::exit(1);
             }
         }

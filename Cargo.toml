@@ -7,3 +7,4 @@ edition = "2021"
 clap = { version = "4.0", features = ["derive"] }
 string-interner = "0.14"
 once_cell = "1.19"
+nom = "8.0.0"

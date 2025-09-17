@@ -1,5 +1,5 @@
 use crate::lexer::structs::{Lexer, Token, TokenInfo};
-use crate::ast::{Span, SourceLocation};
+use crate::ast::prelude::{Span, SourceLocation};
 
 impl Lexer {
     pub fn new(input: String) -> Self {
@@ -10,7 +10,7 @@ impl Lexer {
             input: chars,
             position: 0,
             current_char,
-            current_line: 0,
+            current_line: 1,
             current_column: 0,
         }
     }

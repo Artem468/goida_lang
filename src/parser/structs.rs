@@ -1,6 +1,5 @@
 use crate::lexer::structs::TokenInfo;
-use crate::ast::*;
-
+use crate::ast::prelude::Program;
 
 #[derive(Debug)]
 pub struct Parser {

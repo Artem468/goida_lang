@@ -1,8 +1,7 @@
 use std::collections::HashMap;
-use crate::ast::{Function, Program};
-
 use std::rc::Rc;
 
+use crate::ast::prelude::{FieldVisibility, Function, Program};
 use std::cell::RefCell;
 
 #[derive(Debug, Clone)]
@@ -12,6 +11,7 @@ pub enum Value {
     Text(String),
     Boolean(bool),
     Object(Rc<RefCell<ClassInstance>>),
+    Function(Rc<Function>),
     Empty,
 }
 
@@ -22,10 +22,7 @@ impl PartialEq for Value {
             (Value::Float(a), Value::Float(b)) => a == b,
             (Value::Text(a), Value::Text(b)) => a == b,
             (Value::Boolean(a), Value::Boolean(b)) => a == b,
-            (Value::Object(a), Value::Object(b)) => {
-                
-                Rc::ptr_eq(a, b)
-            }
+            (Value::Object(a), Value::Object(b)) => Rc::ptr_eq(a, b),
             (Value::Empty, Value::Empty) => true,
             _ => false,
         }
@@ -50,12 +47,11 @@ pub struct Environment {
     pub(crate) parent: Option<Box<Environment>>,
 }
 
-
 #[derive(Debug, Clone, PartialEq)]
 pub struct Class {
     pub name: String,
-    pub fields: HashMap<String, (crate::ast::FieldVisibility, Option<Value>)>,
-    pub methods: HashMap<String, (crate::ast::FieldVisibility, Function)>,
+    pub fields: HashMap<String, (FieldVisibility, Option<Value>)>,
+    pub methods: HashMap<String, (FieldVisibility, Function)>,
     pub constructor: Option<Function>,
 }
 
@@ -73,7 +69,7 @@ pub struct Interpreter {
     pub(crate) classes: HashMap<String, Rc<Class>>,
     pub(crate) modules: HashMap<String, Module>,
     pub(crate) current_dir: std::path::PathBuf,
-    pub(crate) current_module: Option<String>
+    pub(crate) current_module: Option<String>,
 }
 
 #[derive(Debug, Clone)]
