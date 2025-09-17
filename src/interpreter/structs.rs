@@ -3,6 +3,7 @@ use std::rc::Rc;
 
 use crate::ast::prelude::{FieldVisibility, Function, Program};
 use std::cell::RefCell;
+use string_interner::{DefaultSymbol as Symbol};
 
 #[derive(Debug, Clone)]
 pub enum Value {
@@ -49,7 +50,7 @@ pub struct Environment {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Class {
-    pub name: String,
+    pub name: Symbol,
     pub fields: HashMap<String, (FieldVisibility, Option<Value>)>,
     pub methods: HashMap<String, (FieldVisibility, Function)>,
     pub constructor: Option<Function>,
@@ -57,7 +58,7 @@ pub struct Class {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct ClassInstance {
-    pub class_name: String,
+    pub class_name: Symbol,
     pub fields: HashMap<String, Value>,
     pub class_ref: Rc<Class>,
 }

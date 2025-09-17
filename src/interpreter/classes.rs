@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::rc::Rc;
+use string_interner::{DefaultSymbol as Symbol};
 use crate::ast::prelude::{ClassDefinition, FieldVisibility, Function, Program};
 use crate::interpreter::structs::{Class, ClassInstance, Environment, Interpreter, RuntimeError, Value};
 use crate::interpreter::traits::{ExpressionEvaluator, InterpreterClasses, StatementExecutor};
@@ -19,7 +20,7 @@ impl InterpreterClasses for Interpreter {
             .resolve_symbol(class_def.name)
             .unwrap()
             .to_string();
-        let mut class = Class::new(class_name.clone());
+        let mut class = Class::new(class_def.name);
 
         for field in &class_def.fields {
             let field_name = program
@@ -129,7 +130,7 @@ impl InterpreterClasses for Interpreter {
 
 impl ClassInstance {
     /// Создать новый экземпляр класса
-    pub fn new(class_name: String, class_ref: Rc<Class>) -> Self {
+    pub fn new(class_name: Symbol, class_ref: Rc<Class>) -> Self {
         let mut fields = HashMap::new();
 
         for (field_name, (_, default_value)) in &class_ref.fields {
@@ -194,7 +195,7 @@ impl ClassInstance {
 
 impl Class {
     /// Создать новый класс
-    pub fn new(name: String) -> Self {
+    pub fn new(name: Symbol) -> Self {
         Self {
             name,
             fields: HashMap::new(),
