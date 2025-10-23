@@ -1,4 +1,4 @@
-use crate::ast::prelude::{ClassDefinition, ExprId, Function, Program, StmtId};
+use crate::ast::prelude::{ClassDefinition, ExprId, FunctionDefinition, Program, StmtId};
 use crate::interpreter::structs::{Module, RuntimeError, Value};
 
 pub trait StatementExecutor {
@@ -39,7 +39,7 @@ pub trait InterpreterUtils {
 pub trait InterpreterFunctions {
     fn call_function(
         &mut self,
-        function: Function,
+        function: FunctionDefinition,
         arguments: Vec<Value>,
         program: &Program,
     ) -> Result<Value, RuntimeError>;
@@ -59,7 +59,7 @@ pub trait InterpreterClasses {
     ) -> Result<(), RuntimeError>;
     fn call_method(
         &mut self,
-        method: Function,
+        method: FunctionDefinition,
         arguments: Vec<Value>,
         this_obj: Value,
         program: &Program,

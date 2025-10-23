@@ -1,0 +1,200 @@
+use crate::ast::prelude::{
+    AstArena, ExpressionKind, StatementKind, LiteralValue, BinaryOperator, Span,
+    ExprId, StmtId, Program
+};
+
+grammar<'program>(program: &'program mut Program);
+
+
+pub Program: Vec<StmtId> = {
+    <stmts:Stmt+> => stmts.into_iter().filter_map(|s| {
+        match s {
+            Some(_s) => program.statements.push(_s),
+            None => ()
+        }
+        s
+    }).collect(),
+};
+
+
+Stmt: Option<StmtId> = {
+    Assign => Some(<>),
+    IfBlock => Some(<>),
+    WhileLoop => Some(<>),
+    ForLoop => Some(<>),
+    Print => Some(<>),
+    Input => Some(<>),
+    Comment => None,
+    <expr:Expression> => {
+        if expr == 0 {
+            None
+        } else {
+            Some(program.arena.add_statement(StatementKind::Expression(expr), Span::default()))
+        }
+    },
+};
+
+
+Assign: StmtId = {
+    <name:r"[\p{L}_][\p{L}\p{N}_]*"> "=" <value:Expression> ";" => {
+        let sym = program.arena.intern_string(name);
+        program.arena.add_statement(
+            StatementKind::Assign {
+                name: sym,
+                value,
+            },
+            Span::default(),
+        )
+    }
+};
+
+
+IfBlock: StmtId = {
+    "если" "(" <cond:Expression> ")" "{" <then:Block> "}" <else_:ElseOpt> => {
+        let then_id = program.arena.add_statement(StatementKind::Block(then), Span::default());
+        let else_id = else_.map(|b| program.arena.add_statement(StatementKind::Block(b), Span::default()));
+        program.arena.add_statement(
+            StatementKind::If {
+                condition: cond,
+                then_body: then_id,
+                else_body: else_id,
+            },
+            Span::default(),
+        )
+    }
+};
+
+
+ElseOpt: Option<Vec<StmtId>> = {
+    => None,
+    "иначе" <body:ElseBody> => Some(body),
+};
+
+
+ElseBody: Vec<StmtId> = {
+    "{" <stmts:Block> "}" => stmts,
+    IfBlock => vec![<>],
+};
+
+
+WhileLoop: StmtId = {
+    "пока" "(" <cond:Expression> ")" "{" <body:Block> "}" => {
+        let body_id = program.arena.add_statement(StatementKind::Block(body), Span::default());
+        program.arena.add_statement(
+            StatementKind::While {
+                condition: cond,
+                body: body_id,
+            },
+            Span::default(),
+        )
+    }
+};
+
+
+ForLoop: StmtId = {
+    "для" "(" <var:r"[\p{L}_][\p{L}\p{N}_]*"> "=" <start:Expression> ";" <end:Expression> ")" "{" <body:Block> "}" => {
+        let sym = program.arena.intern_string(var);
+        let body_id = program.arena.add_statement(StatementKind::Block(body), Span::default());
+        program.arena.add_statement(
+            StatementKind::For {
+                variable: sym,
+                start,
+                end,
+                body: body_id,
+            },
+            Span::default(),
+        )
+    }
+};
+
+
+Block: Vec<StmtId> = {
+    => vec![],
+    <stmts:Stmt+> => stmts.into_iter().flatten().collect(),
+};
+
+
+Print: StmtId = {
+    "печать" "(" <data:Expression> ")" ";" => {
+        program.arena.add_statement(
+            StatementKind::Print(data),
+            Span::default()
+        )
+    }
+};
+
+
+Input: StmtId = {
+    "ввод" "(" <data:Expression> ")" ";" => {
+        program.arena.add_statement(
+            StatementKind::Input(data),
+            Span::default()
+        )
+    }
+};
+
+
+Expression: ExprId = {
+    <l:AddSub> "<" <r:AddSub>  => program.arena.add_expression(
+        ExpressionKind::Binary { op: BinaryOperator::Lt, left: l, right: r }, Span::default()
+    ),
+    <l:AddSub> ">" <r:AddSub>  => program.arena.add_expression(
+        ExpressionKind::Binary { op: BinaryOperator::Gt, left: l, right: r }, Span::default()
+    ),
+    <l:AddSub> "<=" <r:AddSub> => program.arena.add_expression(
+        ExpressionKind::Binary { op: BinaryOperator::Le, left: l, right: r }, Span::default()
+    ),
+    <l:AddSub> ">=" <r:AddSub> => program.arena.add_expression(
+        ExpressionKind::Binary { op: BinaryOperator::Ge, left: l, right: r }, Span::default()
+    ),
+    <l:AddSub> "==" <r:AddSub> => program.arena.add_expression(
+        ExpressionKind::Binary { op: BinaryOperator::Eq, left: l, right: r }, Span::default()
+    ),
+    <l:AddSub> "!=" <r:AddSub> => program.arena.add_expression(
+        ExpressionKind::Binary { op: BinaryOperator::Ne, left: l, right: r }, Span::default()
+    ),
+    AddSub,
+};
+
+
+AddSub: ExprId = {
+    <l:MulDiv> "+" <r:AddSub> => program.arena.add_expression(
+        ExpressionKind::Binary { op: BinaryOperator::Add, left: l, right: r }, Span::default()
+    ),
+    <l:MulDiv> "-" <r:AddSub> => program.arena.add_expression(
+        ExpressionKind::Binary { op: BinaryOperator::Sub, left: l, right: r }, Span::default()
+    ),
+    MulDiv,
+};
+
+
+MulDiv: ExprId = {
+    <l:Factor> "*" <r:MulDiv> => program.arena.add_expression(
+        ExpressionKind::Binary { op: BinaryOperator::Mul, left: l, right: r }, Span::default()
+    ),
+    <l:Factor> "/" <r:MulDiv> => program.arena.add_expression(
+        ExpressionKind::Binary { op: BinaryOperator::Div, left: l, right: r }, Span::default()
+    ),
+    Factor,
+};
+
+
+Factor: ExprId = {
+    r#""([^"\\]|\\.)*""# => {   // Строковый литерал
+        let s = &<>[1..<>.len()-1]; // убираем кавычки
+        let sym = program.arena.intern_string(s); // регистрируем в арене
+        program.arena.add_expression(ExpressionKind::Literal(LiteralValue::Text(sym)), Span::default())
+    },
+    r"[0-9]+" => {
+        let num: i64 = <>.parse().unwrap();
+        program.arena.add_expression(ExpressionKind::Literal(LiteralValue::Number(num)), Span::default())
+    },
+    r"[\p{L}_][\p{L}\p{N}_]*" => {
+        let sym = program.arena.intern_string(<>);
+        program.arena.add_expression(ExpressionKind::Identifier(sym), Span::default())
+    },
+    "(" <e:Expression> ")" => e,
+};
+
+
+Comment: () = { r"//[^\n]*" => () };

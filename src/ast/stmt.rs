@@ -1,5 +1,5 @@
 use string_interner::{DefaultSymbol as Symbol};
-use crate::ast::prelude::{ClassDefinition, ExprId, Span, TypeId};
+use crate::ast::prelude::{ClassDefinition, ExprId, FunctionDefinition, Span, TypeId};
 
 pub type StmtId = u32;
 
@@ -45,7 +45,7 @@ pub enum StatementKind {
     Return(Option<ExprId>),
     Print(ExprId),
     Input(ExprId),
-
+    FunctionDefinition(FunctionDefinition),
     ClassDefinition(ClassDefinition),
     PropertyAssign {
         object: ExprId,

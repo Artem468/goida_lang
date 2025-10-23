@@ -1,11 +1,11 @@
-use crate::ast::prelude::{Function, Program};
+use crate::ast::prelude::{FunctionDefinition, Program};
 use crate::interpreter::structs::{Environment, Interpreter, RuntimeError, Value};
 use crate::interpreter::traits::{InterpreterFunctions, StatementExecutor};
 
 impl InterpreterFunctions for Interpreter {
     fn call_function(
         &mut self,
-        function: Function,
+        function: FunctionDefinition,
         arguments: Vec<Value>,
         program: &Program,
     ) -> Result<Value, RuntimeError> {

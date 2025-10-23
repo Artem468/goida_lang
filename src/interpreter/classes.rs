@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::rc::Rc;
 use string_interner::{DefaultSymbol as Symbol};
-use crate::ast::prelude::{ClassDefinition, FieldVisibility, Function, Program};
+use crate::ast::prelude::{ClassDefinition, FieldVisibility, FunctionDefinition, Program};
 use crate::interpreter::structs::{Class, ClassInstance, Environment, Interpreter, RuntimeError, Value};
 use crate::interpreter::traits::{ExpressionEvaluator, InterpreterClasses, StatementExecutor};
 
@@ -12,8 +12,7 @@ impl InterpreterClasses for Interpreter {
         class_def: &ClassDefinition,
         program: &Program,
     ) -> Result<(), RuntimeError> {
-        use crate::interpreter::structs::Class;
-        use std::rc::Rc;
+
 
         let class_name = program
             .arena
@@ -43,7 +42,7 @@ impl InterpreterClasses for Interpreter {
                 .unwrap()
                 .to_string();
 
-            let function = Function {
+            let function = FunctionDefinition {
                 name: method.name,
                 params: method.params.clone(),
                 return_type: method.return_type,
@@ -66,7 +65,7 @@ impl InterpreterClasses for Interpreter {
     /// Вызываем метод с контекстом объекта
     fn call_method(
         &mut self,
-        method: Function,
+        method: FunctionDefinition,
         arguments: Vec<Value>,
         this_obj: Value,
         program: &Program,
@@ -183,12 +182,12 @@ impl ClassInstance {
     }
 
     /// Получить метод по имени
-    pub fn get_method(&self, method_name: &str) -> Option<&Function> {
+    pub fn get_method(&self, method_name: &str) -> Option<&FunctionDefinition> {
         self.class_ref.methods.get(method_name).map(|(_, func)| func)
     }
 
     /// Получить конструктор класса
-    pub fn get_constructor(&self) -> Option<&Function> {
+    pub fn get_constructor(&self) -> Option<&FunctionDefinition> {
         self.class_ref.constructor.as_ref()
     }
 }
@@ -210,12 +209,12 @@ impl Class {
     }
 
     /// Добавить метод в класс
-    pub fn add_method(&mut self, name: String, visibility: FieldVisibility, method: Function) {
+    pub fn add_method(&mut self, name: String, visibility: FieldVisibility, method: FunctionDefinition) {
         self.methods.insert(name, (visibility, method));
     }
 
     /// Установить конструктор
-    pub fn set_constructor(&mut self, constructor: Function) {
+    pub fn set_constructor(&mut self, constructor: FunctionDefinition) {
         self.constructor = Some(constructor);
     }
 

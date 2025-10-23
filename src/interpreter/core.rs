@@ -1,10 +1,9 @@
 use crate::ast::prelude::Program;
 use crate::interpreter::structs::{Environment, Interpreter, Module, RuntimeError, Value};
 use crate::interpreter::traits::{CoreOperations, InterpreterClasses, StatementExecutor};
-use crate::lexer::structs::Lexer;
-use crate::parser::structs::Parser;
 use std::collections::HashMap;
 use std::rc::Rc;
+use crate::grammar;
 
 impl CoreOperations for Interpreter {
     fn new(dir: std::path::PathBuf) -> Self {
@@ -46,13 +45,9 @@ impl CoreOperations for Interpreter {
                     RuntimeError::IOError(format!("{} | {err}", full_path.display()))
                 })?;
 
-                let tokens = Lexer::new(code).tokenize();
-                let program = Parser::new(tokens, file_stem.to_string()).parse().map_err(|err| {
-                    RuntimeError::ParseError(format!(
-                        "Ошибка парсинга модуля {}: {err:?}",
-                        file_stem
-                    ))
-                })?;
+                let mut program = Program::new(file_stem.to_string());
+                let parser = grammar::ProgramParser::new();
+                let _ = parser.parse(&mut program, code.as_str());
 
                 let mut sub_interpreter = Interpreter::new(
                     full_path.parent().unwrap_or(&self.current_dir).to_path_buf(),

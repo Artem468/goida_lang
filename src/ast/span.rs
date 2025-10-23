@@ -1,8 +1,8 @@
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct SourceLocation {
-    pub line: u32,
-    pub column: u32,
-    pub offset: u32,
+    pub line: usize,
+    pub column: usize,
+    pub offset: usize,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

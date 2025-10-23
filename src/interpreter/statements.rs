@@ -136,6 +136,7 @@ impl StatementExecutor for Interpreter {
             }
 
             StatementKind::ClassDefinition(_) => Ok(()),
+            StatementKind::FunctionDefinition(_) => Ok(()),
 
             StatementKind::PropertyAssign {
                 object,

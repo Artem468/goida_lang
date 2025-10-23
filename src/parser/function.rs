@@ -1,4 +1,4 @@
-use crate::ast::prelude::{Function, Parameter};
+use crate::ast::prelude::{FunctionDefinition, Parameter};
 use crate::lexer::structs::Token;
 use crate::parser::structs::{ParseError, Parser};
 
@@ -30,7 +30,7 @@ impl Parser {
         })
     }
 
-    pub(crate) fn parse_function(&mut self) -> Result<Function, ParseError> {
+    pub(crate) fn parse_function(&mut self) -> Result<FunctionDefinition, ParseError> {
         self.expect(Token::Function)?;
         let span = self.current_token().span;
 
@@ -76,7 +76,7 @@ impl Parser {
 
         let body = self.parse_block()?;
 
-        Ok(Function {
+        Ok(FunctionDefinition {
             name,
             params: parameters,
             return_type,
