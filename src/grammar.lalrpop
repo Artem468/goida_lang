@@ -2,7 +2,8 @@ use crate::ast::prelude::{
     AstArena, ExpressionKind, StatementKind, LiteralValue, BinaryOperator, Span,
     ExprId, StmtId, TypeId, Program, Parameter, FunctionDefinition
 };
-use string_interner::{DefaultSymbol as Symbol};
+use string_interner::DefaultSymbol as Symbol;
+
 
 grammar<'program>(program: &'program mut Program);
 
@@ -17,7 +18,6 @@ pub Program: Vec<StmtId> = {
     }).collect(),
 };
 
-
 Stmt: Option<StmtId> = {
     Assign => Some(<>),
     IfBlock => Some(<>),
@@ -28,7 +28,8 @@ Stmt: Option<StmtId> = {
     FunctionDef => Some(<>),
     ReturnStmt => Some(<>),
     Comment => None,
-    <expr:Expression> => {
+
+    <expr:Expression> ";" => {
         if expr == 0 {
             None
         } else {
@@ -58,7 +59,6 @@ FunctionDef: StmtId = {
 
         let sym_name: Symbol = program.arena.intern_string(name);
 
-        // Конвертация параметров в Parameter (через арену)
         let params_final: Vec<_> = params.into_iter().map(|(n, t)| {
             let sym = program.arena.intern_string(&n);
             let ty = match t {
@@ -90,13 +90,14 @@ FunctionDef: StmtId = {
             span: Span::default(),
             module: None,
         };
-
+        program.functions.push(func_def.clone());
         program.arena.add_statement(
             StatementKind::FunctionDefinition(func_def),
             Span::default(),
         )
     }
 };
+
 
 ParamList: Vec<(String, Option<String>)> = {
     <first:Param> <rest:ParamTail*> => {
@@ -107,9 +108,11 @@ ParamList: Vec<(String, Option<String>)> = {
     => vec![],
 };
 
+
 ParamTail: (String, Option<String>) = {
     "," <p:Param> => p
 };
+
 
 Param: (String, Option<String>) = {
     <name:r"[\p{L}_][\p{L}\p{N}_]*"> ":" <typ:r"[\p{L}_][\p{L}\p{N}_]*"> => (name.to_string(), Some(typ.to_string())),
@@ -130,6 +133,7 @@ ReturnStmt: StmtId = {
         )
     }
 };
+
 
 IfBlock: StmtId = {
     "если" "(" <cond:Expression> ")" <then:Block> <else_:ElseOpt> => {
@@ -261,24 +265,109 @@ MulDiv: ExprId = {
 
 
 Factor: ExprId = {
-    r#""([^"\\]|\\.)*""# => {   // Строковый литерал
-        let s = &<>[1..<>.len()-1]; // убираем кавычки
-        let sym = program.arena.intern_string(s); // регистрируем в арене
-        program.arena.add_expression(ExpressionKind::Literal(LiteralValue::Text(sym)), Span::default())
+    <base:Primary> <tails:("." r"[\p{L}_][\p{L}\p{N}_]*" MaybeArgs? )*> => {
+        let mut expr = base;
+
+        for (_, name, maybe_args) in tails {
+            let sym = program.arena.intern_string(name);
+            match maybe_args {
+                Some(args) => {
+                    expr = program.arena.add_expression(
+                        ExpressionKind::MethodCall {
+                            object: expr,
+                            method: sym,
+                            args,
+                        },
+                        Span::default(),
+                    );
+                }
+                None => {
+                    expr = program.arena.add_expression(
+                        ExpressionKind::PropertyAccess {
+                            object: expr,
+                            property: sym,
+                        },
+                        Span::default(),
+                    );
+                }
+            }
+        }
+
+        expr
+    }
+};
+
+
+Primary: ExprId = {
+    <name:r"[\p{L}_][\p{L}\p{N}_]*"> <maybe_call:MaybeArgs?> => {
+        let sym = program.arena.intern_string(name);
+        match maybe_call {
+            Some(args) => {
+                let func_expr = program.arena.add_expression(
+                    ExpressionKind::Identifier(sym),
+                    Span::default(),
+                );
+                program.arena.add_expression(
+                    ExpressionKind::FunctionCall {
+                        function: func_expr,
+                        args,
+                    },
+                    Span::default(),
+                )
+            },
+            None => program.arena.add_expression(
+                ExpressionKind::Identifier(sym),
+                Span::default(),
+            ),
+        }
     },
+
+    r#""([^"\\]|\\.)*""# => {
+        let s = &<>[1..<>.len()-1];
+        let sym = program.arena.intern_string(s);
+        program.arena.add_expression(
+            ExpressionKind::Literal(LiteralValue::Text(sym)),
+            Span::default(),
+        )
+    },
+
     r"[0-9]+" => {
         let num: i64 = <>.parse().unwrap();
-        program.arena.add_expression(ExpressionKind::Literal(LiteralValue::Number(num)), Span::default())
+        program.arena.add_expression(
+            ExpressionKind::Literal(LiteralValue::Number(num)),
+            Span::default(),
+        )
     },
+
     r"[0-9]+\.[0-9]+" => {
         let num: f64 = <>.parse().unwrap();
-        program.arena.add_expression(ExpressionKind::Literal(LiteralValue::Float(num)), Span::default())
+        program.arena.add_expression(
+            ExpressionKind::Literal(LiteralValue::Float(num)),
+            Span::default(),
+        )
     },
-    r"[\p{L}_][\p{L}\p{N}_]*" => {
-        let sym = program.arena.intern_string(<>);
-        program.arena.add_expression(ExpressionKind::Identifier(sym), Span::default())
-    },
+
     "(" <e:Expression> ")" => e,
+};
+
+
+MaybeArgs: Vec<ExprId> = {
+    "(" <args:ArgList> ")" => args,
+};
+
+
+ArgList: Vec<ExprId> = {
+    <first:Expression> <rest:ArgTail*> => {
+        let mut v = vec![first];
+        v.extend(rest);
+        v
+    },
+    => vec![],
+};
+
+
+ArgTail: ExprId = {
+    "," <p:Expression> => p
 };
 
 
