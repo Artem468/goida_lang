@@ -1,5 +1,5 @@
 use string_interner::{DefaultSymbol as Symbol, StringInterner};
-use crate::ast::prelude::{BinaryOperator, DataType, ExprId, ExpressionKind, ExpressionNode, LiteralValue, Span, StatementKind, StatementNode, StmtId, TypeId};
+use crate::ast::prelude::{BinaryOperator, DataType, ExprId, ExpressionKind, ExpressionNode, LiteralValue, PrimitiveType, Span, StatementKind, StatementNode, StmtId, TypeId};
 
 #[derive(Debug, Clone)]
 pub struct AstArena {
@@ -43,6 +43,25 @@ impl AstArena {
         id
     }
 
+    pub fn resolve_or_intern_type(&mut self, name: &str) -> TypeId {
+        if let Some(pos) = self.types.iter().position(|t| match t {
+            DataType::Primitive(p) => p.to_string() == name,
+            DataType::Object(s) => self.interner.resolve(*s) == Some(name),
+            _ => false,
+        }) {
+            return pos as TypeId;
+        }
+
+        let new_type = match name {
+            "число" => DataType::Primitive(PrimitiveType::Number),
+            "логическое" => DataType::Primitive(PrimitiveType::Boolean),
+            "текст" => DataType::Primitive(PrimitiveType::Text),
+            "дробь" => DataType::Primitive(PrimitiveType::Float),
+            _ => DataType::Object(self.intern_string(name)),
+        };
+
+        self.add_type(new_type)
+    }
     pub fn get_expression(&self, id: ExprId) -> Option<&ExpressionNode> {
         self.expressions.get(id as usize)
     }

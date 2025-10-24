@@ -1,4 +1,5 @@
-use string_interner::{DefaultSymbol as Symbol};
+use std::fmt;
+use string_interner::DefaultSymbol as Symbol;
 
 pub type TypeId = u32;
 
@@ -24,6 +25,17 @@ pub enum PrimitiveType {
     Float,
     Text,
     Boolean,
+}
+
+impl fmt::Display for PrimitiveType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            PrimitiveType::Number => write!(f, "число"),
+            PrimitiveType::Boolean => write!(f, "логическое"),
+            PrimitiveType::Text => write!(f, "текст"),
+            &PrimitiveType::Float => write!(f, "дробь"),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]

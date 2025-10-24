@@ -1,7 +1,8 @@
 use crate::ast::prelude::{
     AstArena, ExpressionKind, StatementKind, LiteralValue, BinaryOperator, Span,
-    ExprId, StmtId, Program
+    ExprId, StmtId, TypeId, Program, Parameter, FunctionDefinition
 };
+use string_interner::{DefaultSymbol as Symbol};
 
 grammar<'program>(program: &'program mut Program);
 
@@ -24,6 +25,8 @@ Stmt: Option<StmtId> = {
     ForLoop => Some(<>),
     Print => Some(<>),
     Input => Some(<>),
+    FunctionDef => Some(<>),
+    ReturnStmt => Some(<>),
     Comment => None,
     <expr:Expression> => {
         if expr == 0 {
@@ -49,8 +52,87 @@ Assign: StmtId = {
 };
 
 
+FunctionDef: StmtId = {
+    "функция" <name:r"[\p{L}_][\p{L}\p{N}_]*">
+        "(" <params:ParamList> ")" <ret:ReturnType?> <body:Block> => {
+
+        let sym_name: Symbol = program.arena.intern_string(name);
+
+        // Конвертация параметров в Parameter (через арену)
+        let params_final: Vec<_> = params.into_iter().map(|(n, t)| {
+            let sym = program.arena.intern_string(&n);
+            let ty = match t {
+                Some(type_name) => program.arena.resolve_or_intern_type(&type_name),
+                None => program.arena.resolve_or_intern_type("неизвестно"),
+            };
+            Parameter {
+                name: sym,
+                param_type: ty,
+                span: Span::default(),
+            }
+        }).collect();
+
+        let ret_type: Option<TypeId> = match ret {
+            Some(rname) => Some(program.arena.resolve_or_intern_type(&rname)),
+            None => None,
+        };
+
+        let body_id = program.arena.add_statement(
+            StatementKind::Block(body),
+            Span::default(),
+        );
+
+        let func_def = FunctionDefinition {
+            name: sym_name,
+            params: params_final,
+            return_type: ret_type,
+            body: body_id,
+            span: Span::default(),
+            module: None,
+        };
+
+        program.arena.add_statement(
+            StatementKind::FunctionDefinition(func_def),
+            Span::default(),
+        )
+    }
+};
+
+ParamList: Vec<(String, Option<String>)> = {
+    <first:Param> <rest:ParamTail*> => {
+        let mut v = vec![first];
+        v.extend(rest);
+        v
+    },
+    => vec![],
+};
+
+ParamTail: (String, Option<String>) = {
+    "," <p:Param> => p
+};
+
+Param: (String, Option<String>) = {
+    <name:r"[\p{L}_][\p{L}\p{N}_]*"> ":" <typ:r"[\p{L}_][\p{L}\p{N}_]*"> => (name.to_string(), Some(typ.to_string())),
+    <name:r"[\p{L}_][\p{L}\p{N}_]*"> => (name.to_string(), None)
+};
+
+
+ReturnType: String = {
+    ":" <typ:r"[\p{L}_][\p{L}\p{N}_]*"> => typ.to_string(),
+};
+
+
+ReturnStmt: StmtId = {
+    "вернуть" <expr:Expression?> ";" => {
+        program.arena.add_statement(
+            StatementKind::Return(expr),
+            Span::default()
+        )
+    }
+};
+
 IfBlock: StmtId = {
-    "если" "(" <cond:Expression> ")" "{" <then:Block> "}" <else_:ElseOpt> => {
+    "если" "(" <cond:Expression> ")" <then:Block> <else_:ElseOpt> => {
         let then_id = program.arena.add_statement(StatementKind::Block(then), Span::default());
         let else_id = else_.map(|b| program.arena.add_statement(StatementKind::Block(b), Span::default()));
         program.arena.add_statement(
@@ -72,13 +154,13 @@ ElseOpt: Option<Vec<StmtId>> = {
 
 
 ElseBody: Vec<StmtId> = {
-    "{" <stmts:Block> "}" => stmts,
+    <stmts:Block> => stmts,
     IfBlock => vec![<>],
 };
 
 
 WhileLoop: StmtId = {
-    "пока" "(" <cond:Expression> ")" "{" <body:Block> "}" => {
+    "пока" "(" <cond:Expression> ")" <body:Block> => {
         let body_id = program.arena.add_statement(StatementKind::Block(body), Span::default());
         program.arena.add_statement(
             StatementKind::While {
@@ -92,7 +174,7 @@ WhileLoop: StmtId = {
 
 
 ForLoop: StmtId = {
-    "для" "(" <var:r"[\p{L}_][\p{L}\p{N}_]*"> "=" <start:Expression> ";" <end:Expression> ")" "{" <body:Block> "}" => {
+    "для" "(" <var:r"[\p{L}_][\p{L}\p{N}_]*"> "=" <start:Expression> ";" <end:Expression> ")" <body:Block> => {
         let sym = program.arena.intern_string(var);
         let body_id = program.arena.add_statement(StatementKind::Block(body), Span::default());
         program.arena.add_statement(
@@ -109,8 +191,7 @@ ForLoop: StmtId = {
 
 
 Block: Vec<StmtId> = {
-    => vec![],
-    <stmts:Stmt+> => stmts.into_iter().flatten().collect(),
+    "{" <stmts:Stmt*> "}" => stmts.into_iter().flatten().collect(),
 };
 
 
@@ -188,6 +269,10 @@ Factor: ExprId = {
     r"[0-9]+" => {
         let num: i64 = <>.parse().unwrap();
         program.arena.add_expression(ExpressionKind::Literal(LiteralValue::Number(num)), Span::default())
+    },
+    r"[0-9]+\.[0-9]+" => {
+        let num: f64 = <>.parse().unwrap();
+        program.arena.add_expression(ExpressionKind::Literal(LiteralValue::Float(num)), Span::default())
     },
     r"[\p{L}_][\p{L}\p{N}_]*" => {
         let sym = program.arena.intern_string(<>);

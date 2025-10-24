@@ -86,7 +86,7 @@ impl ExpressionEvaluator for Interpreter {
                 }
             }
 
-            ExpressionKind::Call { function, args } => {
+            ExpressionKind::FunctionCall { function, args } => {
                 let func_expr = program.arena.get_expression(*function).unwrap();
                 let func_name = match &func_expr.kind {
                     ExpressionKind::Identifier(symbol) => {

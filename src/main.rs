@@ -1,7 +1,7 @@
 mod ast;
 mod interpreter;
 
-use crate::ast::prelude::{Program, StmtId};
+use crate::ast::prelude::Program;
 use clap::{Parser, Subcommand};
 use interpreter::prelude::InterpreterStructs::{Interpreter, RuntimeError};
 use interpreter::prelude::InterpreterTraits::CoreOperations;
