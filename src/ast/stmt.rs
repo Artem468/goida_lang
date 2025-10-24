@@ -12,13 +12,9 @@ pub struct StatementNode {
 #[derive(Debug, Clone)]
 pub enum StatementKind {
     Expression(ExprId),
-    Let {
-        name: Symbol,
-        type_hint: Option<TypeId>,
-        value: Option<ExprId>,
-    },
     Assign {
         name: Symbol,
+        type_hint: Option<TypeId>,
         value: ExprId,
     },
     IndexAssign {

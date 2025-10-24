@@ -15,22 +15,11 @@ impl StatementExecutor for Interpreter {
                 Ok(())
             }
 
-            StatementKind::Let {
+            StatementKind::Assign {
                 name,
                 type_hint: _,
                 value,
             } => {
-                let name_str = program.arena.resolve_symbol(*name).unwrap().to_string();
-                let val = if let Some(expr_id) = value {
-                    self.evaluate_expression(*expr_id, program)?
-                } else {
-                    Value::Empty
-                };
-                self.environment.define(name_str, val);
-                Ok(())
-            }
-
-            StatementKind::Assign { name, value } => {
                 let name_str = program.arena.resolve_symbol(*name).unwrap().to_string();
                 let val = self.evaluate_expression(*value, program)?;
                 self.environment.set(&name_str, val)?;

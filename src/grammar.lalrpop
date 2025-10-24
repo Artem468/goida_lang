@@ -39,12 +39,20 @@ Stmt: Option<StmtId> = {
 };
 
 
+
 Assign: StmtId = {
-    <name:r"[\p{L}_][\p{L}\p{N}_]*"> "=" <value:Expression> ";" => {
+    <name:r"[\p{L}_][\p{L}\p{N}_]*"> <type_hint:TypeAnnotation?> "=" <value:Expression> ";" => {
         let sym = program.arena.intern_string(name);
+
+        let type_hint = match type_hint {
+            Some(t) => Some(program.arena.resolve_or_intern_type(&t)),
+            None => None,
+        };
+
         program.arena.add_statement(
             StatementKind::Assign {
                 name: sym,
+                type_hint,
                 value,
             },
             Span::default(),
@@ -55,7 +63,7 @@ Assign: StmtId = {
 
 FunctionDef: StmtId = {
     "функция" <name:r"[\p{L}_][\p{L}\p{N}_]*">
-        "(" <params:ParamList> ")" <ret:ReturnType?> <body:Block> => {
+        "(" <params:ParamList> ")" <ret:TypeAnnotation?> <body:Block> => {
 
         let sym_name: Symbol = program.arena.intern_string(name);
 
@@ -120,7 +128,7 @@ Param: (String, Option<String>) = {
 };
 
 
-ReturnType: String = {
+TypeAnnotation: String = {
     ":" <typ:r"[\p{L}_][\p{L}\p{N}_]*"> => typ.to_string(),
 };
 
