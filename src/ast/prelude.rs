@@ -1,5 +1,5 @@
 pub use super::arena::{AstArena};
-pub use super::class::{FieldVisibility, ClassDefinition, ClassField, ClassMethod};
+pub use super::class::{Visibility, ClassDefinition, ClassField, ClassMethod, ClassMember};
 pub use super::expr::{ExprId, ExpressionKind, LiteralValue, ExpressionNode};
 pub use super::program::{FunctionDefinition, Parameter, Import, Program};
 pub use super::span::{SourceLocation, Span};

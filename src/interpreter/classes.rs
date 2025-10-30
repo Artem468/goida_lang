@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::rc::Rc;
 use string_interner::{DefaultSymbol as Symbol};
-use crate::ast::prelude::{ClassDefinition, FieldVisibility, FunctionDefinition, Program};
+use crate::ast::prelude::{ClassDefinition, Visibility, FunctionDefinition, Program};
 use crate::interpreter::structs::{Class, ClassInstance, Environment, Interpreter, RuntimeError, Value};
 use crate::interpreter::traits::{ExpressionEvaluator, InterpreterClasses, StatementExecutor};
 
@@ -161,8 +161,8 @@ impl ClassInstance {
     pub fn is_field_accessible(&self, field_name: &str, is_external_access: bool) -> bool {
         if let Some((visibility, _)) = self.class_ref.fields.get(field_name) {
             match visibility {
-                FieldVisibility::Public => true,
-                FieldVisibility::Private => !is_external_access,
+                Visibility::Public => true,
+                Visibility::Private => !is_external_access,
             }
         } else {
             false
@@ -173,8 +173,8 @@ impl ClassInstance {
     pub fn is_method_accessible(&self, method_name: &str, is_external_access: bool) -> bool {
         if let Some((visibility, _)) = self.class_ref.methods.get(method_name) {
             match visibility {
-                FieldVisibility::Public => true,
-                FieldVisibility::Private => !is_external_access,
+                Visibility::Public => true,
+                Visibility::Private => !is_external_access,
             }
         } else {
             false
@@ -204,12 +204,12 @@ impl Class {
     }
 
     /// Добавить поле в класс
-    pub fn add_field(&mut self, name: String, visibility: FieldVisibility, default_value: Option<Value>) {
+    pub fn add_field(&mut self, name: String, visibility: Visibility, default_value: Option<Value>) {
         self.fields.insert(name, (visibility, default_value));
     }
 
     /// Добавить метод в класс
-    pub fn add_method(&mut self, name: String, visibility: FieldVisibility, method: FunctionDefinition) {
+    pub fn add_method(&mut self, name: String, visibility: Visibility, method: FunctionDefinition) {
         self.methods.insert(name, (visibility, method));
     }
 

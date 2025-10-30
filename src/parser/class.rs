@@ -1,4 +1,4 @@
-use crate::ast::class::{ClassDefinition, ClassField, ClassMethod, FieldVisibility};
+use crate::ast::class::{ClassDefinition, ClassField, ClassMethod, Visibility};
 use crate::ast::expr::{ExprId, ExpressionKind};
 use crate::ast::prelude::Span;
 use crate::lexer::structs::Token;
@@ -68,22 +68,22 @@ impl Parser {
     }
 
     /// Парсинг видимости (приватный/публичный)
-    fn parse_visibility(&mut self) -> Result<FieldVisibility, ParseError> {
+    fn parse_visibility(&mut self) -> Result<Visibility, ParseError> {
         match self.current_token().token {
             Token::Private => {
                 self.advance();
-                Ok(FieldVisibility::Private)
+                Ok(Visibility::Private)
             }
             Token::Public => {
                 self.advance();
-                Ok(FieldVisibility::Public)
+                Ok(Visibility::Public)
             }
-            _ => Ok(FieldVisibility::Private)
+            _ => Ok(Visibility::Private)
         }
     }
 
     /// Парсинг поля класса
-    fn parse_class_field(&mut self, visibility: FieldVisibility) -> Result<ClassField, ParseError> {
+    fn parse_class_field(&mut self, visibility: Visibility) -> Result<ClassField, ParseError> {
         let span = self.current_token().span;
 
         let name = match &self.current_token().token {
@@ -129,7 +129,7 @@ impl Parser {
     }
 
     /// Парсинг метода класса
-    fn parse_class_method(&mut self, visibility: FieldVisibility) -> Result<ClassMethod, ParseError> {
+    fn parse_class_method(&mut self, visibility: Visibility) -> Result<ClassMethod, ParseError> {
         let span = self.current_token().span;
         let is_constructor = matches!(self.current_token().token, Token::Constructor);
 

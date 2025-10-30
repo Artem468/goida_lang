@@ -2,7 +2,7 @@ use string_interner::{DefaultSymbol as Symbol};
 use crate::ast::prelude::{ExprId, Parameter, Span, StmtId, TypeId};
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum FieldVisibility {
+pub enum Visibility {
     Private,
     Public,
 }
@@ -11,7 +11,7 @@ pub enum FieldVisibility {
 pub struct ClassField {
     pub name: Symbol,
     pub field_type: Option<TypeId>,
-    pub visibility: FieldVisibility,
+    pub visibility: Visibility,
     pub default_value: Option<ExprId>,
     pub span: Span,
 }
@@ -22,7 +22,7 @@ pub struct ClassMethod {
     pub params: Vec<Parameter>,
     pub return_type: Option<TypeId>,
     pub body: StmtId,
-    pub visibility: FieldVisibility,
+    pub visibility: Visibility,
     pub is_constructor: bool,
     pub span: Span,
 }
@@ -33,4 +33,9 @@ pub struct ClassDefinition {
     pub fields: Vec<ClassField>,
     pub methods: Vec<ClassMethod>,
     pub span: Span,
+}
+
+pub enum ClassMember {
+    Field(ClassField),
+    Method(ClassMethod),
 }

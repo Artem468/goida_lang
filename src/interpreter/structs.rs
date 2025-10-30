@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::rc::Rc;
 
-use crate::ast::prelude::{FieldVisibility, FunctionDefinition, Program};
+use crate::ast::prelude::{Visibility, FunctionDefinition, Program};
 use std::cell::RefCell;
 use string_interner::{DefaultSymbol as Symbol};
 
@@ -51,8 +51,8 @@ pub struct Environment {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Class {
     pub name: Symbol,
-    pub fields: HashMap<String, (FieldVisibility, Option<Value>)>,
-    pub methods: HashMap<String, (FieldVisibility, FunctionDefinition)>,
+    pub fields: HashMap<String, (Visibility, Option<Value>)>,
+    pub methods: HashMap<String, (Visibility, FunctionDefinition)>,
     pub constructor: Option<FunctionDefinition>,
 }
 

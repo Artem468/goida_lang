@@ -1,7 +1,4 @@
-use crate::ast::prelude::{
-    AstArena, ExpressionKind, StatementKind, LiteralValue, BinaryOperator, Span,
-    ExprId, StmtId, TypeId, Program, Parameter, FunctionDefinition
-};
+use crate::ast::prelude::*;
 use string_interner::DefaultSymbol as Symbol;
 
 
@@ -18,6 +15,7 @@ pub Program: Vec<StmtId> = {
     }).collect(),
 };
 
+
 Stmt: Option<StmtId> = {
     Assign => Some(<>),
     IfBlock => Some(<>),
@@ -26,6 +24,7 @@ Stmt: Option<StmtId> = {
     Print => Some(<>),
     Input => Some(<>),
     FunctionDef => Some(<>),
+    ClassDef => Some(<>),
     ReturnStmt => Some(<>),
     Comment => None,
 
@@ -37,7 +36,6 @@ Stmt: Option<StmtId> = {
         }
     },
 };
-
 
 
 Assign: StmtId = {
@@ -104,6 +102,144 @@ FunctionDef: StmtId = {
             Span::default(),
         )
     }
+};
+
+
+ClassDef: StmtId = {
+   "класс" <name:r"[\p{L}_][\p{L}\p{N}_]*"> <body:ClassBody> => {
+        let sym_name = program.arena.intern_string(name);
+
+        let mut fields = vec![];
+        let mut methods = vec![];
+
+        for member in body {
+            match member {
+                ClassMember::Field(f) => fields.push(f),
+                ClassMember::Method(m) => methods.push(m),
+            }
+        }
+
+        let class_def = ClassDefinition {
+            name: sym_name,
+            fields: fields,
+            methods: methods,
+            span: Span::default()
+        };
+
+        program.classes.push(class_def.clone());
+        program.arena.add_statement(
+            StatementKind::ClassDefinition(class_def),
+            Span::default(),
+        )
+   }
+};
+
+ClassBody: Vec<ClassMember> = {
+    "{" <members:ClassMember*> "}" => members,
+};
+
+
+ClassMember: ClassMember = {
+    ClassField => ClassMember::Field(<>),
+    ClassMethod => ClassMember::Method(<>),
+};
+
+
+ClassField: ClassField = {
+    <vis:Visibility?> <name:r"[\p{L}_][\p{L}\p{N}_]*"> <type_hint:TypeAnnotation?> ";" => {
+        let name = program.arena.intern_string(name);
+
+        ClassField {
+            name,
+            field_type: type_hint.map(|t| program.arena.resolve_or_intern_type(&t)),
+            visibility: vis.unwrap_or(Visibility::Private),
+            default_value: None,
+            span: Span::default(),
+        }
+    },
+
+    <vis:Visibility?> <name:r"[\p{L}_][\p{L}\p{N}_]*"> <type_hint:TypeAnnotation?> "=" <init:Expression> ";" => {
+        let name = program.arena.intern_string(name);
+
+        ClassField {
+            name,
+            field_type: type_hint.map(|t| program.arena.resolve_or_intern_type(&t)),
+            visibility: vis.unwrap_or(Visibility::Private),
+            default_value: Some(init),
+            span: Span::default(),
+        }
+    }
+};
+
+ClassMethod: ClassMethod = {
+
+    <vis:Visibility?> "конструктор" <name:r"[\p{L}_][\p{L}\p{N}_]*">
+        "(" <params:ParamList> ")" <body:Block> => {
+
+        let sym_name = program.arena.intern_string(name);
+
+        let params_final: Vec<_> = params.into_iter().map(|(n, t)| {
+            let sym = program.arena.intern_string(&n);
+            let ty = match t {
+                Some(type_name) => program.arena.resolve_or_intern_type(&type_name),
+                None => program.arena.resolve_or_intern_type("неизвестно"),
+            };
+            Parameter { name: sym, param_type: ty, span: Span::default() }
+        }).collect();
+
+        let body_id = program.arena.add_statement(
+            StatementKind::Block(body),
+            Span::default()
+        );
+
+        ClassMethod {
+            name: sym_name,
+            params: params_final,
+            return_type: None,
+            body: body_id,
+            visibility: vis.unwrap_or(Visibility::Private),
+            is_constructor: true,
+            span: Span::default(),
+        }
+    },
+
+    <vis:Visibility?> "функция" <name:r"[\p{L}_][\p{L}\p{N}_]*">
+        "(" <params:ParamList> ")" <ret:TypeAnnotation?> <body:Block> => {
+
+        let sym_name = program.arena.intern_string(name);
+
+        let params_final: Vec<_> = params.into_iter().map(|(n, t)| {
+            let sym = program.arena.intern_string(&n);
+            let ty = match t {
+                Some(type_name) => program.arena.resolve_or_intern_type(&type_name),
+                None => program.arena.resolve_or_intern_type("неизвестно"),
+            };
+            Parameter { name: sym, param_type: ty, span: Span::default() }
+        }).collect();
+
+        let ret_type = ret.map(|rname| program.arena.resolve_or_intern_type(&rname));
+
+        let body_id = program.arena.add_statement(
+            StatementKind::Block(body),
+            Span::default()
+        );
+
+        ClassMethod {
+            name: sym_name,
+            params: params_final,
+            return_type: ret_type,
+            body: body_id,
+            visibility: vis.unwrap_or(Visibility::Private),
+            is_constructor: false,
+            span: Span::default(),
+        }
+    }
+};
+
+
+Visibility: Visibility = {
+    "публичный" => Visibility::Public,
+    "приватный" => Visibility::Private,
 };
 
 
@@ -351,6 +487,17 @@ Primary: ExprId = {
         let num: f64 = <>.parse().unwrap();
         program.arena.add_expression(
             ExpressionKind::Literal(LiteralValue::Float(num)),
+            Span::default(),
+        )
+    },
+
+    "новый" <class_name:r"[\p{L}_][\p{L}\p{N}_]*"> "(" <args:ArgList> ")" => {
+        let sym = program.arena.intern_string(class_name);
+        program.arena.add_expression(
+            ExpressionKind::ObjectCreation {
+                class_name: sym,
+                args,
+            },
             Span::default(),
         )
     },
