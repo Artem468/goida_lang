@@ -33,8 +33,9 @@ pub enum StatementKind {
     },
     For {
         variable: Symbol,
-        start: ExprId,
-        end: ExprId,
+        init: ExprId,
+        condition: ExprId,
+        update: ExprId,
         body: StmtId,
     },
     Block(Vec<StmtId>),

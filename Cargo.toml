@@ -6,7 +6,5 @@ edition = "2021"
 [dependencies]
 clap = { version = "4.0", features = ["derive"] }
 string-interner = "0.14"
-lalrpop-util = { version = "0.22.2", features = ["lexer"] }
-
-[build-dependencies]
-lalrpop = "0.22.2"
+pest = { version = "2.8.5" }
+pest_derive = { version = "2.8.5" }

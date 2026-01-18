@@ -1,9 +1,3 @@
 pub mod structs;
 pub mod prelude;
 pub mod parser;
-pub mod expression;
-pub mod statement;
-pub mod function;
-pub mod class;
-pub mod import;
-pub mod utils;
