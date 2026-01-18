@@ -86,7 +86,7 @@ impl ExpressionEvaluator for Interpreter {
                 }
             }
 
-            ExpressionKind::Call { function, args } => {
+            ExpressionKind::FunctionCall { function, args } => {
                 let func_expr = program.arena.get_expression(*function).unwrap();
                 let func_name = match &func_expr.kind {
                     ExpressionKind::Identifier(symbol) => {
@@ -205,7 +205,8 @@ impl ExpressionEvaluator for Interpreter {
                             let method_program = {
                                 let mut found_program = program.clone();
                                 for (_module_name, module) in &self.modules {
-                                    if module.classes.contains_key(&instance.class_name) {
+                                    let class_name = program.arena.resolve_symbol(instance.class_name).unwrap();
+                                    if module.classes.contains_key(class_name) {
                                         found_program = module.program.clone();
                                         break;
                                     }
@@ -227,9 +228,10 @@ impl ExpressionEvaluator for Interpreter {
                                 &method_program,
                             )
                         } else {
+                            let class_name = program.arena.resolve_symbol(instance.class_name).unwrap();
                             Err(RuntimeError::UndefinedFunction(format!(
                                 "Метод '{}' не найден в классе '{}'",
-                                method_name, instance.class_name
+                                method_name, class_name
                             )))
                         }
                     }

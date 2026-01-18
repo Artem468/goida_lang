@@ -1,5 +1,5 @@
 use string_interner::{DefaultSymbol as Symbol};
-use crate::ast::prelude::{BinaryOperator, Span, TypeId, UnaryOperator};
+use crate::ast::prelude::{BinaryOperator, Program, Span, TypeId, UnaryOperator};
 
 pub type ExprId = u32;
 
@@ -16,7 +16,7 @@ pub enum ExpressionKind {
         op: UnaryOperator,
         operand: ExprId,
     },
-    Call {
+    FunctionCall {
         function: ExprId,
         args: Vec<ExprId>,
     },

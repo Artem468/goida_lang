@@ -2,7 +2,7 @@ use string_interner::{DefaultSymbol as Symbol};
 use crate::ast::prelude::{AstArena, ClassDefinition, Span, StmtId, TypeId};
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct Function {
+pub struct FunctionDefinition {
     pub name: Symbol,
     pub params: Vec<Parameter>,
     pub return_type: Option<TypeId>,
@@ -27,7 +27,7 @@ pub struct Import {
 #[derive(Debug, Clone)]
 pub struct Program {
     pub name: Symbol,
-    pub functions: Vec<Function>,
+    pub functions: Vec<FunctionDefinition>,
     pub classes: Vec<ClassDefinition>,
     pub statements: Vec<StmtId>,
     pub imports: Vec<Import>,

@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::rc::Rc;
-use crate::ast::prelude::{ClassDefinition, FieldVisibility, Function, Program};
+use string_interner::{DefaultSymbol as Symbol};
+use crate::ast::prelude::{ClassDefinition, Visibility, FunctionDefinition, Program};
 use crate::interpreter::structs::{Class, ClassInstance, Environment, Interpreter, RuntimeError, Value};
 use crate::interpreter::traits::{ExpressionEvaluator, InterpreterClasses, StatementExecutor};
 
@@ -11,15 +12,14 @@ impl InterpreterClasses for Interpreter {
         class_def: &ClassDefinition,
         program: &Program,
     ) -> Result<(), RuntimeError> {
-        use crate::interpreter::structs::Class;
-        use std::rc::Rc;
+
 
         let class_name = program
             .arena
             .resolve_symbol(class_def.name)
             .unwrap()
             .to_string();
-        let mut class = Class::new(class_name.clone());
+        let mut class = Class::new(class_def.name);
 
         for field in &class_def.fields {
             let field_name = program
@@ -42,7 +42,7 @@ impl InterpreterClasses for Interpreter {
                 .unwrap()
                 .to_string();
 
-            let function = Function {
+            let function = FunctionDefinition {
                 name: method.name,
                 params: method.params.clone(),
                 return_type: method.return_type,
@@ -65,7 +65,7 @@ impl InterpreterClasses for Interpreter {
     /// Вызываем метод с контекстом объекта
     fn call_method(
         &mut self,
-        method: Function,
+        method: FunctionDefinition,
         arguments: Vec<Value>,
         this_obj: Value,
         program: &Program,
@@ -129,7 +129,7 @@ impl InterpreterClasses for Interpreter {
 
 impl ClassInstance {
     /// Создать новый экземпляр класса
-    pub fn new(class_name: String, class_ref: Rc<Class>) -> Self {
+    pub fn new(class_name: Symbol, class_ref: Rc<Class>) -> Self {
         let mut fields = HashMap::new();
 
         for (field_name, (_, default_value)) in &class_ref.fields {
@@ -161,8 +161,8 @@ impl ClassInstance {
     pub fn is_field_accessible(&self, field_name: &str, is_external_access: bool) -> bool {
         if let Some((visibility, _)) = self.class_ref.fields.get(field_name) {
             match visibility {
-                FieldVisibility::Public => true,
-                FieldVisibility::Private => !is_external_access,
+                Visibility::Public => true,
+                Visibility::Private => !is_external_access,
             }
         } else {
             false
@@ -173,8 +173,8 @@ impl ClassInstance {
     pub fn is_method_accessible(&self, method_name: &str, is_external_access: bool) -> bool {
         if let Some((visibility, _)) = self.class_ref.methods.get(method_name) {
             match visibility {
-                FieldVisibility::Public => true,
-                FieldVisibility::Private => !is_external_access,
+                Visibility::Public => true,
+                Visibility::Private => !is_external_access,
             }
         } else {
             false
@@ -182,19 +182,19 @@ impl ClassInstance {
     }
 
     /// Получить метод по имени
-    pub fn get_method(&self, method_name: &str) -> Option<&Function> {
+    pub fn get_method(&self, method_name: &str) -> Option<&FunctionDefinition> {
         self.class_ref.methods.get(method_name).map(|(_, func)| func)
     }
 
     /// Получить конструктор класса
-    pub fn get_constructor(&self) -> Option<&Function> {
+    pub fn get_constructor(&self) -> Option<&FunctionDefinition> {
         self.class_ref.constructor.as_ref()
     }
 }
 
 impl Class {
     /// Создать новый класс
-    pub fn new(name: String) -> Self {
+    pub fn new(name: Symbol) -> Self {
         Self {
             name,
             fields: HashMap::new(),
@@ -204,17 +204,17 @@ impl Class {
     }
 
     /// Добавить поле в класс
-    pub fn add_field(&mut self, name: String, visibility: FieldVisibility, default_value: Option<Value>) {
+    pub fn add_field(&mut self, name: String, visibility: Visibility, default_value: Option<Value>) {
         self.fields.insert(name, (visibility, default_value));
     }
 
     /// Добавить метод в класс
-    pub fn add_method(&mut self, name: String, visibility: FieldVisibility, method: Function) {
+    pub fn add_method(&mut self, name: String, visibility: Visibility, method: FunctionDefinition) {
         self.methods.insert(name, (visibility, method));
     }
 
     /// Установить конструктор
-    pub fn set_constructor(&mut self, constructor: Function) {
+    pub fn set_constructor(&mut self, constructor: FunctionDefinition) {
         self.constructor = Some(constructor);
     }
 

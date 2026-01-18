@@ -1,16 +1,15 @@
-mod lexer;
 mod ast;
-mod parser;
 mod interpreter;
+mod parser;
 
+use crate::ast::prelude::Program;
+use crate::parser::prelude::ParserStructs;
 use clap::{Parser, Subcommand};
-use std::{env, fs};
+use interpreter::prelude::InterpreterStructs::{Interpreter, RuntimeError};
+use interpreter::prelude::InterpreterTraits::CoreOperations;
 use std::io::{self, Write};
 use std::path::PathBuf;
-use lexer::prelude::LexerStructs::Lexer;
-use parser::prelude::ParserStructs::{Parser as GoidaParser, ParseError};
-use interpreter::prelude::InterpreterStructs::{Interpreter, RuntimeError};
-use interpreter::prelude::InterpreterTraits::{CoreOperations};
+use std::{env, fs};
 
 #[derive(Parser)]
 #[command(name = "goida")]
@@ -64,8 +63,9 @@ fn run_file(filename: &str) -> Result<(), Box<dyn std::error::Error>> {
 fn run_repl() {
     println!("Интерактивный режим языка Гойда");
     println!("Введите 'выход' для завершения\n");
-    let mut interpreter = Interpreter::new(env::current_dir().expect("Не удалось получить текущую директорию"));
-    
+    let mut interpreter =
+        Interpreter::new(env::current_dir().expect("Не удалось получить текущую директорию"));
+
     loop {
         print!("гойда> ");
         io::stdout().flush().unwrap();
@@ -97,38 +97,44 @@ fn run_repl() {
 }
 
 fn execute_code(code: &str, filename: &str) -> Result<(), Box<dyn std::error::Error>> {
-    let _path = std::path::PathBuf::from(filename);
-    let file_stem = _path.file_stem().and_then(|s| s.to_str()).ok_or_else(|| {
-        RuntimeError::InvalidOperation(format!(
-            "Невозможно получить имя модуля из пути: {}",
-            _path.display()
-        ))
-    }).unwrap();
+    let _path = PathBuf::from(filename);
+    let file_stem = _path
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .ok_or_else(|| {
+            RuntimeError::InvalidOperation(format!(
+                "Невозможно получить имя модуля из пути: {}",
+                _path.display()
+            ))
+        })
+        .unwrap();
     let mut interpreter = Interpreter::new(PathBuf::from(_path.parent().unwrap()));
     execute_code_with_interpreter(&mut interpreter, code, file_stem)
 }
 
-fn execute_code_with_interpreter(interpreter: &mut Interpreter, code: &str, filename: &str) -> Result<(), Box<dyn std::error::Error>> {
-    let mut lexer = Lexer::new(code.to_string());
-    let tokens = lexer.tokenize();
+fn execute_code_with_interpreter(
+    interpreter: &mut Interpreter,
+    code: &str,
+    filename: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let parser = ParserStructs::Parser::new(filename.to_string());
+    match parser.parse(code) {
+        Ok(program) => {
+            interpreter.interpret(program).map_err(|e| match e {
+                RuntimeError::UndefinedVariable(name) => format!("Неопределенная переменная: {}", name),
+                RuntimeError::UndefinedFunction(name) => format!("Неопределенная функция: {}", name),
+                RuntimeError::TypeMismatch(msg) => format!("Несоответствие типов: {}", msg),
+                RuntimeError::DivisionByZero => "Деление на ноль".to_string(),
+                RuntimeError::InvalidOperation(msg) => format!("Недопустимая операция: {}", msg),
+                RuntimeError::IOError(msg) => format!("Ошибка чтения файла: {}", msg),
+                RuntimeError::ParseError(msg) => format!("Ошибка при парсинге: {}", msg),
+                RuntimeError::Return(_) => "Неожиданный return".to_string(),
+            })?;
+        }
+        Err(err) => eprintln!("{:#?}", err),
+    }
 
-    let parser = GoidaParser::new(tokens, filename.to_string());
-    let program = parser.parse().map_err(|e| match e {
-        ParseError::UnexpectedToken(msg) => format!("Синтаксическая ошибка: {}", msg),
-        ParseError::InternalError(msg) => format!("Внутренняя ошибка парсера: {}", msg),
-        ParseError::TypeError(msg) => format!("Ошибка типа: {}", msg),
-    })?;
-    
-    interpreter.interpret(program).map_err(|e| match e {
-        RuntimeError::UndefinedVariable(name) => format!("Неопределенная переменная: {}", name),
-        RuntimeError::UndefinedFunction(name) => format!("Неопределенная функция: {}", name),
-        RuntimeError::TypeMismatch(msg) => format!("Несоответствие типов: {}", msg),
-        RuntimeError::DivisionByZero => "Деление на ноль".to_string(),
-        RuntimeError::InvalidOperation(msg) => format!("Недопустимая операция: {}", msg),
-        RuntimeError::IOError(msg) => format!("Ошибка чтения файла: {}", msg),
-        RuntimeError::ParseError(msg) => format!("Ошибка при парсинге: {}", msg),
-        RuntimeError::Return(_) => "Неожиданный return".to_string(),
-    })?;
+
 
     Ok(())
 }

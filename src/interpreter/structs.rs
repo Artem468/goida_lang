@@ -1,8 +1,9 @@
 use std::collections::HashMap;
 use std::rc::Rc;
 
-use crate::ast::prelude::{FieldVisibility, Function, Program};
+use crate::ast::prelude::{Visibility, FunctionDefinition, Program};
 use std::cell::RefCell;
+use string_interner::{DefaultSymbol as Symbol};
 
 #[derive(Debug, Clone)]
 pub enum Value {
@@ -11,7 +12,7 @@ pub enum Value {
     Text(String),
     Boolean(bool),
     Object(Rc<RefCell<ClassInstance>>),
-    Function(Rc<Function>),
+    Function(Rc<FunctionDefinition>),
     Empty,
 }
 
@@ -49,15 +50,15 @@ pub struct Environment {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Class {
-    pub name: String,
-    pub fields: HashMap<String, (FieldVisibility, Option<Value>)>,
-    pub methods: HashMap<String, (FieldVisibility, Function)>,
-    pub constructor: Option<Function>,
+    pub name: Symbol,
+    pub fields: HashMap<String, (Visibility, Option<Value>)>,
+    pub methods: HashMap<String, (Visibility, FunctionDefinition)>,
+    pub constructor: Option<FunctionDefinition>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct ClassInstance {
-    pub class_name: String,
+    pub class_name: Symbol,
     pub fields: HashMap<String, Value>,
     pub class_ref: Rc<Class>,
 }
@@ -65,7 +66,7 @@ pub struct ClassInstance {
 #[derive(Debug)]
 pub struct Interpreter {
     pub(crate) environment: Environment,
-    pub(crate) functions: HashMap<String, Function>,
+    pub(crate) functions: HashMap<String, FunctionDefinition>,
     pub(crate) classes: HashMap<String, Rc<Class>>,
     pub(crate) modules: HashMap<String, Module>,
     pub(crate) current_dir: std::path::PathBuf,
@@ -74,7 +75,7 @@ pub struct Interpreter {
 
 #[derive(Debug, Clone)]
 pub struct Module {
-    pub(crate) functions: HashMap<String, Function>,
+    pub(crate) functions: HashMap<String, FunctionDefinition>,
     pub(crate) classes: HashMap<String, Rc<Class>>,
     pub(crate) environment: Environment,
     pub(crate) program: Program,

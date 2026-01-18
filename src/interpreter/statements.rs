@@ -15,22 +15,11 @@ impl StatementExecutor for Interpreter {
                 Ok(())
             }
 
-            StatementKind::Let {
+            StatementKind::Assign {
                 name,
                 type_hint: _,
                 value,
             } => {
-                let name_str = program.arena.resolve_symbol(*name).unwrap().to_string();
-                let val = if let Some(expr_id) = value {
-                    self.evaluate_expression(*expr_id, program)?
-                } else {
-                    Value::Empty
-                };
-                self.environment.define(name_str, val);
-                Ok(())
-            }
-
-            StatementKind::Assign { name, value } => {
                 let name_str = program.arena.resolve_symbol(*name).unwrap().to_string();
                 let val = self.evaluate_expression(*value, program)?;
                 self.environment.set(&name_str, val)?;
@@ -68,32 +57,38 @@ impl StatementExecutor for Interpreter {
 
             StatementKind::For {
                 variable,
-                start,
-                end,
+                init,
+                condition,
+                update,
                 body,
             } => {
                 let variable_str = program.arena.resolve_symbol(*variable).unwrap().to_string();
-                let start_val = self.evaluate_expression(*start, program)?;
-                let end_val = self.evaluate_expression(*end, program)?;
-
-                let (start_num, end_num) = match (start_val, end_val) {
-                    (Value::Number(s), Value::Number(e)) => (s, e),
-                    _ => {
-                        return Err(RuntimeError::TypeMismatch(
-                            "Цикл 'для' требует числовые значения".to_string(),
-                        ))
-                    }
-                };
-
+                
+                // Create new scope for loop
                 let parent_env = self.environment.clone();
                 self.environment = Environment::with_parent(parent_env);
-
-                for i in start_num..=end_num {
-                    self.environment
-                        .define(variable_str.clone(), Value::Number(i));
+                
+                // Initialize variable
+                let init_val = self.evaluate_expression(*init, program)?;
+                self.environment.define(variable_str.clone(), init_val);
+                
+                // Loop
+                loop {
+                    // Check condition
+                    let cond_val = self.evaluate_expression(*condition, program)?;
+                    if !cond_val.is_truthy() {
+                        break;
+                    }
+                    
+                    // Execute body
                     self.execute_statement(*body, program)?;
+                    
+                    // Update variable
+                    let update_val = self.evaluate_expression(*update, program)?;
+                    self.environment.define(variable_str.clone(), update_val);
                 }
-
+                
+                // Restore parent scope
                 if let Some(parent) = self.environment.parent.take() {
                     self.environment = *parent;
                 }
@@ -136,6 +131,7 @@ impl StatementExecutor for Interpreter {
             }
 
             StatementKind::ClassDefinition(_) => Ok(()),
+            StatementKind::FunctionDefinition(_) => Ok(()),
 
             StatementKind::PropertyAssign {
                 object,

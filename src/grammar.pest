@@ -1,0 +1,252 @@
+WHITESPACE = _{ " " | "\t" }
+COMMENT = _{ "//" ~ (!"\n" ~ ANY)* ~ NEWLINE? }
+
+// === Program structure ===
+program = { SOI ~ (NEWLINE | COMMENT)* ~ item* ~ (NEWLINE | COMMENT)* ~ EOI }
+item = _{ 
+    (NEWLINE | COMMENT)* ~
+    (function | class | statement) ~
+    (NEWLINE | COMMENT)*
+}
+
+// === Functions ===
+function = {
+    "функция" ~ identifier ~ "(" ~ param_list? ~ ")" ~ return_type? ~ block
+}
+
+// === Classes ===
+class = {
+    "класс" ~ identifier ~ "{" ~ class_item* ~ "}"
+}
+
+class_item = _{
+    class_field |
+    class_method
+}
+
+class_field = {
+    visibility? ~ identifier ~ ":" ~ type_name ~ "=" ~ expression ~ ";"
+}
+
+class_method = {
+    visibility? ~ ("конструктор" | "функция") ~ identifier ~ "(" ~ param_list? ~ ")" ~ return_type? ~ block
+}
+
+// === Statements ===
+statement = _{
+    assignment |
+    property_assign |
+    if_stmt |
+    while_stmt |
+    for_stmt |
+    print_stmt |
+    input_stmt |
+    return_stmt |
+    expr_stmt
+}
+
+assignment = {
+    identifier ~ type_hint? ~ "=" ~ expression ~ ";"
+}
+
+// это.поле = значение
+property_assign = {
+    "это" ~ "." ~ identifier ~ "=" ~ expression ~ ";"
+}
+
+if_stmt = {
+    "если" ~ "(" ~ expression ~ ")" ~ block ~ else_block?
+}
+
+else_block = {
+    "иначе" ~ block
+}
+
+while_stmt = {
+    "пока" ~ "(" ~ expression ~ ")" ~ block
+}
+
+for_stmt = {
+    "для" ~ "(" ~ for_init ~ ";" ~ for_condition ~ ";" ~ for_update ~ ")" ~ block
+}
+
+for_init = {
+    identifier ~ "=" ~ expression
+}
+
+for_condition = {
+    expression
+}
+
+for_update = {
+    compound_assign | assignment_expr | expression
+}
+
+assignment_expr = {
+    identifier ~ "=" ~ expression
+}
+
+compound_assign = {
+    identifier ~ compound_op ~ expression
+}
+
+compound_op = @{
+    "+=" | "-=" | "*=" | "/="
+}
+
+print_stmt = {
+    "печать" ~ "(" ~ expression ~ ")" ~ ";"
+}
+
+input_stmt = {
+    "ввод" ~ "(" ~ identifier ~ ")" ~ ";"
+}
+
+return_stmt = {
+    "вернуть" ~ expression? ~ ";"
+}
+
+expr_stmt = {
+    expression ~ ";"
+}
+
+// === Expressions ===
+expression = {
+    logical_or
+}
+
+logical_or = {
+    logical_and ~ ("или" ~ logical_and)*
+}
+
+logical_and = {
+    comparison ~ ("и" ~ comparison)*
+}
+
+comparison = {
+    addition ~ (comp_op ~ addition)*
+}
+
+addition = {
+    multiplication ~ (add_op ~ multiplication)*
+}
+
+multiplication = {
+    unary ~ (mul_op ~ unary)*
+}
+
+unary = {
+    unary_op? ~ postfix
+}
+
+postfix = {
+    primary ~ postfix_op*
+}
+
+postfix_op = _{
+    method_call |
+    function_call |
+    property_access |
+    index_access
+}
+
+function_call = {
+    "(" ~ arg_list? ~ ")"
+}
+
+method_call = {
+    "." ~ identifier ~ "(" ~ arg_list? ~ ")"
+}
+
+property_access = {
+    "." ~ identifier
+}
+
+index_access = {
+    "[" ~ expression ~ "]"
+}
+
+// === Primary expressions ===
+primary = _{
+    paren_expr |
+    new_expr |
+    string_literal |
+    number_literal |
+    identifier
+}
+
+paren_expr = {
+    "(" ~ expression ~ ")"
+}
+
+new_expr = {
+    "новый" ~ identifier ~ "(" ~ arg_list? ~ ")"
+}
+
+// this - это самостоятельное слово, не часть выражения
+// Используется только в property_assign как "это.поле"
+
+// === Terminals ===
+block = {
+    "{" ~ (NEWLINE | COMMENT)* ~ (item ~ (NEWLINE | COMMENT)*)* ~ "}"
+}
+
+param_list = {
+    param ~ ("," ~ param)*
+}
+
+param = {
+    identifier ~ (":" ~ type_name)?
+}
+
+arg_list = {
+    expression ~ ("," ~ expression)*
+}
+
+type_hint = {
+    ":" ~ type_name
+}
+
+return_type = {
+    ":" ~ type_name
+}
+
+type_name = @{
+    identifier
+}
+
+visibility = @{
+    "публичный" | "приватный"
+}
+
+identifier = @{
+    (LETTER | "_") ~ (LETTER | DIGIT | "_")*
+}
+
+string_literal = @{
+    "\"" ~ (!"\"" ~ ANY)* ~ "\""
+}
+
+number_literal = @{
+    DIGIT+ ~ ("." ~ DIGIT+)?
+}
+
+comp_op = @{
+    "<=" | ">=" | "==" | "!=" | "<" | ">"
+}
+
+add_op = @{
+    "+" | "-"
+}
+
+mul_op = @{
+    "*" | "/" | "%"
+}
+
+unary_op = @{
+    "-" | "!"
+}
+
+DIGIT = _{
+    '0'..'9'
+}

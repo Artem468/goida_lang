@@ -1,5 +1,5 @@
 use string_interner::{DefaultSymbol as Symbol};
-use crate::ast::prelude::{ClassDefinition, ExprId, Span, TypeId};
+use crate::ast::prelude::{ClassDefinition, ExprId, FunctionDefinition, Span, TypeId};
 
 pub type StmtId = u32;
 
@@ -12,13 +12,9 @@ pub struct StatementNode {
 #[derive(Debug, Clone)]
 pub enum StatementKind {
     Expression(ExprId),
-    Let {
-        name: Symbol,
-        type_hint: Option<TypeId>,
-        value: Option<ExprId>,
-    },
     Assign {
         name: Symbol,
+        type_hint: Option<TypeId>,
         value: ExprId,
     },
     IndexAssign {
@@ -37,15 +33,16 @@ pub enum StatementKind {
     },
     For {
         variable: Symbol,
-        start: ExprId,
-        end: ExprId,
+        init: ExprId,
+        condition: ExprId,
+        update: ExprId,
         body: StmtId,
     },
     Block(Vec<StmtId>),
     Return(Option<ExprId>),
     Print(ExprId),
     Input(ExprId),
-
+    FunctionDefinition(FunctionDefinition),
     ClassDefinition(ClassDefinition),
     PropertyAssign {
         object: ExprId,
