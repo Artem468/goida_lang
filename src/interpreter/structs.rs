@@ -1,11 +1,12 @@
 use std::collections::HashMap;
 use std::rc::Rc;
 
-use crate::ast::prelude::{Visibility, FunctionDefinition, Program};
+use crate::ast::prelude::{FunctionDefinition, Program, Visibility};
 use std::cell::RefCell;
-use string_interner::{DefaultSymbol as Symbol};
+use std::sync::Arc;
+use string_interner::DefaultSymbol as Symbol;
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub enum Value {
     Number(i64),
     Float(f64),
@@ -13,6 +14,7 @@ pub enum Value {
     Boolean(bool),
     Object(Rc<RefCell<ClassInstance>>),
     Function(Rc<FunctionDefinition>),
+    Builtin(BuiltinFn),
     Empty,
 }
 
@@ -24,13 +26,17 @@ impl PartialEq for Value {
             (Value::Text(a), Value::Text(b)) => a == b,
             (Value::Boolean(a), Value::Boolean(b)) => a == b,
             (Value::Object(a), Value::Object(b)) => Rc::ptr_eq(a, b),
+            (Value::Function(a), Value::Function(b)) => Rc::ptr_eq(a, b),
             (Value::Empty, Value::Empty) => true,
             _ => false,
         }
     }
 }
 
-#[derive(Debug)]
+pub type BuiltinFn =
+    Arc<dyn Fn(&Interpreter, Vec<Value>) -> Result<Value, RuntimeError> + Send + Sync>;
+
+
 pub enum RuntimeError {
     UndefinedVariable(String),
     UndefinedFunction(String),
@@ -39,16 +45,17 @@ pub enum RuntimeError {
     DivisionByZero,
     InvalidOperation(String),
     Return(Value),
+    TypeError(String),
     IOError(String),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct Environment {
     pub(crate) variables: HashMap<String, Value>,
     pub(crate) parent: Option<Box<Environment>>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Clone, PartialEq)]
 pub struct Class {
     pub name: Symbol,
     pub fields: HashMap<String, (Visibility, Option<Value>)>,
@@ -56,24 +63,24 @@ pub struct Class {
     pub constructor: Option<FunctionDefinition>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Clone, PartialEq)]
 pub struct ClassInstance {
     pub class_name: Symbol,
     pub fields: HashMap<String, Value>,
     pub class_ref: Rc<Class>,
 }
 
-#[derive(Debug)]
 pub struct Interpreter {
     pub(crate) environment: Environment,
     pub(crate) functions: HashMap<String, FunctionDefinition>,
+    pub(crate) builtins: HashMap<String, BuiltinFn>,
     pub(crate) classes: HashMap<String, Rc<Class>>,
     pub(crate) modules: HashMap<String, Module>,
     pub(crate) current_dir: std::path::PathBuf,
     pub(crate) current_module: Option<String>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct Module {
     pub(crate) functions: HashMap<String, FunctionDefinition>,
     pub(crate) classes: HashMap<String, Rc<Class>>,

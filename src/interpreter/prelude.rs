@@ -1,2 +1,2 @@
-pub use super::structs as InterpreterStructs;
-pub use super::traits as InterpreterTraits;
+pub use super::structs::*;
+pub use super::traits::*;

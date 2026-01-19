@@ -22,16 +22,6 @@ impl ParserTrait {
             if pair.as_rule() == Rule::program {
                 for inner in pair.into_inner() {
                     match inner.as_rule() {
-                        Rule::print_stmt => {
-                            if let Some(stmt_id) = self.parse_print_stmt(inner) {
-                                self.program.statements.push(stmt_id);
-                            }
-                        }
-                        Rule::input_stmt => {
-                            if let Some(stmt_id) = self.parse_input_stmt(inner) {
-                                self.program.statements.push(stmt_id);
-                            }
-                        }
                         Rule::function => {
                             if let Some(stmt_id) = self.parse_function(inner) {
                                 self.program.statements.push(stmt_id);
@@ -320,16 +310,6 @@ impl ParserTrait {
                         statements.push(stmt_id);
                     }
                 }
-                Rule::print_stmt => {
-                    if let Some(stmt_id) = self.parse_print_stmt(inner) {
-                        statements.push(stmt_id);
-                    }
-                }
-                Rule::input_stmt => {
-                    if let Some(stmt_id) = self.parse_input_stmt(inner) {
-                        statements.push(stmt_id);
-                    }
-                }
                 Rule::return_stmt => {
                     if let Some(stmt_id) = self.parse_return_stmt(inner) {
                         statements.push(stmt_id);
@@ -547,46 +527,7 @@ impl ParserTrait {
         );
         Some(stmt_id)
     }
-
-    fn parse_print_stmt(&mut self, pair: pest::iterators::Pair<Rule>) -> Option<StmtId> {
-        let inner = pair.into_inner();
-
-        for token in inner {
-            if token.as_rule() == Rule::expression {
-                let expr = self.parse_expression(token)?;
-                let stmt_id = self
-                    .program
-                    .arena
-                    .add_statement(StatementKind::Print(expr), Span::default());
-                return Some(stmt_id);
-            }
-        }
-
-        None
-    }
-
-    fn parse_input_stmt(&mut self, pair: pest::iterators::Pair<Rule>) -> Option<StmtId> {
-        let inner = pair.into_inner();
-
-        for token in inner {
-            if token.as_rule() == Rule::identifier {
-                let var_name_str = token.as_str().to_string();
-                let var_name = self.program.arena.intern_string(&var_name_str);
-                let var_expr = self
-                    .program
-                    .arena
-                    .add_expression(ExpressionKind::Identifier(var_name), Span::default());
-                let stmt_id = self
-                    .program
-                    .arena
-                    .add_statement(StatementKind::Input(var_expr), Span::default());
-                return Some(stmt_id);
-            }
-        }
-
-        None
-    }
-
+    
     fn parse_return_stmt(&mut self, pair: pest::iterators::Pair<Rule>) -> Option<StmtId> {
         let inner = pair.into_inner();
 

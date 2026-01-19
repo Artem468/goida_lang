@@ -10,6 +10,7 @@ impl CoreOperations for Interpreter {
         Interpreter {
             environment: Environment::new(),
             functions: HashMap::new(),
+            builtins: HashMap::new(),
             classes: HashMap::new(),
             modules: HashMap::new(),
             current_dir: dir,

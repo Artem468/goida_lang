@@ -1,6 +1,6 @@
 use crate::ast::prelude::{FunctionDefinition, Program};
 use crate::interpreter::structs::{Environment, Interpreter, RuntimeError, Value};
-use crate::interpreter::traits::{InterpreterFunctions, InterpreterUtils, StatementExecutor};
+use crate::interpreter::traits::{InterpreterFunctions, StatementExecutor};
 
 impl InterpreterFunctions for Interpreter {
     fn call_function(
@@ -76,13 +76,13 @@ impl InterpreterFunctions for Interpreter {
         }
 
         if let Some(val) = self.environment.get(name) {
-            if let Value::Function(func) = val {
-                return self.call_function((*func).clone(), arguments, program);
+            return if let Value::Function(func) = val {
+                self.call_function((*func).clone(), arguments, program)
             } else {
-                return Err(RuntimeError::InvalidOperation(format!(
+                Err(RuntimeError::InvalidOperation(format!(
                     "'{}' не является функцией",
                     name
-                )));
+                )))
             }
         }
 
@@ -97,29 +97,11 @@ impl InterpreterFunctions for Interpreter {
                 }
             }
         }
-
-        // Встроенные функции
-        match name {
-            "ввод" => {
-                if arguments.len() != 1 {
-                    return Err(RuntimeError::InvalidOperation(format!(
-                        "Функция 'ввод' ожидает 1 аргумент, получено {}",
-                        arguments.len()
-                    )));
-                }
-                self.input_function(arguments[0].clone())
-            }
-            "печать" => {
-                if arguments.len() != 1 {
-                    return Err(RuntimeError::InvalidOperation(format!(
-                        "Функция 'печать' ожидает 1 аргумент, получено {}",
-                        arguments.len()
-                    )));
-                }
-                println!("{}", arguments[0].to_string());
-                Ok(arguments[0].clone())
-            }
-            _ => Err(RuntimeError::UndefinedFunction(name.to_string())),
+        
+        if let Some(builtin_fn) = self.builtins.get(name) {
+            return builtin_fn(self, arguments);
         }
+
+        Err(RuntimeError::UndefinedFunction(name.to_string()))
     }
 }

@@ -32,10 +32,6 @@ pub trait ValueOperations {
     fn compare_less_equal(&self, left: Value, right: Value) -> Result<Value, RuntimeError>;
 }
 
-pub trait InterpreterUtils {
-    fn input_function(&self, argument: Value) -> Result<Value, RuntimeError>;
-}
-
 pub trait InterpreterFunctions {
     fn call_function(
         &mut self,

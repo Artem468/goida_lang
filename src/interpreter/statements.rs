@@ -1,6 +1,7 @@
 use crate::ast::prelude::{ExpressionKind, Program, StatementKind, StmtId};
-use crate::interpreter::structs::{Environment, Interpreter, RuntimeError, Value};
-use crate::interpreter::traits::{ExpressionEvaluator, InterpreterUtils, StatementExecutor};
+use crate::interpreter::prelude::{
+    Environment, ExpressionEvaluator, Interpreter, RuntimeError, StatementExecutor, Value,
+};
 
 impl StatementExecutor for Interpreter {
     fn execute_statement(
@@ -112,18 +113,6 @@ impl StatementExecutor for Interpreter {
                 Err(RuntimeError::Return(value))
             }
 
-            StatementKind::Print(expr_id) => {
-                let value = self.evaluate_expression(*expr_id, program)?;
-                println!("{}", value.to_string());
-                Ok(())
-            }
-
-            StatementKind::Input(expr_id) => {
-                let value = self.evaluate_expression(*expr_id, program)?;
-                self.input_function(value)?;
-                Ok(())
-            }
-
             StatementKind::ClassDefinition(_) => Ok(()),
             StatementKind::FunctionDefinition(_) => Ok(()),
 
@@ -158,7 +147,7 @@ impl StatementExecutor for Interpreter {
                     Ok(())
                 } else {
                     Err(RuntimeError::TypeMismatch(format!(
-                        "Попытка присвоения свойства не-объектному типу: {:?}",
+                        "Попытка присвоения свойства не-объектному типу: {}",
                         obj_value
                     )))
                 }

@@ -39,8 +39,6 @@ statement = _{
     if_stmt |
     while_stmt |
     for_stmt |
-    print_stmt |
-    input_stmt |
     return_stmt |
     expr_stmt
 }
@@ -96,14 +94,6 @@ compound_assign = {
 
 compound_op = @{
     "+=" | "-=" | "*=" | "/="
-}
-
-print_stmt = {
-    "печать" ~ "(" ~ expression ~ ")" ~ ";"
-}
-
-input_stmt = {
-    "ввод" ~ "(" ~ identifier ~ ")" ~ ";"
 }
 
 return_stmt = {
