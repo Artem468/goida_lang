@@ -2,7 +2,6 @@ mod ast;
 mod interpreter;
 mod parser;
 
-use crate::ast::prelude::Program;
 use crate::parser::prelude::ParserStructs;
 use clap::{Parser, Subcommand};
 use interpreter::prelude::InterpreterStructs::{Interpreter, RuntimeError};
@@ -123,11 +122,11 @@ fn execute_code_with_interpreter(
             interpreter.interpret(program).map_err(|e| match e {
                 RuntimeError::UndefinedVariable(name) => format!("Неопределенная переменная: {}", name),
                 RuntimeError::UndefinedFunction(name) => format!("Неопределенная функция: {}", name),
+                RuntimeError::UndefinedMethod(name) => format!("Неопределенный метод: {}", name),
                 RuntimeError::TypeMismatch(msg) => format!("Несоответствие типов: {}", msg),
                 RuntimeError::DivisionByZero => "Деление на ноль".to_string(),
                 RuntimeError::InvalidOperation(msg) => format!("Недопустимая операция: {}", msg),
                 RuntimeError::IOError(msg) => format!("Ошибка чтения файла: {}", msg),
-                RuntimeError::ParseError(msg) => format!("Ошибка при парсинге: {}", msg),
                 RuntimeError::Return(_) => "Неожиданный return".to_string(),
             })?;
         }

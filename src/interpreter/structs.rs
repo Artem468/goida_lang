@@ -34,12 +34,12 @@ impl PartialEq for Value {
 pub enum RuntimeError {
     UndefinedVariable(String),
     UndefinedFunction(String),
+    UndefinedMethod(String),
     TypeMismatch(String),
     DivisionByZero,
     InvalidOperation(String),
     Return(Value),
     IOError(String),
-    ParseError(String),
 }
 
 #[derive(Debug, Clone)]

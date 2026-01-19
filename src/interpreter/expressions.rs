@@ -1,6 +1,6 @@
 use crate::ast::prelude::{BinaryOperator, ExprId, ExpressionKind, LiteralValue, Program, UnaryOperator};
 use crate::interpreter::structs::{Interpreter, RuntimeError, Value};
-use crate::interpreter::traits::{ExpressionEvaluator, InterpreterClasses, InterpreterFunctions, InterpreterUtils, ValueOperations};
+use crate::interpreter::traits::{ExpressionEvaluator, InterpreterClasses, InterpreterFunctions, ValueOperations};
 
 impl ExpressionEvaluator for Interpreter {
     fn evaluate_expression(
@@ -40,7 +40,7 @@ impl ExpressionEvaluator for Interpreter {
                 } else {
                     self.environment
                         .get(&name)
-                        .ok_or_else(|| RuntimeError::UndefinedVariable(name))
+                        .ok_or(RuntimeError::UndefinedVariable(name))
                 }
             }
 
@@ -113,12 +113,7 @@ impl ExpressionEvaluator for Interpreter {
             } => Err(RuntimeError::InvalidOperation(
                 "Индексный доступ отключён".to_string(),
             )),
-
-            ExpressionKind::Input(arg_id) => {
-                let data = self.evaluate_expression(*arg_id, program)?;
-                self.input_function(data)
-            }
-
+            
             ExpressionKind::PropertyAccess { object, property } => {
                 let obj_expr = program.arena.get_expression(*object).unwrap();
 
@@ -204,7 +199,7 @@ impl ExpressionEvaluator for Interpreter {
 
                             let method_program = {
                                 let mut found_program = program.clone();
-                                for (_module_name, module) in &self.modules {
+                                for module in self.modules.values() {
                                     let class_name = program.arena.resolve_symbol(instance.class_name).unwrap();
                                     if module.classes.contains_key(class_name) {
                                         found_program = module.program.clone();

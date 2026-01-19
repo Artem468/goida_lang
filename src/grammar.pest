@@ -55,11 +55,15 @@ property_assign = {
 }
 
 if_stmt = {
-    "если" ~ "(" ~ expression ~ ")" ~ block ~ else_block?
+    "если" ~ "(" ~ expression ~ ")" ~ block ~ (NEWLINE | COMMENT)* ~ else_clause?
 }
 
-else_block = {
-    "иначе" ~ block
+else_clause = {
+    "иначе" ~ (NEWLINE | COMMENT)* ~ (else_if_clause | block)
+}
+
+else_if_clause = {
+    if_stmt
 }
 
 while_stmt = {
@@ -172,6 +176,7 @@ primary = _{
     new_expr |
     string_literal |
     number_literal |
+    bool_literal |
     identifier
 }
 
@@ -181,6 +186,10 @@ paren_expr = {
 
 new_expr = {
     "новый" ~ identifier ~ "(" ~ arg_list? ~ ")"
+}
+
+bool_literal = @{
+    "истина" | "ложь"
 }
 
 // this - это самостоятельное слово, не часть выражения

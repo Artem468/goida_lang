@@ -415,21 +415,32 @@ impl ParserTrait {
             .arena
             .add_statement(StatementKind::Block(then_block), Span::default());
 
-        let else_body = if let Some(else_pair) = inner.next() {
-            if else_pair.as_rule() == Rule::else_block {
-                let mut else_inner = else_pair.into_inner();
-                let else_block = self.parse_block(else_inner.next()?)?;
-                Some(
-                    self.program
-                        .arena
-                        .add_statement(StatementKind::Block(else_block), Span::default()),
-                )
-            } else {
-                None
+        let mut else_body = None;
+
+        if let Some(else_clause) = inner.next() {
+            if else_clause.as_rule() == Rule::else_clause {
+                let mut clause_inner = else_clause.into_inner();
+                
+                if let Some(else_content) = clause_inner.next() {
+                    match else_content.as_rule() {
+                        Rule::else_if_clause => {
+                            if let Some(if_stmt) = else_content.into_inner().next() {
+                                else_body = self.parse_if_stmt(if_stmt);
+                            }
+                        }
+                        Rule::block => {
+                            let else_block = self.parse_block(else_content)?;
+                            else_body = Some(
+                                self.program
+                                    .arena
+                                    .add_statement(StatementKind::Block(else_block), Span::default()),
+                            );
+                        }
+                        _ => {}
+                    }
+                }
             }
-        } else {
-            None
-        };
+        }
 
         let stmt_id = self.program.arena.add_statement(
             StatementKind::If {
@@ -463,20 +474,17 @@ impl ParserTrait {
     fn parse_for_stmt(&mut self, pair: pest::iterators::Pair<Rule>) -> Option<StmtId> {
         let mut inner = pair.into_inner();
 
-        // Parse for_init
         let for_init = inner.next()?;
         let mut init_inner = for_init.into_inner();
         let variable_str = init_inner.next()?.as_str().to_string();
         let variable = self.program.arena.intern_string(&variable_str);
         let init_expr = self.parse_expression(init_inner.next()?)?;
 
-        // Parse for_condition
         let for_cond_token = inner.next()?;
         let mut cond_inner = for_cond_token.into_inner();
         let cond_expr_token = cond_inner.next()?;
         let condition_expr = self.parse_expression(cond_expr_token)?;
 
-        // Parse for_update (can be compound_assign or expression)
         let for_upd_token = inner.next()?;
 
         let mut upd_inner = for_upd_token.into_inner();
@@ -521,7 +529,6 @@ impl ParserTrait {
             _ => self.parse_expression(first_upd_token)?,
         };
 
-        // Parse body
         let block_stmts = self.parse_block(inner.next()?)?;
         let body = self
             .program
@@ -544,7 +551,6 @@ impl ParserTrait {
     fn parse_print_stmt(&mut self, pair: pest::iterators::Pair<Rule>) -> Option<StmtId> {
         let inner = pair.into_inner();
 
-        // Ищем expression в токенах
         for token in inner {
             if token.as_rule() == Rule::expression {
                 let expr = self.parse_expression(token)?;
@@ -923,6 +929,14 @@ impl ParserTrait {
                         .arena
                         .add_expression(ExpressionKind::Identifier(name), Span::default()),
                 )
+            }
+            Rule::bool_literal => {
+                let s = pair.as_str();
+                let boolean_val = s == "истина";
+                Some(self.program.arena.add_expression(
+                    ExpressionKind::Literal(LiteralValue::Boolean(boolean_val)),
+                    Span::default(),
+                ))
             }
             _ => None,
         }

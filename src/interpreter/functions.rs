@@ -1,6 +1,6 @@
 use crate::ast::prelude::{FunctionDefinition, Program};
 use crate::interpreter::structs::{Environment, Interpreter, RuntimeError, Value};
-use crate::interpreter::traits::{InterpreterFunctions, StatementExecutor};
+use crate::interpreter::traits::{InterpreterFunctions, InterpreterUtils, StatementExecutor};
 
 impl InterpreterFunctions for Interpreter {
     fn call_function(
@@ -10,17 +10,13 @@ impl InterpreterFunctions for Interpreter {
         program: &Program,
     ) -> Result<Value, RuntimeError> {
         let prev_module = self.current_module.clone();
-        let module_name = if let Some(module_symbol) = function.module {
-            Some(
-                program
-                    .arena
-                    .resolve_symbol(module_symbol)
-                    .unwrap()
-                    .to_string(),
-            )
-        } else {
-            None
-        };
+        let module_name = function.module.map(|module_symbol| {
+            program
+                .arena
+                .resolve_symbol(module_symbol)
+                .unwrap()
+                .to_string()
+        });
         self.current_module = module_name;
 
         let parent_env = self.environment.clone();
@@ -68,7 +64,6 @@ impl InterpreterFunctions for Interpreter {
         arguments: Vec<Value>,
         program: &Program,
     ) -> Result<Value, RuntimeError> {
-        // 1. Проверяем доступ через модуль (module.func)
         if let Some(dot_index) = name.find('.') {
             let module_name = &name[..dot_index];
             let func_name = &name[dot_index + 1..];
@@ -80,7 +75,6 @@ impl InterpreterFunctions for Interpreter {
             return Err(RuntimeError::UndefinedFunction(name.to_string()));
         }
 
-        // 2. Сначала ищем в environment
         if let Some(val) = self.environment.get(name) {
             if let Value::Function(func) = val {
                 return self.call_function((*func).clone(), arguments, program);
@@ -92,7 +86,6 @@ impl InterpreterFunctions for Interpreter {
             }
         }
 
-        // 3. Ищем в текущем модуле
         if let Some(function) = self.functions.get(name).cloned() {
             return self.call_function(function, arguments, program);
         }
@@ -105,8 +98,28 @@ impl InterpreterFunctions for Interpreter {
             }
         }
 
-        // 4. Если нигде не найдено
-        Err(RuntimeError::UndefinedFunction(name.to_string()))
+        // Встроенные функции
+        match name {
+            "ввод" => {
+                if arguments.len() != 1 {
+                    return Err(RuntimeError::InvalidOperation(format!(
+                        "Функция 'ввод' ожидает 1 аргумент, получено {}",
+                        arguments.len()
+                    )));
+                }
+                self.input_function(arguments[0].clone())
+            }
+            "печать" => {
+                if arguments.len() != 1 {
+                    return Err(RuntimeError::InvalidOperation(format!(
+                        "Функция 'печать' ожидает 1 аргумент, получено {}",
+                        arguments.len()
+                    )));
+                }
+                println!("{}", arguments[0].to_string());
+                Ok(arguments[0].clone())
+            }
+            _ => Err(RuntimeError::UndefinedFunction(name.to_string())),
+        }
     }
-
 }

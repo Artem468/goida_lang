@@ -56,7 +56,7 @@ impl fmt::Display for Value {
                 write!(f, "[Функция {:p}]", Rc::as_ptr(func))
             }
             Value::Empty => {
-                write!(f, "")
+                write!(f, "Пустота")
             }
         }
     }

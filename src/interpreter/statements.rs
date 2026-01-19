@@ -41,11 +41,12 @@ impl StatementExecutor for Interpreter {
             } => {
                 let condition_value = self.evaluate_expression(*condition, program)?;
                 if condition_value.is_truthy() {
-                    self.execute_statement(*then_body, program)?;
+                    self.execute_statement(*then_body, program)
                 } else if let Some(else_stmt_id) = else_body {
-                    self.execute_statement(*else_stmt_id, program)?;
+                    self.execute_statement(*else_stmt_id, program)
+                } else {
+                    Ok(())
                 }
-                Ok(())
             }
 
             StatementKind::While { condition, body } => {
@@ -63,32 +64,25 @@ impl StatementExecutor for Interpreter {
                 body,
             } => {
                 let variable_str = program.arena.resolve_symbol(*variable).unwrap().to_string();
-                
-                // Create new scope for loop
+
                 let parent_env = self.environment.clone();
                 self.environment = Environment::with_parent(parent_env);
-                
-                // Initialize variable
+
                 let init_val = self.evaluate_expression(*init, program)?;
                 self.environment.define(variable_str.clone(), init_val);
-                
-                // Loop
+
                 loop {
-                    // Check condition
                     let cond_val = self.evaluate_expression(*condition, program)?;
                     if !cond_val.is_truthy() {
                         break;
                     }
-                    
-                    // Execute body
+
                     self.execute_statement(*body, program)?;
-                    
-                    // Update variable
+
                     let update_val = self.evaluate_expression(*update, program)?;
                     self.environment.define(variable_str.clone(), update_val);
                 }
-                
-                // Restore parent scope
+
                 if let Some(parent) = self.environment.parent.take() {
                     self.environment = *parent;
                 }
