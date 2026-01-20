@@ -6,9 +6,10 @@ use std::collections::HashMap;
 use std::rc::Rc;
 
 impl CoreOperations for Interpreter {
-    fn new(dir: std::path::PathBuf) -> Self {
+    fn new(dir: std::path::PathBuf, program: Program) -> Self {
         Interpreter {
             environment: Environment::new(),
+            program,
             functions: HashMap::new(),
             builtins: HashMap::new(),
             classes: HashMap::new(),
@@ -62,6 +63,7 @@ impl CoreOperations for Interpreter {
                                 .parent()
                                 .unwrap_or(&self.current_dir)
                                 .to_path_buf(),
+                            program.clone()
                         );
                         sub_interpreter.interpret(program.clone())?;
                         self.modules

@@ -3,7 +3,7 @@ use crate::{define_builtin, setup_builtins};
 use std::io;
 use std::io::Write;
 
-setup_builtins!(
+setup_builtins!(interpreter, {
     "печать" (arguments) {
         let sep =  " ";
         let end = "\n";
@@ -78,4 +78,52 @@ setup_builtins!(
         let n: bool = arguments[0].clone().try_into()?;
         Ok(Value::Boolean(n))
     }
-);
+
+    "тип" (arguments) -> Result<Value, RuntimeError> {
+        if arguments.len() != 1 {
+            return Err(RuntimeError::InvalidOperation(format!(
+                "Функция 'тип' ожидает 1 аргумент, получено {}",
+                arguments.len()
+            )));
+        }
+        let val = arguments.get(0).ok_or_else(|| RuntimeError::InvalidOperation("Не передан объект".into()))?;
+        match val
+         {
+            Value::Number(_) => Ok(Value::Text("число".to_string())),
+            Value::Float(_) => Ok(Value::Text("дробь".to_string())),
+            Value::Text(_) => Ok(Value::Text("текст".to_string())),
+            Value::Boolean(_) => Ok(Value::Text("логический".to_string())),
+            Value::Object(obj) => Ok(
+                Value::Text(
+                     format!(
+                         "объект \"{}\"",
+                         interpreter
+                         .program
+                         .arena
+                         .resolve_symbol(obj.borrow().class_name)
+                         .ok_or_else(|| RuntimeError::InvalidOperation("Тип не найден".into()))?.to_string()
+                     )
+                 )
+
+            ),
+            Value::Function(obj) => Ok(
+                Value::Text(
+                    format!(
+                         "функция \"{}\"",
+                         interpreter
+                        .program
+                        .arena
+                        .resolve_symbol(obj.name)
+                        .ok_or_else(|| RuntimeError::InvalidOperation("Тип не найден".into()))?.to_string()
+                    )
+                )
+            ),
+            Value::Builtin(_) => {
+                Ok(Value::Text("встроенная функция".to_string()))
+            },
+            Value::Empty => {
+                Ok(Value::Text("пустота".to_string()))
+            }
+        }
+    }
+});

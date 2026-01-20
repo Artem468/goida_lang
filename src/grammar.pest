@@ -16,7 +16,7 @@ function = {
 
 // === Classes ===
 class = {
-    "класс" ~ identifier ~ "{" ~ class_item* ~ "}"
+    "класс" ~ identifier ~ "{" ~ (NEWLINE | COMMENT)* ~ (class_item ~ (NEWLINE | COMMENT)*)* ~ "}"
 }
 
 class_item = _{

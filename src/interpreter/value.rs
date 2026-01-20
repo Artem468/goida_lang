@@ -53,16 +53,16 @@ impl fmt::Display for Value {
                 write!(f, "{data}")
             }
             Value::Object(obj) => {
-                write!(f, "[Объект {:p}]", Rc::as_ptr(obj))
+                write!(f, "[объект {:p}]", Rc::as_ptr(obj))
             }
             Value::Function(func) => {
-                write!(f, "[Функция {:p}]", Rc::as_ptr(func))
+                write!(f, "[функция {:p}]", Rc::as_ptr(func))
             }
             Value::Builtin(func) => {
-                write!(f, "[Встроенная функция {:p}]", func)
+                write!(f, "[встроенная функция {:p}]", func)
             }
             Value::Empty => {
-                write!(f, "Пустота")
+                write!(f, "пустота")
             }
         }
     }

@@ -72,6 +72,7 @@ pub struct ClassInstance {
 
 pub struct Interpreter {
     pub(crate) environment: Environment,
+    pub(crate) program: Program,
     pub(crate) functions: HashMap<String, FunctionDefinition>,
     pub(crate) builtins: HashMap<String, BuiltinFn>,
     pub(crate) classes: HashMap<String, Rc<Class>>,

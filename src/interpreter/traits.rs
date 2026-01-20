@@ -15,7 +15,7 @@ pub trait ExpressionEvaluator {
 }
 
 pub trait CoreOperations {
-    fn new(dir: std::path::PathBuf) -> Self;
+    fn new(dir: std::path::PathBuf, program: Program) -> Self;
     fn into_module(self, program: Program) -> Module;
     fn interpret(&mut self, program: Program) -> Result<(), RuntimeError>;
 }
