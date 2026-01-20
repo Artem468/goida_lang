@@ -93,6 +93,13 @@ impl CoreOperations for Interpreter {
             self.functions.insert(func_name, function.clone());
         }
 
+        for (builtin_name, builtin_fn) in &self.builtins.clone() {
+            self.environment.define(
+                builtin_name.clone(),
+                Value::Builtin(builtin_fn.clone()),
+            );
+        }
+
         for &stmt_id in &program.statements {
             match self.execute_statement(stmt_id, &program) {
                 Err(RuntimeError::Return(_)) => {}

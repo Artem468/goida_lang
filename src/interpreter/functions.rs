@@ -76,13 +76,19 @@ impl InterpreterFunctions for Interpreter {
         }
 
         if let Some(val) = self.environment.get(name) {
-            return if let Value::Function(func) = val {
-                self.call_function((*func).clone(), arguments, program)
-            } else {
-                Err(RuntimeError::InvalidOperation(format!(
-                    "'{}' не является функцией",
-                    name
-                )))
+            return match val {
+                Value::Function(func) => {
+                    self.call_function((*func).clone(), arguments, program)
+                }
+                Value::Builtin(builtin_fn) => {
+                    builtin_fn(self, arguments)
+                }
+                _ => {
+                    Err(RuntimeError::InvalidOperation(format!(
+                        "'{}' не является функцией",
+                        name
+                    )))
+                }
             }
         }
 
