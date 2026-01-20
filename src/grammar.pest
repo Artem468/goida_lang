@@ -207,7 +207,7 @@ type_hint = {
 }
 
 return_type = {
-    ":" ~ type_name
+    "->" ~ type_name
 }
 
 type_name = @{
