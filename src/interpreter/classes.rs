@@ -2,7 +2,7 @@ use crate::ast::prelude::{ClassDefinition, FunctionDefinition, Program, Visibili
 use crate::interpreter::structs::{
     Class, ClassInstance, Environment, Interpreter, RuntimeError, Value,
 };
-use crate::interpreter::traits::{ExpressionEvaluator, InterpreterClasses, StatementExecutor};
+use crate::traits::prelude::{ExpressionEvaluator, InterpreterClasses, StatementExecutor};
 use std::collections::HashMap;
 use std::rc::Rc;
 use string_interner::DefaultSymbol as Symbol;

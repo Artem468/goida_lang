@@ -1,12 +1,10 @@
 pub mod environment;
-pub mod value;
 pub mod prelude;
 pub mod structs;
 pub mod core;
 pub mod operations;
 pub mod functions;
 pub mod classes;
-pub mod traits;
 pub mod expressions;
 pub mod statements;
 pub mod builtins;

@@ -1,6 +1,6 @@
 use crate::ast::prelude::{BinaryOperator, ExprId, ExpressionKind, LiteralValue, Program, UnaryOperator};
 use crate::interpreter::structs::{Interpreter, RuntimeError, Value};
-use crate::interpreter::traits::{ExpressionEvaluator, InterpreterClasses, InterpreterFunctions, ValueOperations};
+use crate::traits::prelude::{ExpressionEvaluator, InterpreterClasses, InterpreterFunctions, ValueOperations};
 
 impl ExpressionEvaluator for Interpreter {
     fn evaluate_expression(

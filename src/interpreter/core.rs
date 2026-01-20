@@ -1,6 +1,6 @@
 use crate::ast::prelude::Program;
 use crate::interpreter::structs::{Environment, Interpreter, Module, RuntimeError, Value};
-use crate::interpreter::traits::{CoreOperations, InterpreterClasses, StatementExecutor};
+use crate::traits::prelude::{CoreOperations, InterpreterClasses, StatementExecutor};
 use crate::parser::prelude::ParserStructs;
 use std::collections::HashMap;
 use std::rc::Rc;

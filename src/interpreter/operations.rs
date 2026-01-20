@@ -1,5 +1,5 @@
 use crate::interpreter::structs::{Interpreter, RuntimeError, Value};
-use crate::interpreter::traits::ValueOperations;
+use crate::traits::prelude::ValueOperations;
 
 impl ValueOperations for Interpreter {
     fn add_values(&self, left: Value, right: Value) -> Result<Value, RuntimeError> {

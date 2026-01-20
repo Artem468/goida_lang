@@ -2,10 +2,12 @@ mod ast;
 mod interpreter;
 mod macros;
 mod parser;
+mod traits;
 
 use crate::parser::prelude::ParserStructs;
 use clap::{Parser, Subcommand};
-use interpreter::prelude::{CoreOperations, Interpreter, RuntimeError};
+use interpreter::prelude::{Interpreter, RuntimeError};
+use traits::prelude::{CoreOperations};
 use std::io::{self, Write};
 use std::path::PathBuf;
 use std::{env, fs};

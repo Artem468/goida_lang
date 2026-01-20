@@ -1,7 +1,6 @@
 use crate::ast::prelude::{ExpressionKind, Program, StatementKind, StmtId};
-use crate::interpreter::prelude::{
-    Environment, ExpressionEvaluator, Interpreter, RuntimeError, StatementExecutor, Value,
-};
+use crate::interpreter::prelude::{Environment, Interpreter, RuntimeError, Value};
+use crate::traits::prelude::{ExpressionEvaluator, StatementExecutor};
 
 impl StatementExecutor for Interpreter {
     fn execute_statement(

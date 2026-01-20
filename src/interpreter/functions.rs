@@ -1,6 +1,6 @@
 use crate::ast::prelude::{FunctionDefinition, Program};
 use crate::interpreter::structs::{Environment, Interpreter, RuntimeError, Value};
-use crate::interpreter::traits::{InterpreterFunctions, StatementExecutor};
+use crate::traits::prelude::{InterpreterFunctions, StatementExecutor};
 
 impl InterpreterFunctions for Interpreter {
     fn call_function(

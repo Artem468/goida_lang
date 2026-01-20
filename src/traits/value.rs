@@ -3,6 +3,18 @@ use crate::interpreter::structs::Value;
 use std::fmt;
 use std::rc::Rc;
 
+pub trait ValueOperations {
+    fn add_values(&self, left: Value, right: Value) -> Result<Value, RuntimeError>;
+    fn subtract_values(&self, left: Value, right: Value) -> Result<Value, RuntimeError>;
+    fn multiply_values(&self, left: Value, right: Value) -> Result<Value, RuntimeError>;
+    fn divide_values(&self, left: Value, right: Value) -> Result<Value, RuntimeError>;
+    fn modulo_values(&self, left: Value, right: Value) -> Result<Value, RuntimeError>;
+    fn compare_greater(&self, left: Value, right: Value) -> Result<Value, RuntimeError>;
+    fn compare_less(&self, left: Value, right: Value) -> Result<Value, RuntimeError>;
+    fn compare_greater_equal(&self, left: Value, right: Value) -> Result<Value, RuntimeError>;
+    fn compare_less_equal(&self, left: Value, right: Value) -> Result<Value, RuntimeError>;
+}
+
 impl Value {
     pub fn to_string(&self) -> String {
         match self {
@@ -50,11 +62,16 @@ impl TryFrom<Value> for f64 {
         match value {
             Value::Float(data) => Ok(data),
             Value::Number(data) => Ok(data as f64),
-            Value::Text(data) => data
-                .parse()
-                .map_err(|_| RuntimeError::TypeError(format!("Не удалось преобразовать текст '{}' в дробное число", data))),
+            Value::Text(data) => data.parse().map_err(|_| {
+                RuntimeError::TypeError(format!(
+                    "Не удалось преобразовать текст '{}' в дробное число",
+                    data
+                ))
+            }),
             Value::Boolean(b) => Ok(if b { 1.0 } else { 0.0 }),
-            _ => Err(RuntimeError::TypeError("Тип не может быть приведен к дробному числу".into())),
+            _ => Err(RuntimeError::TypeError(
+                "Тип не может быть приведен к дробному числу".into(),
+            )),
         }
     }
 }
@@ -66,11 +83,16 @@ impl TryFrom<Value> for i64 {
         match value {
             Value::Float(data) => Ok(data as i64),
             Value::Number(data) => Ok(data),
-            Value::Text(data) => data
-                .parse()
-                .map_err(|_| RuntimeError::TypeError(format!("Не удалось преобразовать текст '{}' в целое число", data))),
+            Value::Text(data) => data.parse().map_err(|_| {
+                RuntimeError::TypeError(format!(
+                    "Не удалось преобразовать текст '{}' в целое число",
+                    data
+                ))
+            }),
             Value::Boolean(b) => Ok(if b { 1 } else { 0 }),
-            _ => Err(RuntimeError::TypeError("Тип не может быть приведен к целому числу".into())),
+            _ => Err(RuntimeError::TypeError(
+                "Тип не может быть приведен к целому числу".into(),
+            )),
         }
     }
 }
