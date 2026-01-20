@@ -16,9 +16,9 @@ impl Value {
                     "ложь".to_string()
                 }
             }
-            Value::Object(obj) => format!("Объект {:p}", Rc::as_ptr(obj)),
-            Value::Function(func) => format!("Функция {:p}", Rc::as_ptr(func)),
-            Value::Builtin(func) => format!("Встроенная функция {:p}", func),
+            Value::Object(obj) => format!("<Объект {:p}>", Rc::as_ptr(obj)),
+            Value::Function(func) => format!("<Функция {:p}>", Rc::as_ptr(func)),
+            Value::Builtin(func) => format!("<Встроенная функция {:p}>", func),
             Value::Empty => "пустота".to_string(),
         }
     }
@@ -39,32 +39,7 @@ impl Value {
 
 impl fmt::Display for Value {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            Value::Number(data) => {
-                write!(f, "{data}")
-            }
-            Value::Float(data) => {
-                write!(f, "{data}")
-            }
-            Value::Text(data) => {
-                write!(f, "{data}")
-            }
-            Value::Boolean(data) => {
-                write!(f, "{data}")
-            }
-            Value::Object(obj) => {
-                write!(f, "[объект {:p}]", Rc::as_ptr(obj))
-            }
-            Value::Function(func) => {
-                write!(f, "[функция {:p}]", Rc::as_ptr(func))
-            }
-            Value::Builtin(func) => {
-                write!(f, "[встроенная функция {:p}]", func)
-            }
-            Value::Empty => {
-                write!(f, "пустота")
-            }
-        }
+        self.to_string().fmt(f)
     }
 }
 

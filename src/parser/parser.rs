@@ -135,6 +135,12 @@ impl ParserTrait {
                         fields.push(field);
                     }
                 }
+                Rule::constructor => {
+                    if let Some(mut method) = self.parse_constructor(token) {
+                        method.is_constructor = true;
+                        methods.push(method);
+                    }
+                }
                 Rule::class_method => {
                     if let Some(method) = self.parse_class_method(token) {
                         methods.push(method);
@@ -197,10 +203,9 @@ impl ParserTrait {
         })
     }
 
-    fn parse_class_method(&mut self, pair: pest::iterators::Pair<Rule>) -> Option<ClassMethod> {
+    fn parse_constructor(&mut self, pair: pest::iterators::Pair<Rule>) -> Option<ClassMethod> {
         let mut inner = pair.into_inner();
         let mut visibility = Visibility::Private;
-        let mut is_constructor = false;
         let mut method_name = String::new();
         let mut params = Vec::new();
         let mut return_type = None;
@@ -233,11 +238,7 @@ impl ParserTrait {
                             .add_statement(StatementKind::Block(block_stmts), Span::default()),
                     );
                 }
-                _ => {
-                    if token.as_str() == "конструктор" {
-                        is_constructor = true;
-                    }
-                }
+                _ => {}
             }
         }
 
@@ -247,7 +248,57 @@ impl ParserTrait {
             return_type,
             body: body?,
             visibility,
-            is_constructor,
+            is_constructor: false, // будет установлено в parse_class
+            span: Span::default(),
+        })
+    }
+
+    fn parse_class_method(&mut self, pair: pest::iterators::Pair<Rule>) -> Option<ClassMethod> {
+        let mut inner = pair.into_inner();
+        let mut visibility = Visibility::Private;
+        let mut method_name = String::new();
+        let mut params = Vec::new();
+        let mut return_type = None;
+        let mut body = None;
+
+        while let Some(token) = inner.next() {
+            match token.as_rule() {
+                Rule::visibility => {
+                    visibility = if token.as_str() == "публичный" {
+                        Visibility::Public
+                    } else {
+                        Visibility::Private
+                    };
+                }
+                Rule::identifier => {
+                    method_name = token.as_str().to_string();
+                }
+                Rule::param_list => {
+                    params = self.parse_param_list(token);
+                }
+                Rule::return_type => {
+                    let type_str = token.into_inner().next()?.as_str().to_string();
+                    return_type = Some(self.program.arena.resolve_or_intern_type(&type_str));
+                }
+                Rule::block => {
+                    let block_stmts = self.parse_block(token)?;
+                    body = Some(
+                        self.program
+                            .arena
+                            .add_statement(StatementKind::Block(block_stmts), Span::default()),
+                    );
+                }
+                _ => {}
+            }
+        }
+
+        Some(ClassMethod {
+            name: self.program.arena.intern_string(&method_name),
+            params,
+            return_type,
+            body: body?,
+            visibility,
+            is_constructor: false,
             span: Span::default(),
         })
     }
@@ -361,27 +412,31 @@ impl ParserTrait {
 
     fn parse_property_assign(&mut self, pair: pest::iterators::Pair<Rule>) -> Option<StmtId> {
         let mut inner = pair.into_inner();
-        inner.next()?; // "это"
-        inner.next()?; // "."
-        let prop_name_str = inner.next()?.as_str().to_string();
-        let prop_name = self.program.arena.intern_string(&prop_name_str);
-        inner.next()?; // "="
-        let value_expr = self.parse_expression(inner.next()?)?;
-
-        let this_expr = self
-            .program
-            .arena
-            .add_expression(ExpressionKind::This, Span::default());
-
-        let stmt_id = self.program.arena.add_statement(
-            StatementKind::PropertyAssign {
-                object: this_expr,
-                property: prop_name,
-                value: value_expr,
-            },
-            Span::default(),
-        );
-        Some(stmt_id)
+        
+        // Parse the postfix expression (e.g., "это.поле" or "объект.свойство")
+        let postfix_pair = inner.next()?;
+        let postfix_expr = self.parse_postfix(postfix_pair)?;
+        
+        // The postfix expression should be a PropertyAccess
+        // Extract the object and property from it
+        if let ExpressionKind::PropertyAccess { object, property } = &self.program.arena.expressions[postfix_expr as usize].kind {
+            let object = *object;
+            let property = *property;
+            
+            let value_expr = self.parse_expression(inner.next()?)?;
+            
+            let stmt_id = self.program.arena.add_statement(
+                StatementKind::PropertyAssign {
+                    object,
+                    property,
+                    value: value_expr,
+                },
+                Span::default(),
+            );
+            Some(stmt_id)
+        } else {
+            None
+        }
     }
 
     fn parse_if_stmt(&mut self, pair: pest::iterators::Pair<Rule>) -> Option<StmtId> {
@@ -876,6 +931,18 @@ impl ParserTrait {
                 let boolean_val = s == "истина";
                 Some(self.program.arena.add_expression(
                     ExpressionKind::Literal(LiteralValue::Boolean(boolean_val)),
+                    Span::default(),
+                ))
+            }
+            Rule::empty_literal => {
+                Some(self.program.arena.add_expression(
+                    ExpressionKind::Literal(LiteralValue::Unit),
+                    Span::default(),
+                ))
+            }
+            Rule::this_expr => {
+                Some(self.program.arena.add_expression(
+                    ExpressionKind::This,
                     Span::default(),
                 ))
             }
