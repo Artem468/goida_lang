@@ -1,6 +1,7 @@
 use crate::ast::prelude::{ExpressionKind, Program, StatementKind, StmtId};
-use crate::interpreter::structs::{Environment, Interpreter, RuntimeError, Value};
-use crate::interpreter::traits::{ExpressionEvaluator, InterpreterUtils, StatementExecutor};
+use crate::interpreter::prelude::{
+    Environment, ExpressionEvaluator, Interpreter, RuntimeError, StatementExecutor, Value,
+};
 
 impl StatementExecutor for Interpreter {
     fn execute_statement(
@@ -41,11 +42,12 @@ impl StatementExecutor for Interpreter {
             } => {
                 let condition_value = self.evaluate_expression(*condition, program)?;
                 if condition_value.is_truthy() {
-                    self.execute_statement(*then_body, program)?;
+                    self.execute_statement(*then_body, program)
                 } else if let Some(else_stmt_id) = else_body {
-                    self.execute_statement(*else_stmt_id, program)?;
+                    self.execute_statement(*else_stmt_id, program)
+                } else {
+                    Ok(())
                 }
-                Ok(())
             }
 
             StatementKind::While { condition, body } => {
@@ -63,32 +65,25 @@ impl StatementExecutor for Interpreter {
                 body,
             } => {
                 let variable_str = program.arena.resolve_symbol(*variable).unwrap().to_string();
-                
-                // Create new scope for loop
+
                 let parent_env = self.environment.clone();
                 self.environment = Environment::with_parent(parent_env);
-                
-                // Initialize variable
+
                 let init_val = self.evaluate_expression(*init, program)?;
                 self.environment.define(variable_str.clone(), init_val);
-                
-                // Loop
+
                 loop {
-                    // Check condition
                     let cond_val = self.evaluate_expression(*condition, program)?;
                     if !cond_val.is_truthy() {
                         break;
                     }
-                    
-                    // Execute body
+
                     self.execute_statement(*body, program)?;
-                    
-                    // Update variable
+
                     let update_val = self.evaluate_expression(*update, program)?;
                     self.environment.define(variable_str.clone(), update_val);
                 }
-                
-                // Restore parent scope
+
                 if let Some(parent) = self.environment.parent.take() {
                     self.environment = *parent;
                 }
@@ -116,18 +111,6 @@ impl StatementExecutor for Interpreter {
                     Value::Empty
                 };
                 Err(RuntimeError::Return(value))
-            }
-
-            StatementKind::Print(expr_id) => {
-                let value = self.evaluate_expression(*expr_id, program)?;
-                println!("{}", value.to_string());
-                Ok(())
-            }
-
-            StatementKind::Input(expr_id) => {
-                let value = self.evaluate_expression(*expr_id, program)?;
-                self.input_function(value)?;
-                Ok(())
             }
 
             StatementKind::ClassDefinition(_) => Ok(()),
@@ -164,7 +147,7 @@ impl StatementExecutor for Interpreter {
                     Ok(())
                 } else {
                     Err(RuntimeError::TypeMismatch(format!(
-                        "Попытка присвоения свойства не-объектному типу: {:?}",
+                        "Попытка присвоения свойства не-объектному типу: {}",
                         obj_value
                     )))
                 }

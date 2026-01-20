@@ -40,8 +40,6 @@ pub enum StatementKind {
     },
     Block(Vec<StmtId>),
     Return(Option<ExprId>),
-    Print(ExprId),
-    Input(ExprId),
     FunctionDefinition(FunctionDefinition),
     ClassDefinition(ClassDefinition),
     PropertyAssign {

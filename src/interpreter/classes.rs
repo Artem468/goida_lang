@@ -1,9 +1,11 @@
+use crate::ast::prelude::{ClassDefinition, FunctionDefinition, Program, Visibility};
+use crate::interpreter::structs::{
+    Class, ClassInstance, Environment, Interpreter, RuntimeError, Value,
+};
+use crate::interpreter::traits::{ExpressionEvaluator, InterpreterClasses, StatementExecutor};
 use std::collections::HashMap;
 use std::rc::Rc;
-use string_interner::{DefaultSymbol as Symbol};
-use crate::ast::prelude::{ClassDefinition, Visibility, FunctionDefinition, Program};
-use crate::interpreter::structs::{Class, ClassInstance, Environment, Interpreter, RuntimeError, Value};
-use crate::interpreter::traits::{ExpressionEvaluator, InterpreterClasses, StatementExecutor};
+use string_interner::DefaultSymbol as Symbol;
 
 impl InterpreterClasses for Interpreter {
     /// Регистрируем класс в интерпретаторе
@@ -12,8 +14,6 @@ impl InterpreterClasses for Interpreter {
         class_def: &ClassDefinition,
         program: &Program,
     ) -> Result<(), RuntimeError> {
-
-
         let class_name = program
             .arena
             .resolve_symbol(class_def.name)
@@ -71,17 +71,13 @@ impl InterpreterClasses for Interpreter {
         program: &Program,
     ) -> Result<Value, RuntimeError> {
         let prev_module = self.current_module.clone();
-        let module_name = if let Some(module_symbol) = method.module {
-            Some(
-                program
-                    .arena
-                    .resolve_symbol(module_symbol)
-                    .unwrap()
-                    .to_string(),
-            )
-        } else {
-            None
-        };
+        let module_name = method.module.map(|module_symbol| {
+            program
+                .arena
+                .resolve_symbol(module_symbol)
+                .unwrap()
+                .to_string()
+        });
         self.current_module = module_name;
 
         let parent_env = self.environment.clone();
@@ -125,7 +121,6 @@ impl InterpreterClasses for Interpreter {
         Ok(result)
     }
 }
-
 
 impl ClassInstance {
     /// Создать новый экземпляр класса
@@ -183,7 +178,10 @@ impl ClassInstance {
 
     /// Получить метод по имени
     pub fn get_method(&self, method_name: &str) -> Option<&FunctionDefinition> {
-        self.class_ref.methods.get(method_name).map(|(_, func)| func)
+        self.class_ref
+            .methods
+            .get(method_name)
+            .map(|(_, func)| func)
     }
 
     /// Получить конструктор класса
@@ -204,7 +202,12 @@ impl Class {
     }
 
     /// Добавить поле в класс
-    pub fn add_field(&mut self, name: String, visibility: Visibility, default_value: Option<Value>) {
+    pub fn add_field(
+        &mut self,
+        name: String,
+        visibility: Visibility,
+        default_value: Option<Value>,
+    ) {
         self.fields.insert(name, (visibility, default_value));
     }
 
@@ -220,6 +223,6 @@ impl Class {
 
     /// Создать экземпляр класса
     pub fn create_instance(self: &Rc<Self>) -> ClassInstance {
-        ClassInstance::new(self.name.clone(), self.clone())
+        ClassInstance::new(self.name, self.clone())
     }
 }

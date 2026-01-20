@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use crate::interpreter::prelude::InterpreterStructs::{Environment, RuntimeError, Value};
+use crate::interpreter::prelude::{Environment, RuntimeError, Value};
 
 impl Environment {
     pub(crate) fn new() -> Self {

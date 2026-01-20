@@ -15,7 +15,7 @@ pub trait ExpressionEvaluator {
 }
 
 pub trait CoreOperations {
-    fn new(dir: std::path::PathBuf) -> Self;
+    fn new(dir: std::path::PathBuf, program: Program) -> Self;
     fn into_module(self, program: Program) -> Module;
     fn interpret(&mut self, program: Program) -> Result<(), RuntimeError>;
 }
@@ -30,10 +30,6 @@ pub trait ValueOperations {
     fn compare_less(&self, left: Value, right: Value) -> Result<Value, RuntimeError>;
     fn compare_greater_equal(&self, left: Value, right: Value) -> Result<Value, RuntimeError>;
     fn compare_less_equal(&self, left: Value, right: Value) -> Result<Value, RuntimeError>;
-}
-
-pub trait InterpreterUtils {
-    fn input_function(&self, argument: Value) -> Result<Value, RuntimeError>;
 }
 
 pub trait InterpreterFunctions {

@@ -24,7 +24,6 @@ pub enum ExpressionKind {
         object: ExprId,
         index: ExprId,
     },
-    Input(ExprId),
 
     PropertyAccess {
         object: ExprId,

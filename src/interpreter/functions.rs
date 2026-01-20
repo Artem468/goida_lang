@@ -10,17 +10,13 @@ impl InterpreterFunctions for Interpreter {
         program: &Program,
     ) -> Result<Value, RuntimeError> {
         let prev_module = self.current_module.clone();
-        let module_name = if let Some(module_symbol) = function.module {
-            Some(
-                program
-                    .arena
-                    .resolve_symbol(module_symbol)
-                    .unwrap()
-                    .to_string(),
-            )
-        } else {
-            None
-        };
+        let module_name = function.module.map(|module_symbol| {
+            program
+                .arena
+                .resolve_symbol(module_symbol)
+                .unwrap()
+                .to_string()
+        });
         self.current_module = module_name;
 
         let parent_env = self.environment.clone();
@@ -68,7 +64,6 @@ impl InterpreterFunctions for Interpreter {
         arguments: Vec<Value>,
         program: &Program,
     ) -> Result<Value, RuntimeError> {
-        // 1. Проверяем доступ через модуль (module.func)
         if let Some(dot_index) = name.find('.') {
             let module_name = &name[..dot_index];
             let func_name = &name[dot_index + 1..];
@@ -80,19 +75,17 @@ impl InterpreterFunctions for Interpreter {
             return Err(RuntimeError::UndefinedFunction(name.to_string()));
         }
 
-        // 2. Сначала ищем в environment
         if let Some(val) = self.environment.get(name) {
-            if let Value::Function(func) = val {
-                return self.call_function((*func).clone(), arguments, program);
+            return if let Value::Function(func) = val {
+                self.call_function((*func).clone(), arguments, program)
             } else {
-                return Err(RuntimeError::InvalidOperation(format!(
+                Err(RuntimeError::InvalidOperation(format!(
                     "'{}' не является функцией",
                     name
-                )));
+                )))
             }
         }
 
-        // 3. Ищем в текущем модуле
         if let Some(function) = self.functions.get(name).cloned() {
             return self.call_function(function, arguments, program);
         }
@@ -104,9 +97,11 @@ impl InterpreterFunctions for Interpreter {
                 }
             }
         }
+        
+        if let Some(builtin_fn) = self.builtins.get(name) {
+            return builtin_fn(self, arguments);
+        }
 
-        // 4. Если нигде не найдено
         Err(RuntimeError::UndefinedFunction(name.to_string()))
     }
-
 }

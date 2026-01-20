@@ -1,12 +1,11 @@
 mod ast;
 mod interpreter;
+mod macros;
 mod parser;
 
-use crate::ast::prelude::Program;
 use crate::parser::prelude::ParserStructs;
 use clap::{Parser, Subcommand};
-use interpreter::prelude::InterpreterStructs::{Interpreter, RuntimeError};
-use interpreter::prelude::InterpreterTraits::CoreOperations;
+use interpreter::prelude::{CoreOperations, Interpreter, RuntimeError};
 use std::io::{self, Write};
 use std::path::PathBuf;
 use std::{env, fs};
@@ -63,9 +62,6 @@ fn run_file(filename: &str) -> Result<(), Box<dyn std::error::Error>> {
 fn run_repl() {
     println!("Интерактивный режим языка Гойда");
     println!("Введите 'выход' для завершения\n");
-    let mut interpreter =
-        Interpreter::new(env::current_dir().expect("Не удалось получить текущую директорию"));
-
     loop {
         print!("гойда> ");
         io::stdout().flush().unwrap();
@@ -84,7 +80,11 @@ fn run_repl() {
                     continue;
                 }
 
-                if let Err(e) = execute_code_with_interpreter(&mut interpreter, input, "main") {
+                if let Err(e) = execute_code_with_interpreter(
+                    input,
+                    "main",
+                    env::current_dir().expect("Не удалось получить текущую директорию"),
+                ) {
                     eprintln!("Ошибка: {}", e);
                 }
             }
@@ -98,43 +98,40 @@ fn run_repl() {
 
 fn execute_code(code: &str, filename: &str) -> Result<(), Box<dyn std::error::Error>> {
     let _path = PathBuf::from(filename);
-    let file_stem = _path
-        .file_stem()
-        .and_then(|s| s.to_str())
-        .ok_or_else(|| {
-            RuntimeError::InvalidOperation(format!(
-                "Невозможно получить имя модуля из пути: {}",
-                _path.display()
-            ))
-        })
-        .unwrap();
-    let mut interpreter = Interpreter::new(PathBuf::from(_path.parent().unwrap()));
-    execute_code_with_interpreter(&mut interpreter, code, file_stem)
+    let _path_clone = _path.clone();
+    let file_stem = _path.file_stem().and_then(|s| s.to_str()).unwrap();
+    execute_code_with_interpreter(code, file_stem, _path_clone)
 }
 
 fn execute_code_with_interpreter(
-    interpreter: &mut Interpreter,
     code: &str,
     filename: &str,
+    path_buf: PathBuf,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let parser = ParserStructs::Parser::new(filename.to_string());
     match parser.parse(code) {
         Ok(program) => {
+            let mut interpreter =
+                Interpreter::new(PathBuf::from(path_buf.parent().unwrap()), program.clone());
+            interpreter.define_builtins();
             interpreter.interpret(program).map_err(|e| match e {
-                RuntimeError::UndefinedVariable(name) => format!("Неопределенная переменная: {}", name),
-                RuntimeError::UndefinedFunction(name) => format!("Неопределенная функция: {}", name),
+                RuntimeError::UndefinedVariable(name) => {
+                    format!("Неопределенная переменная: {}", name)
+                }
+                RuntimeError::UndefinedFunction(name) => {
+                    format!("Неопределенная функция: {}", name)
+                }
+                RuntimeError::UndefinedMethod(name) => format!("Неопределенный метод: {}", name),
                 RuntimeError::TypeMismatch(msg) => format!("Несоответствие типов: {}", msg),
                 RuntimeError::DivisionByZero => "Деление на ноль".to_string(),
                 RuntimeError::InvalidOperation(msg) => format!("Недопустимая операция: {}", msg),
                 RuntimeError::IOError(msg) => format!("Ошибка чтения файла: {}", msg),
-                RuntimeError::ParseError(msg) => format!("Ошибка при парсинге: {}", msg),
+                RuntimeError::TypeError(msg) => format!("Недопустимый тип данных: {}", msg),
                 RuntimeError::Return(_) => "Неожиданный return".to_string(),
             })?;
         }
         Err(err) => eprintln!("{:#?}", err),
     }
-
-
 
     Ok(())
 }

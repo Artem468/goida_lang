@@ -16,7 +16,7 @@ function = {
 
 // === Classes ===
 class = {
-    "класс" ~ identifier ~ "{" ~ class_item* ~ "}"
+    "класс" ~ identifier ~ "{" ~ (NEWLINE | COMMENT)* ~ (class_item ~ (NEWLINE | COMMENT)*)* ~ "}"
 }
 
 class_item = _{
@@ -39,8 +39,6 @@ statement = _{
     if_stmt |
     while_stmt |
     for_stmt |
-    print_stmt |
-    input_stmt |
     return_stmt |
     expr_stmt
 }
@@ -55,11 +53,15 @@ property_assign = {
 }
 
 if_stmt = {
-    "если" ~ "(" ~ expression ~ ")" ~ block ~ else_block?
+    "если" ~ "(" ~ expression ~ ")" ~ block ~ (NEWLINE | COMMENT)* ~ else_clause?
 }
 
-else_block = {
-    "иначе" ~ block
+else_clause = {
+    "иначе" ~ (NEWLINE | COMMENT)* ~ (else_if_clause | block)
+}
+
+else_if_clause = {
+    if_stmt
 }
 
 while_stmt = {
@@ -92,14 +94,6 @@ compound_assign = {
 
 compound_op = @{
     "+=" | "-=" | "*=" | "/="
-}
-
-print_stmt = {
-    "печать" ~ "(" ~ expression ~ ")" ~ ";"
-}
-
-input_stmt = {
-    "ввод" ~ "(" ~ identifier ~ ")" ~ ";"
 }
 
 return_stmt = {
@@ -172,6 +166,7 @@ primary = _{
     new_expr |
     string_literal |
     number_literal |
+    bool_literal |
     identifier
 }
 
@@ -181,6 +176,10 @@ paren_expr = {
 
 new_expr = {
     "новый" ~ identifier ~ "(" ~ arg_list? ~ ")"
+}
+
+bool_literal = @{
+    "истина" | "ложь"
 }
 
 // this - это самостоятельное слово, не часть выражения
@@ -208,7 +207,7 @@ type_hint = {
 }
 
 return_type = {
-    ":" ~ type_name
+    "->" ~ type_name
 }
 
 type_name = @{
