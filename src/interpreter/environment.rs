@@ -1,5 +1,6 @@
-use std::collections::HashMap;
 use crate::interpreter::prelude::{Environment, RuntimeError, Value};
+use std::collections::HashMap;
+use string_interner::{DefaultSymbol as Symbol};
 
 impl Environment {
     pub(crate) fn new() -> Self {
@@ -18,15 +19,15 @@ impl Environment {
     pub fn pop(self) -> Environment {
         match self.parent {
             Some(parent_box) => *parent_box,
-            None => self
+            None => self,
         }
     }
 
-    pub(crate) fn define(&mut self, name: String, value: Value) {
+    pub(crate) fn define(&mut self, name: Symbol, value: Value) {
         self.variables.insert(name, value);
     }
 
-    pub(crate) fn get(&self, name: &str) -> Option<Value> {
+    pub(crate) fn get(&self, name: &Symbol) -> Option<Value> {
         if let Some(value) = self.variables.get(name) {
             Some(value.clone())
         } else if let Some(parent) = &self.parent {
@@ -36,14 +37,14 @@ impl Environment {
         }
     }
 
-    pub(crate) fn set(&mut self, name: &str, value: Value) -> Result<(), RuntimeError> {
-        if self.variables.contains_key(name) {
-            self.variables.insert(name.to_string(), value);
+    pub(crate) fn set(&mut self, name: Symbol, value: Value) -> Result<(), RuntimeError> {
+        if self.variables.contains_key(&name) {
+            self.variables.insert(name, value);
             Ok(())
         } else if let Some(parent) = &mut self.parent {
             parent.set(name, value)
         } else {
-            self.variables.insert(name.to_string(), value);
+            self.variables.insert(name, value);
             Ok(())
         }
     }

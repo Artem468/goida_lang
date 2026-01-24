@@ -1,4 +1,5 @@
-use crate::ast::prelude::{FunctionDefinition, Program};
+use string_interner::DefaultSymbol as Symbol;
+use crate::ast::prelude::{FunctionDefinition};
 use crate::interpreter::prelude::{RuntimeError, Value};
 
 pub trait InterpreterFunctions {
@@ -6,12 +7,12 @@ pub trait InterpreterFunctions {
         &mut self,
         function: FunctionDefinition,
         arguments: Vec<Value>,
-        program: &Program,
+        current_module_id: Symbol,
     ) -> Result<Value, RuntimeError>;
     fn call_function_by_name(
         &mut self,
-        name: &str,
+        name: Symbol,
         arguments: Vec<Value>,
-        program: &Program,
+        current_module_id: Symbol,
     ) -> Result<Value, RuntimeError>;
 }

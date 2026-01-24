@@ -1,46 +1,34 @@
-use crate::ast::prelude::Program;
-use crate::interpreter::structs::{Environment, Interpreter, Module, RuntimeError, Value};
-use crate::traits::prelude::{CoreOperations, InterpreterClasses, StatementExecutor};
+use crate::interpreter::prelude::{Environment, SharedInterner};
+use crate::interpreter::structs::{Interpreter, Module, RuntimeError, Value};
 use crate::parser::prelude::ParserStructs;
+use crate::traits::prelude::{CoreOperations, InterpreterClasses, StatementExecutor};
 use std::collections::HashMap;
 use std::rc::Rc;
+use std::sync::Arc;
+use string_interner::DefaultSymbol as Symbol;
 
 impl CoreOperations for Interpreter {
-    fn new(dir: std::path::PathBuf, program: Program) -> Self {
+    fn new(main_module: Module, interner: SharedInterner) -> Self {
+        let mut modules = HashMap::new();
+        modules.insert(main_module.name, main_module);
+
         Interpreter {
-            environment: Environment::new(),
-            program,
-            functions: HashMap::new(),
             builtins: HashMap::new(),
-            classes: HashMap::new(),
-            modules: HashMap::new(),
-            current_dir: dir,
-            current_module: None,
+            modules,
+            interner,
+            environment: Environment::new(),
         }
     }
 
-    fn into_module(self, program: Program) -> Module {
-        Module {
-            functions: self.functions,
-            classes: self.classes,
-            environment: self.environment,
-            program,
-        }
-    }
-
-    fn interpret(&mut self, program: Program) -> Result<(), RuntimeError> {
-        let module_name = program
-            .arena
-            .resolve_symbol(program.name)
-            .unwrap()
-            .to_string();
-        self.current_module = Some(module_name.clone());
-
-        for import in &program.imports {
+    fn interpret(&mut self, mut module: Module) -> Result<(), RuntimeError> {
+        for import in &module.imports {
             for path_symbol in &import.files {
-                let path = program.arena.resolve_symbol(*path_symbol).unwrap();
-                let relative_path = std::path::Path::new(path);
-                let full_path = self.current_dir.join(relative_path).with_extension("goida");
+                let path = module
+                    .arena
+                    .resolve_symbol(&self.interner, *path_symbol)
+                    .unwrap();
+                let relative_path = std::path::Path::new(&path);
+                let full_path = module.path.join(relative_path).with_extension("goida");
                 let file_stem =
                     full_path
                         .file_stem()
@@ -55,19 +43,18 @@ impl CoreOperations for Interpreter {
                     RuntimeError::IOError(format!("{} | {err}", full_path.display()))
                 })?;
 
-                let parser = ParserStructs::Parser::new(file_stem.to_string());
+                let parser = ParserStructs::Parser::new(
+                    Arc::clone(&self.interner),
+                    file_stem,
+                    module.path.clone(),
+                );
                 match parser.parse(code.as_str()) {
-                    Ok(program) => {
-                        let mut sub_interpreter = Interpreter::new(
-                            full_path
-                                .parent()
-                                .unwrap_or(&self.current_dir)
-                                .to_path_buf(),
-                            program.clone()
-                        );
-                        sub_interpreter.interpret(program.clone())?;
-                        self.modules
-                            .insert(file_stem.to_string(), sub_interpreter.into_module(program));
+                    Ok(new_module) => {
+                        let module_symbol = self.interner.write().unwrap().get_or_intern(file_stem);
+                        for &stmt_id in &new_module.body {
+                            self.execute_statement(stmt_id, module_symbol)?;
+                        }
+                        self.modules.insert(module_symbol, new_module);
                     }
                     Err(err) => {
                         println!("{:#?}", err);
@@ -76,32 +63,24 @@ impl CoreOperations for Interpreter {
             }
         }
 
-        for class_def in &program.classes {
-            self.register_class(class_def, &program)?;
+        for (class_name, class_def) in &module.classes {
+            self.register_class(class_def.clone(), *class_name)?;
         }
 
-        for function in &program.functions {
-            let func_name = program
-                .arena
-                .resolve_symbol(function.name)
-                .unwrap()
-                .to_string();
+        for (function_name, function_fn) in &module.functions {
             self.environment.define(
-                func_name.clone(),
-                Value::Function(Rc::new(function.clone())),
+                function_name.clone(),
+                Value::Function(Rc::new(function_fn.clone())),
             );
-            self.functions.insert(func_name, function.clone());
         }
 
         for (builtin_name, builtin_fn) in &self.builtins.clone() {
-            self.environment.define(
-                builtin_name.clone(),
-                Value::Builtin(builtin_fn.clone()),
-            );
+            self.environment
+                .define(builtin_name.clone(), Value::Builtin(builtin_fn.clone()));
         }
 
-        for &stmt_id in &program.statements {
-            match self.execute_statement(stmt_id, &program) {
+        for &stmt_id in &module.body {
+            match self.execute_statement(stmt_id, module.name) {
                 Err(RuntimeError::Return(_)) => {}
                 Err(e) => return Err(e),
                 Ok(()) => {}
@@ -109,5 +88,20 @@ impl CoreOperations for Interpreter {
         }
 
         Ok(())
+    }
+
+    fn resolve_symbol(&self, symbol: Symbol) -> Option<String> {
+        self.interner
+            .read()
+            .expect("interner lock poisoned")
+            .resolve(symbol)
+            .map(|s| s.to_string())
+    }
+
+    fn intern_string(&self, s: &str) -> Symbol {
+        self.interner
+            .write()
+            .expect("interner lock poisoned")
+            .get_or_intern(s)
     }
 }

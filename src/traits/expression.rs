@@ -1,10 +1,21 @@
-use crate::ast::prelude::{ExprId, Program};
+use string_interner::DefaultSymbol;
+use crate::ast::prelude::{ExprId, ExpressionKind, LiteralValue};
 use crate::interpreter::prelude::{RuntimeError, Value};
 
 pub trait ExpressionEvaluator {
     fn evaluate_expression(
         &mut self,
         expr_id: ExprId,
-        program: &Program,
+        current_module_id: DefaultSymbol,
     ) -> Result<Value, RuntimeError>;
+}
+
+impl ExpressionKind {
+    pub fn as_literal(&self) -> Option<&LiteralValue> {
+        if let ExpressionKind::Literal(lit) = self {
+            Some(lit)
+        } else {
+            None
+        }
+    }
 }

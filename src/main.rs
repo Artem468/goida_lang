@@ -7,10 +7,12 @@ mod traits;
 use crate::parser::prelude::ParserStructs;
 use clap::{Parser, Subcommand};
 use interpreter::prelude::{Interpreter, RuntimeError};
-use traits::prelude::{CoreOperations};
 use std::io::{self, Write};
 use std::path::PathBuf;
+use std::sync::{Arc, RwLock};
 use std::{env, fs};
+use string_interner::StringInterner;
+use traits::prelude::CoreOperations;
 
 #[derive(Parser)]
 #[command(name = "goida")]
@@ -110,11 +112,12 @@ fn execute_code_with_interpreter(
     filename: &str,
     path_buf: PathBuf,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let parser = ParserStructs::Parser::new(filename.to_string());
+    let interner = Arc::new(RwLock::new(StringInterner::new()));
+
+    let parser = ParserStructs::Parser::new(Arc::clone(&interner), filename, path_buf);
     match parser.parse(code) {
         Ok(program) => {
-            let mut interpreter =
-                Interpreter::new(PathBuf::from(path_buf.parent().unwrap()), program.clone());
+            let mut interpreter = Interpreter::new(program.clone(), Arc::clone(&interner));
             interpreter.define_builtins();
             interpreter.interpret(program).map_err(|e| match e {
                 RuntimeError::UndefinedVariable(name) => {

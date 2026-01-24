@@ -119,3 +119,18 @@ impl TryFrom<Value> for bool {
         }
     }
 }
+
+impl PartialEq for Value {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Value::Number(a), Value::Number(b)) => a == b,
+            (Value::Float(a), Value::Float(b)) => a == b,
+            (Value::Text(a), Value::Text(b)) => a == b,
+            (Value::Boolean(a), Value::Boolean(b)) => a == b,
+            (Value::Object(a), Value::Object(b)) => Rc::ptr_eq(a, b),
+            (Value::Function(a), Value::Function(b)) => Rc::ptr_eq(a, b),
+            (Value::Empty, Value::Empty) => true,
+            _ => false,
+        }
+    }
+}

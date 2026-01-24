@@ -1,8 +1,9 @@
-use crate::ast::prelude::Program;
-use crate::interpreter::prelude::{Module, RuntimeError};
+use string_interner::DefaultSymbol as Symbol;
+use crate::interpreter::prelude::{Module, RuntimeError, SharedInterner};
 
 pub trait CoreOperations {
-    fn new(dir: std::path::PathBuf, program: Program) -> Self;
-    fn into_module(self, program: Program) -> Module;
-    fn interpret(&mut self, program: Program) -> Result<(), RuntimeError>;
+    fn new(module: Module, interner: SharedInterner) -> Self;
+    fn interpret(&mut self, module: Module) -> Result<(), RuntimeError>;
+    fn resolve_symbol(&self, symbol: Symbol) -> Option<String>;
+    fn intern_string(&self, s: &str) -> Symbol;
 }

@@ -5,8 +5,17 @@ COMMENT = _{ "//" ~ (!"\n" ~ ANY)* ~ NEWLINE? }
 program = { SOI ~ (NEWLINE | COMMENT)* ~ item* ~ (NEWLINE | COMMENT)* ~ EOI }
 item = _{ 
     (NEWLINE | COMMENT)* ~
-    (function | class | statement) ~
+    (import_stmt | function | class | statement) ~
     (NEWLINE | COMMENT)*
+}
+
+// === Import statements ===
+import_stmt = {
+    "подключить" ~ import_list ~ ";"
+}
+
+import_list = {
+    string_literal ~ ("," ~ string_literal)*
 }
 
 // === Functions ===
@@ -189,7 +198,11 @@ paren_expr = {
 }
 
 new_expr = {
-    "новый" ~ identifier ~ "(" ~ arg_list? ~ ")"
+    "новый" ~ qualified_name ~ "(" ~ arg_list? ~ ")"
+}
+
+qualified_name = {
+    identifier ~ ("." ~ identifier)*
 }
 
 bool_literal = @{

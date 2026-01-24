@@ -26,16 +26,3 @@ pub struct ClassMethod {
     pub is_constructor: bool,
     pub span: Span,
 }
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct ClassDefinition {
-    pub name: Symbol,
-    pub fields: Vec<ClassField>,
-    pub methods: Vec<ClassMethod>,
-    pub span: Span,
-}
-
-pub enum ClassMember {
-    Field(ClassField),
-    Method(ClassMethod),
-}
