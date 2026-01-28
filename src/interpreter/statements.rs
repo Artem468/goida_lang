@@ -14,7 +14,9 @@ impl StatementExecutor for Interpreter {
                 .modules
                 .get(&current_module_id)
                 .ok_or_else(|| RuntimeError::InvalidOperation("Модуль не найден".into()))?;
-            module.arena.get_statement(stmt_id).unwrap().kind.clone()
+            module.arena.get_statement(stmt_id).ok_or_else(|| {
+                RuntimeError::InvalidOperation(format!("Statement {} not found", stmt_id))
+            })?.kind.clone()
         };
         
         match stmt_kind {
@@ -130,8 +132,14 @@ impl StatementExecutor for Interpreter {
                     module.arena.get_expression(object).unwrap().kind.clone()
                 };
                 let is_external = !matches!(obj_expr, ExpressionKind::This);
+                
+                // Проверяем, находимся ли мы внутри метода класса (this доступен в окружении)
+                let this_sym = self.intern_string("this");
+                let is_inside_method = self.environment.get(&this_sym).is_some();
+                let is_external = is_external && !is_inside_method;
 
                 let obj_value = self.evaluate_expression(object, current_module_id)?;
+                let value_result = self.evaluate_expression(value, current_module_id)?;
                 
                 if let Value::Object(instance_ref) = obj_value {
                     let mut instance = instance_ref.borrow_mut();
@@ -141,7 +149,7 @@ impl StatementExecutor for Interpreter {
                             property_name
                         )));
                     }
-                    instance.set_field(property, value);
+                    instance.set_field_value(property, value_result);
                     Ok(())
                 } else {
                     Err(RuntimeError::TypeMismatch("Ожидался объект".into()))

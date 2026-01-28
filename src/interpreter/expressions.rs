@@ -32,8 +32,8 @@ impl ExpressionEvaluator for Interpreter {
             },
 
             ExpressionKind::Identifier(symbol) => {
-                if let Some(val) = self.environment.variables.get(&symbol) {
-                    return Ok(val.clone());
+                if let Some(val) = self.environment.get(&symbol) {
+                    return Ok(val);
                 }
 
                 let current_module = self.modules.get(&current_module_id).ok_or_else(|| {
@@ -196,6 +196,11 @@ impl ExpressionEvaluator for Interpreter {
                         let instance = instance_ref.borrow();
 
                         let is_external = !matches!(obj_expr, ExpressionKind::This);
+                        
+                        // Проверяем, находимся ли мы внутри метода класса (this доступен в окружении)
+                        let this_sym = self.intern_string("this");
+                        let is_inside_method = self.environment.get(&this_sym).is_some();
+                        let is_external = is_external && !is_inside_method;
 
                         if !instance.is_field_accessible(&property, is_external) {
                             return Err(RuntimeError::InvalidOperation(format!(
@@ -205,11 +210,16 @@ impl ExpressionEvaluator for Interpreter {
                         }
 
                         if let Some(opt_expr) = instance.get_field(&property) {
-                            match opt_expr {
-                                Some(expr) => {
-                                    Ok(self.evaluate_expression(*expr, current_module_id)?)
+                            // Сначала проверяем вычисленные значения
+                            if let Some(computed_value) = instance.field_values.get(&property) {
+                                Ok(computed_value.clone())
+                            } else {
+                                match opt_expr {
+                                    Some(expr) => {
+                                        Ok(self.evaluate_expression(*expr, current_module_id)?)
+                                    }
+                                    None => Ok(Value::Empty),
                                 }
-                                None => Ok(Value::Empty),
                             }
                         } else {
                             Ok(Value::Empty)

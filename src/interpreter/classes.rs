@@ -80,6 +80,7 @@ impl ClassInstance {
         Self {
             class_name,
             fields,
+            field_values: HashMap::new(),
             class_ref,
         }
     }
@@ -92,6 +93,11 @@ impl ClassInstance {
     /// Установить значение поля
     pub fn set_field(&mut self, field_name: Symbol, expr_id: ExprId) {
         self.fields.insert(field_name, Some(expr_id));
+    }
+
+    /// Установить значение поля с вычисленным Value
+    pub fn set_field_value(&mut self, field_name: Symbol, value: Value) {
+        self.field_values.insert(field_name, value);
     }
 
     /// Проверить доступность поля (приватный или публичный доступ)

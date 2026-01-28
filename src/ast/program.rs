@@ -41,5 +41,6 @@ pub struct ClassDefinition {
 pub struct ClassInstance {
     pub class_name: Symbol,
     pub fields: HashMap<Symbol, Option<ExprId>>,
+    pub field_values: HashMap<Symbol, Value>,  // Вычисленные значения полей
     pub class_ref: Rc<ClassDefinition>,
 }
