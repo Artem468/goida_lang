@@ -32,6 +32,24 @@ impl Value {
             Value::Function(func) => format!("<Функция {:p}>", Rc::as_ptr(func)),
             Value::Builtin(func) => format!("<Встроенная функция {:p}>", func),
             Value::Module(_) => "<Модуль>".to_string(),
+            Value::List(list) => {
+                let items = list.borrow();
+                let strings: Vec<String> = items.iter().map(|v| v.to_string()).collect();
+                format!("[{}]", strings.join(", "))
+            }
+            Value::Array(array) => {
+                let strings: Vec<String> = array.iter().map(|v| v.to_string()).collect();
+                format!("[{}]", strings.join(", "))
+            }
+            Value::Dict(dict) => {
+                let items = dict.borrow();
+                let mut pairs: Vec<String> = items
+                    .iter()
+                    .map(|(k, v)| format!("\"{}\": {}", k, v.to_string()))
+                    .collect();
+                pairs.sort();
+                format!("{{{}}}", pairs.join(", "))
+            }
             Value::Empty => "пустота".to_string(),
         }
     }
@@ -46,6 +64,9 @@ impl Value {
             Value::Function(_) => true,
             Value::Builtin(_) => true,
             Value::Module(_) => true,
+            Value::List(list) => !list.borrow().is_empty(),
+            Value::Array(array) => !array.is_empty(),
+            Value::Dict(dict) => !dict.borrow().is_empty(),
             Value::Empty => false,
         }
     }
@@ -117,6 +138,9 @@ impl TryFrom<Value> for bool {
             Value::Number(n) => Ok(n != 0),
             Value::Float(f) => Ok(f != 0.0 && !f.is_nan()),
             Value::Text(s) => Ok(!s.is_empty()),
+            Value::List(list) => Ok(!list.borrow().is_empty()),
+            Value::Array(array) => Ok(!array.is_empty()),
+            Value::Dict(dict) => Ok(!dict.borrow().is_empty()),
             Value::Object(_) | Value::Function(_) | Value::Builtin(_) | Value::Module(_) => Ok(true),
         }
     }
@@ -132,6 +156,9 @@ impl PartialEq for Value {
             (Value::Object(a), Value::Object(b)) => Rc::ptr_eq(a, b),
             (Value::Function(a), Value::Function(b)) => Rc::ptr_eq(a, b),
             (Value::Module(a), Value::Module(b)) => a == b,
+            (Value::List(a), Value::List(b)) => Rc::ptr_eq(a, b),
+            (Value::Array(a), Value::Array(b)) => Rc::ptr_eq(a, b),
+            (Value::Dict(a), Value::Dict(b)) => Rc::ptr_eq(a, b),
             (Value::Empty, Value::Empty) => true,
             _ => false,
         }
