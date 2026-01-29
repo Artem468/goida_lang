@@ -13,7 +13,7 @@ impl InterpreterFunctions for Interpreter {
         let arena = &self.modules.get(&current_module_id).unwrap().arena;
 
         let parent_env = self.environment.clone();
-        self.environment = Environment::with_parent(parent_env);
+        self.environment = Environment::with_parent(parent_env.clone());
 
         if arguments.len() != function.params.len() {
             return Err(RuntimeError::InvalidOperation(format!(
@@ -35,12 +35,12 @@ impl InterpreterFunctions for Interpreter {
                 result = val;
             }
             Err(e) => {
-                self.environment = self.environment.clone().pop();
+                self.environment = parent_env;
                 return Err(e);
             }
         }
 
-        self.environment = self.environment.clone().pop();
+        self.environment = parent_env;
         Ok(result)
     }
 

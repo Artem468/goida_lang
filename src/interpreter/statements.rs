@@ -27,14 +27,10 @@ impl StatementExecutor for Interpreter {
 
             StatementKind::Assign { name, value, .. } => {
                 let val = self.evaluate_expression(value, current_module_id)?;
-                if let Some(module) = self.modules.get_mut(&current_module_id) {
-                    module.globals.insert(name, val);
-                } else {
-                    return Err(RuntimeError::InvalidOperation(
-                        "Текущий модуль не найден в реестре".to_string()
-                    ));
-                }
 
+                if let Err(_) = self.environment.set(name, val.clone()) {
+                    self.environment.define(name, val);
+                }
                 Ok(())
             }
 

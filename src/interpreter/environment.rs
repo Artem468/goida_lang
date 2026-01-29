@@ -16,12 +16,6 @@ impl Environment {
             parent: Some(Box::new(parent)),
         }
     }
-    pub fn pop(self) -> Environment {
-        match self.parent {
-            Some(parent_box) => *parent_box,
-            None => self,
-        }
-    }
 
     pub(crate) fn define(&mut self, name: Symbol, value: Value) {
         self.variables.insert(name, value);
@@ -44,8 +38,7 @@ impl Environment {
         } else if let Some(parent) = &mut self.parent {
             parent.set(name, value)
         } else {
-            self.variables.insert(name, value);
-            Ok(())
+            Err(RuntimeError::UndefinedVariable("Переменная не найдена".into()))
         }
     }
 }
