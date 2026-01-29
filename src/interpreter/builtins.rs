@@ -120,6 +120,16 @@ setup_builtins!(interpreter, {
             Value::Builtin(_) => {
                 Ok(Value::Text("встроенная функция".to_string()))
             },
+            Value::Module(sym) => {
+                Ok(Value::Text(
+                    format!(
+                        "модуль \"{}\"",
+                        interpreter
+                        .resolve_symbol(*sym)
+                        .ok_or_else(|| RuntimeError::InvalidOperation("Модуль не найден".into()))?
+                    )
+                ))
+            },
             Value::Empty => {
                 Ok(Value::Text("пустота".to_string()))
             }

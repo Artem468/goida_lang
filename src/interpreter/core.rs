@@ -21,6 +21,40 @@ impl CoreOperations for Interpreter {
     }
 
     fn interpret(&mut self, module: Module) -> Result<(), RuntimeError> {
+        self.load_imports(&module)?;
+
+        for (class_name, class_def) in &module.classes {
+            self.register_class(class_def.clone(), *class_name)?;
+        }
+
+        for (function_name, function_fn) in &module.functions {
+            let func_value = Value::Function(Rc::new(function_fn.clone()));
+            self.environment.define(
+                function_name.clone(),
+                func_value.clone(),
+            );
+            if let Some(mod_entry) = self.modules.get_mut(&module.name) {
+                mod_entry.globals.insert(*function_name, func_value);
+            }
+        }
+
+        for (builtin_name, builtin_fn) in &self.builtins.clone() {
+            self.environment
+                .define(builtin_name.clone(), Value::Builtin(builtin_fn.clone()));
+        }
+
+        for &stmt_id in &module.body {
+            match self.execute_statement(stmt_id, module.name) {
+                Err(RuntimeError::Return(_)) => {}
+                Err(e) => return Err(e),
+                Ok(()) => {}
+            }
+        }
+
+        Ok(())
+    }
+
+    fn load_imports(&mut self, module: &Module) -> Result<(), RuntimeError> {
         for import in &module.imports {
             for path_symbol in &import.files {
                 let path = module
@@ -28,7 +62,6 @@ impl CoreOperations for Interpreter {
                     .resolve_symbol(&self.interner, *path_symbol)
                     .unwrap();
                 let relative_path = std::path::Path::new(&path);
-                // module.path - это путь к файлу главного модуля, берём его директорию
                 let module_dir = module.path.parent().unwrap_or_else(|| std::path::Path::new("."));
                 let full_path = module_dir.join(relative_path).with_extension("goida");
                 let file_stem =
@@ -53,23 +86,40 @@ impl CoreOperations for Interpreter {
                 match parser.parse(code.as_str()) {
                     Ok(new_module) => {
                         let module_symbol = self.interner.write().unwrap().get_or_intern(file_stem);
-                        // Register module FIRST before executing statements
+                        
+                        if self.modules.contains_key(&module_symbol) {
+                            continue;
+                        }
+                        
                         self.modules.insert(module_symbol, new_module.clone());
-                        // NOW execute statements that may reference the module
+                        
+                        self.load_imports(&new_module)?;
+                        
                         for &stmt_id in &new_module.body {
                             self.execute_statement(stmt_id, module_symbol)?;
                         }
-                        // Register classes and functions from imported module
+                        
                         for (_class_name, class_def) in &new_module.classes {
-                            // Set module ID on the class definition
                             let class_def_with_module = self.set_class_module(class_def.clone(), module_symbol);
                             self.register_class(class_def_with_module, module_symbol)?;
                         }
+                        
                         for (function_name, function_fn) in &new_module.functions {
+                            let func_value = Value::Function(Rc::new(function_fn.clone()));
                             self.environment.define(
                                 function_name.clone(),
-                                Value::Function(Rc::new(function_fn.clone())),
+                                func_value.clone(),
                             );
+                            if let Some(module) = self.modules.get_mut(&module_symbol) {
+                                module.globals.insert(*function_name, func_value);
+                            }
+                        }
+                        
+                        let imported_globals = self.collect_imported_globals(&new_module)?;
+                        if let Some(module) = self.modules.get_mut(&module_symbol) {
+                            for (sym, val) in imported_globals {
+                                module.globals.insert(sym, val);
+                            }
                         }
                     }
                     Err(err) => {
@@ -78,32 +128,21 @@ impl CoreOperations for Interpreter {
                 }
             }
         }
+        Ok(())
+    }
 
-        for (class_name, class_def) in &module.classes {
-            self.register_class(class_def.clone(), *class_name)?;
-        }
-
-        for (function_name, function_fn) in &module.functions {
-            self.environment.define(
-                function_name.clone(),
-                Value::Function(Rc::new(function_fn.clone())),
-            );
-        }
-
-        for (builtin_name, builtin_fn) in &self.builtins.clone() {
-            self.environment
-                .define(builtin_name.clone(), Value::Builtin(builtin_fn.clone()));
-        }
-
-        for &stmt_id in &module.body {
-            match self.execute_statement(stmt_id, module.name) {
-                Err(RuntimeError::Return(_)) => {}
-                Err(e) => return Err(e),
-                Ok(()) => {}
+    fn collect_imported_globals(&self, module: &Module) -> Result<Vec<(Symbol, Value)>, RuntimeError> {
+        let mut result = Vec::new();
+        for import in &module.imports {
+            for &imp_mod_sym in &import.files {
+                if let Some(imp_module) = self.modules.get(&imp_mod_sym) {
+                    for (sym, val) in &imp_module.globals {
+                        result.push((*sym, val.clone()));
+                    }
+                }
             }
         }
-
-        Ok(())
+        Ok(result)
     }
 
     fn resolve_symbol(&self, symbol: Symbol) -> Option<String> {

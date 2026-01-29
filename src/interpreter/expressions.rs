@@ -76,6 +76,20 @@ impl ExpressionEvaluator for Interpreter {
                             if let Some(val) = m.globals.get(&symbol) {
                                 return Ok(val.clone());
                             }
+                            if let Some(recursive_val) = self.find_in_module_imports(&m, &symbol) {
+                                return Ok(recursive_val);
+                            }
+                        }
+                    }
+                }
+
+                for import in &current_module.imports {
+                    for &imp_mod_sym in &import.files {
+                        if let Some(mod_name) = self.resolve_symbol(imp_mod_sym) {
+                            let this_name = self.resolve_symbol(symbol).unwrap_or_default();
+                            if mod_name == this_name {
+                                return Ok(Value::Module(imp_mod_sym));
+                            }
                         }
                     }
                 }
@@ -192,12 +206,33 @@ impl ExpressionEvaluator for Interpreter {
                 let obj_result = self.evaluate_expression(object, current_module_id);
 
                 match obj_result {
+                    Ok(Value::Module(module_symbol)) => {
+                        if let Some(module_env) = self.modules.get(&module_symbol) {
+                            module_env
+                                .globals
+                                .get(&property)
+                                .ok_or_else(|| {
+                                    RuntimeError::UndefinedVariable(format!(
+                                        "{}.{}",
+                                        self.resolve_symbol(module_symbol).unwrap(),
+                                        self.resolve_symbol(property).unwrap()
+                                    ))
+                                })
+                                .cloned()
+                        } else {
+                            Err(RuntimeError::InvalidOperation(
+                                format!(
+                                    "Модуль '{}' не найден",
+                                    self.resolve_symbol(module_symbol).unwrap()
+                                )
+                            ))
+                        }
+                    }
                     Ok(Value::Object(instance_ref)) => {
                         let instance = instance_ref.borrow();
 
                         let is_external = !matches!(obj_expr, ExpressionKind::This);
-                        
-                        // Проверяем, находимся ли мы внутри метода класса (this доступен в окружении)
+
                         let this_sym = self.intern_string("this");
                         let is_inside_method = self.environment.get(&this_sym).is_some();
                         let is_external = is_external && !is_inside_method;
@@ -210,7 +245,6 @@ impl ExpressionEvaluator for Interpreter {
                         }
 
                         if let Some(opt_expr) = instance.get_field(&property) {
-                            // Сначала проверяем вычисленные значения
                             if let Some(computed_value) = instance.field_values.get(&property) {
                                 Ok(computed_value.clone())
                             } else {
@@ -290,23 +324,48 @@ impl ExpressionEvaluator for Interpreter {
                             )))
                         }
                     }
+                    
+                    Ok(Value::Module(mod_symbol)) => {
+                        if let Some(target_module) = self.modules.get(&mod_symbol) {
+                            if let Some(function) = target_module.functions.get(&method) {
+                                self.call_function(
+                                    function.clone(),
+                                    arguments,
+                                    mod_symbol,
+                                )
+                            } else {
+                                let m_name = self.resolve_symbol(method).unwrap();
+                                let mod_name = self.resolve_symbol(mod_symbol).unwrap();
+                                Err(RuntimeError::UndefinedFunction(format!(
+                                    "Функция '{}' не найдена в модуле '{}'",
+                                    m_name, mod_name
+                                )))
+                            }
+                        } else {
+                            let mod_name = self.resolve_symbol(mod_symbol).unwrap();
+                            Err(RuntimeError::InvalidOperation(format!(
+                                "Модуль '{}' не найден",
+                                mod_name
+                            )))
+                        }
+                    }
 
                     _ => {
                         if let ExpressionKind::Identifier(mod_symbol) = obj_expr {
                             if let Some(target_module) = self.modules.get(&mod_symbol) {
-                                if let Some(function) = target_module.functions.get(&method) {
-                                    return self.call_function(
+                                return if let Some(function) = target_module.functions.get(&method) {
+                                    self.call_function(
                                         function.clone(),
                                         arguments,
                                         mod_symbol,
-                                    );
+                                    )
                                 } else {
                                     let m_name = self.resolve_symbol(method).unwrap();
                                     let mod_name = self.resolve_symbol(mod_symbol).unwrap();
-                                    return Err(RuntimeError::UndefinedFunction(format!(
+                                    Err(RuntimeError::UndefinedFunction(format!(
                                         "Функция '{}' не найдена в модуле '{}'",
                                         m_name, mod_name
-                                    )));
+                                    )))
                                 }
                             }
                         }
@@ -406,5 +465,21 @@ impl ExpressionEvaluator for Interpreter {
                 })
             }
         }
+    }
+
+    fn find_in_module_imports(&self, module: &crate::interpreter::structs::Module, symbol: &string_interner::DefaultSymbol) -> Option<Value> {
+        for import in &module.imports {
+            for &imp_mod_sym in &import.files {
+                if let Some(m) = self.modules.get(&imp_mod_sym) {
+                    if let Some(val) = m.globals.get(symbol) {
+                        return Some(val.clone());
+                    }
+                    if let Some(recursive_val) = self.find_in_module_imports(&m, symbol) {
+                        return Some(recursive_val);
+                    }
+                }
+            }
+        }
+        None
     }
 }

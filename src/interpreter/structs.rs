@@ -17,6 +17,7 @@ pub enum Value {
     Object(Rc<RefCell<ClassInstance>>),
     Function(Rc<FunctionDefinition>),
     Builtin(BuiltinFn),
+    Module(Symbol),
     Empty,
 }
 

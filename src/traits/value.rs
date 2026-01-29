@@ -31,6 +31,7 @@ impl Value {
             Value::Object(obj) => format!("<Объект {:p}>", Rc::as_ptr(obj)),
             Value::Function(func) => format!("<Функция {:p}>", Rc::as_ptr(func)),
             Value::Builtin(func) => format!("<Встроенная функция {:p}>", func),
+            Value::Module(_) => "<Модуль>".to_string(),
             Value::Empty => "пустота".to_string(),
         }
     }
@@ -44,6 +45,7 @@ impl Value {
             Value::Object(_) => true,
             Value::Function(_) => true,
             Value::Builtin(_) => true,
+            Value::Module(_) => true,
             Value::Empty => false,
         }
     }
@@ -115,7 +117,7 @@ impl TryFrom<Value> for bool {
             Value::Number(n) => Ok(n != 0),
             Value::Float(f) => Ok(f != 0.0 && !f.is_nan()),
             Value::Text(s) => Ok(!s.is_empty()),
-            Value::Object(_) | Value::Function(_) | Value::Builtin(_) => Ok(true),
+            Value::Object(_) | Value::Function(_) | Value::Builtin(_) | Value::Module(_) => Ok(true),
         }
     }
 }
@@ -129,6 +131,7 @@ impl PartialEq for Value {
             (Value::Boolean(a), Value::Boolean(b)) => a == b,
             (Value::Object(a), Value::Object(b)) => Rc::ptr_eq(a, b),
             (Value::Function(a), Value::Function(b)) => Rc::ptr_eq(a, b),
+            (Value::Module(a), Value::Module(b)) => a == b,
             (Value::Empty, Value::Empty) => true,
             _ => false,
         }
