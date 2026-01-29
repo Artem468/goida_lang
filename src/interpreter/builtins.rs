@@ -1,7 +1,10 @@
-use crate::interpreter::prelude::{Interpreter, RuntimeError, Value};
+use crate::Arc;
+use crate::interpreter::prelude::{BuiltinFn, Interpreter, RuntimeError, Value};
+use crate::traits::prelude::CoreOperations;
 use crate::{define_builtin, setup_builtins};
 use std::io;
 use std::io::Write;
+
 
 setup_builtins!(interpreter, {
     "печать" (arguments) {
@@ -98,8 +101,6 @@ setup_builtins!(interpreter, {
                      format!(
                          "объект \"{}\"",
                          interpreter
-                         .program
-                         .arena
                          .resolve_symbol(obj.borrow().class_name)
                          .ok_or_else(|| RuntimeError::InvalidOperation("Тип не найден".into()))?.to_string()
                      )
@@ -111,8 +112,6 @@ setup_builtins!(interpreter, {
                     format!(
                          "функция \"{}\"",
                          interpreter
-                        .program
-                        .arena
                         .resolve_symbol(obj.name)
                         .ok_or_else(|| RuntimeError::InvalidOperation("Тип не найден".into()))?.to_string()
                     )
@@ -120,6 +119,16 @@ setup_builtins!(interpreter, {
             ),
             Value::Builtin(_) => {
                 Ok(Value::Text("встроенная функция".to_string()))
+            },
+            Value::Module(sym) => {
+                Ok(Value::Text(
+                    format!(
+                        "модуль \"{}\"",
+                        interpreter
+                        .resolve_symbol(*sym)
+                        .ok_or_else(|| RuntimeError::InvalidOperation("Модуль не найден".into()))?
+                    )
+                ))
             },
             Value::Empty => {
                 Ok(Value::Text("пустота".to_string()))

@@ -1,58 +1,64 @@
-use crate::ast::prelude::{ExpressionKind, Program, StatementKind, StmtId};
-use crate::interpreter::prelude::{
-    Environment, ExpressionEvaluator, Interpreter, RuntimeError, StatementExecutor, Value,
-};
+use crate::ast::prelude::{ExpressionKind, StatementKind, StmtId};
+use crate::interpreter::prelude::{Environment, Interpreter, RuntimeError, Value};
+use crate::traits::prelude::{CoreOperations, ExpressionEvaluator, StatementExecutor};
+use string_interner::{DefaultSymbol};
 
 impl StatementExecutor for Interpreter {
     fn execute_statement(
         &mut self,
         stmt_id: StmtId,
-        program: &Program,
+        current_module_id: DefaultSymbol,
     ) -> Result<(), RuntimeError> {
-        let stmt = program.arena.get_statement(stmt_id).unwrap();
-        match &stmt.kind {
+        let stmt_kind = {
+            let module = self
+                .modules
+                .get(&current_module_id)
+                .ok_or_else(|| RuntimeError::InvalidOperation("Модуль не найден".into()))?;
+            module.arena.get_statement(stmt_id).ok_or_else(|| {
+                RuntimeError::InvalidOperation(format!("Statement {} not found", stmt_id))
+            })?.kind.clone()
+        };
+        
+        match stmt_kind {
             StatementKind::Expression(expr_id) => {
-                self.evaluate_expression(*expr_id, program)?;
+                self.evaluate_expression(expr_id, current_module_id)?;
                 Ok(())
             }
 
-            StatementKind::Assign {
-                name,
-                type_hint: _,
-                value,
-            } => {
-                let name_str = program.arena.resolve_symbol(*name).unwrap().to_string();
-                let val = self.evaluate_expression(*value, program)?;
-                self.environment.set(&name_str, val)?;
+            StatementKind::Assign { name, value, .. } => {
+                let val = self.evaluate_expression(value, current_module_id)?;
+                if let Some(module) = self.modules.get_mut(&current_module_id) {
+                    module.globals.insert(name, val);
+                } else {
+                    return Err(RuntimeError::InvalidOperation(
+                        "Текущий модуль не найден в реестре".to_string()
+                    ));
+                }
+
                 Ok(())
             }
-
-            StatementKind::IndexAssign {
-                object: _,
-                index: _,
-                value: _,
-            } => Err(RuntimeError::InvalidOperation(
-                "Индексный доступ отключён".to_string(),
-            )),
 
             StatementKind::If {
                 condition,
                 then_body,
                 else_body,
             } => {
-                let condition_value = self.evaluate_expression(*condition, program)?;
+                let condition_value = self.evaluate_expression(condition, current_module_id)?;
                 if condition_value.is_truthy() {
-                    self.execute_statement(*then_body, program)
+                    self.execute_statement(then_body, current_module_id)
                 } else if let Some(else_stmt_id) = else_body {
-                    self.execute_statement(*else_stmt_id, program)
+                    self.execute_statement(else_stmt_id, current_module_id)
                 } else {
                     Ok(())
                 }
             }
 
             StatementKind::While { condition, body } => {
-                while self.evaluate_expression(*condition, program)?.is_truthy() {
-                    self.execute_statement(*body, program)?;
+                while self
+                    .evaluate_expression(condition, current_module_id)?
+                    .is_truthy()
+                {
+                    self.execute_statement(body, current_module_id)?;
                 }
                 Ok(())
             }
@@ -64,24 +70,23 @@ impl StatementExecutor for Interpreter {
                 update,
                 body,
             } => {
-                let variable_str = program.arena.resolve_symbol(*variable).unwrap().to_string();
-
                 let parent_env = self.environment.clone();
                 self.environment = Environment::with_parent(parent_env);
 
-                let init_val = self.evaluate_expression(*init, program)?;
-                self.environment.define(variable_str.clone(), init_val);
+                let init_val = self.evaluate_expression(init, current_module_id)?;
+                self.environment.define(variable.clone(), init_val);
 
                 loop {
-                    let cond_val = self.evaluate_expression(*condition, program)?;
-                    if !cond_val.is_truthy() {
+                    if !self
+                        .evaluate_expression(condition, current_module_id)?
+                        .is_truthy()
+                    {
                         break;
                     }
+                    self.execute_statement(body, current_module_id)?;
 
-                    self.execute_statement(*body, program)?;
-
-                    let update_val = self.evaluate_expression(*update, program)?;
-                    self.environment.define(variable_str.clone(), update_val);
+                    let update_val = self.evaluate_expression(update, current_module_id)?;
+                    self.environment.define(variable.clone(), update_val);
                 }
 
                 if let Some(parent) = self.environment.parent.take() {
@@ -94,8 +99,8 @@ impl StatementExecutor for Interpreter {
                 let parent_env = self.environment.clone();
                 self.environment = Environment::with_parent(parent_env);
 
-                for &stmt_id in statements {
-                    self.execute_statement(stmt_id, program)?;
+                for s_id in statements {
+                    self.execute_statement(s_id, current_module_id)?;
                 }
 
                 if let Some(parent) = self.environment.parent.take() {
@@ -106,52 +111,53 @@ impl StatementExecutor for Interpreter {
 
             StatementKind::Return(expr) => {
                 let value = if let Some(e) = expr {
-                    self.evaluate_expression(*e, program)?
+                    self.evaluate_expression(e, current_module_id)?
                 } else {
                     Value::Empty
                 };
                 Err(RuntimeError::Return(value))
             }
 
-            StatementKind::ClassDefinition(_) => Ok(()),
-            StatementKind::FunctionDefinition(_) => Ok(()),
-
             StatementKind::PropertyAssign {
                 object,
                 property,
                 value,
             } => {
-                let property_name = program.arena.resolve_symbol(*property).unwrap().to_string();
-                let obj_expr = program.arena.get_expression(*object).unwrap();
-                let is_external = !matches!(obj_expr.kind, ExpressionKind::This);
+                let property_name = self.resolve_symbol(property).unwrap();
+                let obj_expr = {
+                    let module = self
+                        .modules
+                        .get(&current_module_id)
+                        .ok_or_else(|| RuntimeError::InvalidOperation("Модуль не найден".into()))?;
+                    module.arena.get_expression(object).unwrap().kind.clone()
+                };
+                let is_external = !matches!(obj_expr, ExpressionKind::This);
+                
+                // Проверяем, находимся ли мы внутри метода класса (this доступен в окружении)
+                let this_sym = self.intern_string("this");
+                let is_inside_method = self.environment.get(&this_sym).is_some();
+                let is_external = is_external && !is_inside_method;
 
-                let obj_value = self.evaluate_expression(*object, program)?;
-                let new_value = self.evaluate_expression(*value, program)?;
-
+                let obj_value = self.evaluate_expression(object, current_module_id)?;
+                let value_result = self.evaluate_expression(value, current_module_id)?;
+                
                 if let Value::Object(instance_ref) = obj_value {
-                    {
-                        let instance = instance_ref.borrow();
-                        if !instance.is_field_accessible(&property_name, is_external) {
-                            return Err(RuntimeError::InvalidOperation(format!(
-                                "Поле '{}' недоступно для записи",
-                                property_name
-                            )));
-                        }
+                    let mut instance = instance_ref.borrow_mut();
+                    if !(*instance).is_field_accessible(&property, is_external) {
+                        return Err(RuntimeError::InvalidOperation(format!(
+                            "Поле '{}' недоступно",
+                            property_name
+                        )));
                     }
-
-                    {
-                        let mut instance_mut = instance_ref.borrow_mut();
-                        instance_mut.set_field(property_name, new_value);
-                    }
-
+                    instance.set_field_value(property, value_result);
                     Ok(())
                 } else {
-                    Err(RuntimeError::TypeMismatch(format!(
-                        "Попытка присвоения свойства не-объектному типу: {}",
-                        obj_value
-                    )))
+                    Err(RuntimeError::TypeMismatch("Ожидался объект".into()))
                 }
             }
+
+            StatementKind::ClassDefinition(_) | StatementKind::FunctionDefinition(_) => Ok(()),
+            _ => Ok(()),
         }
     }
 }

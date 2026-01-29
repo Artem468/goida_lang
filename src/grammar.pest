@@ -5,8 +5,17 @@ COMMENT = _{ "//" ~ (!"\n" ~ ANY)* ~ NEWLINE? }
 program = { SOI ~ (NEWLINE | COMMENT)* ~ item* ~ (NEWLINE | COMMENT)* ~ EOI }
 item = _{ 
     (NEWLINE | COMMENT)* ~
-    (function | class | statement) ~
+    (import_stmt | function | class | statement) ~
     (NEWLINE | COMMENT)*
+}
+
+// === Import statements ===
+import_stmt = {
+    "подключить" ~ import_list ~ ";"
+}
+
+import_list = {
+    string_literal ~ ("," ~ string_literal)*
 }
 
 // === Functions ===
@@ -21,15 +30,20 @@ class = {
 
 class_item = _{
     class_field |
+    constructor |
     class_method
 }
 
 class_field = {
-    visibility? ~ identifier ~ ":" ~ type_name ~ "=" ~ expression ~ ";"
+    visibility? ~ identifier ~ ":" ~ type_name ~ ("=" ~ expression)? ~ ";"
+}
+
+constructor = {
+    visibility? ~ "конструктор" ~ identifier ~ "(" ~ param_list? ~ ")" ~ return_type? ~ block
 }
 
 class_method = {
-    visibility? ~ ("конструктор" | "функция") ~ identifier ~ "(" ~ param_list? ~ ")" ~ return_type? ~ block
+    visibility? ~ "функция" ~ identifier ~ "(" ~ param_list? ~ ")" ~ return_type? ~ block
 }
 
 // === Statements ===
@@ -47,9 +61,8 @@ assignment = {
     identifier ~ type_hint? ~ "=" ~ expression ~ ";"
 }
 
-// это.поле = значение
 property_assign = {
-    "это" ~ "." ~ identifier ~ "=" ~ expression ~ ";"
+    postfix ~ "=" ~ expression ~ ";"
 }
 
 if_stmt = {
@@ -167,7 +180,17 @@ primary = _{
     string_literal |
     number_literal |
     bool_literal |
+    empty_literal |
+    this_expr |
     identifier
+}
+
+this_expr = {
+    "это"
+}
+
+empty_literal = @{
+    "пустота"
 }
 
 paren_expr = {
@@ -175,7 +198,11 @@ paren_expr = {
 }
 
 new_expr = {
-    "новый" ~ identifier ~ "(" ~ arg_list? ~ ")"
+    "новый" ~ qualified_name ~ "(" ~ arg_list? ~ ")"
+}
+
+qualified_name = {
+    identifier ~ ("." ~ identifier)*
 }
 
 bool_literal = @{

@@ -1,5 +1,9 @@
-use string_interner::{DefaultSymbol as Symbol};
-use crate::ast::prelude::{AstArena, ClassDefinition, Span, StmtId, TypeId};
+use crate::ast::class::Visibility;
+use crate::ast::prelude::{ExprId, Span, StmtId, TypeId};
+use crate::interpreter::prelude::Value;
+use std::collections::HashMap;
+use std::rc::Rc;
+use string_interner::DefaultSymbol as Symbol;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct FunctionDefinition {
@@ -24,28 +28,19 @@ pub struct Import {
     pub span: Span,
 }
 
-#[derive(Debug, Clone)]
-pub struct Program {
+#[derive(Clone, PartialEq, Debug)]
+pub struct ClassDefinition {
     pub name: Symbol,
-    pub functions: Vec<FunctionDefinition>,
-    pub classes: Vec<ClassDefinition>,
-    pub statements: Vec<StmtId>,
-    pub imports: Vec<Import>,
-    pub arena: AstArena,
+    pub fields: HashMap<Symbol, (Visibility, Option<ExprId>)>,
+    pub methods: HashMap<Symbol, (Visibility, FunctionDefinition)>,
+    pub constructor: Option<FunctionDefinition>,
+    pub span: Span,
 }
 
-impl Program {
-    pub fn new(name: String) -> Self {
-        let mut arena = AstArena::new();
-        let name_symbol = arena.intern_string(&name);
-
-        Self {
-            name: name_symbol,
-            functions: Vec::new(),
-            classes: Vec::new(),
-            statements: Vec::new(),
-            imports: Vec::new(),
-            arena,
-        }
-    }
+#[derive(Clone, PartialEq, Debug)]
+pub struct ClassInstance {
+    pub class_name: Symbol,
+    pub fields: HashMap<Symbol, Option<ExprId>>,
+    pub field_values: HashMap<Symbol, Value>,  // Вычисленные значения полей
+    pub class_ref: Rc<ClassDefinition>,
 }

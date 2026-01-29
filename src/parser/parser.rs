@@ -1,20 +1,25 @@
 use crate::ast::prelude::*;
+use crate::interpreter::prelude::{Module, SharedInterner};
 use crate::parser::structs::{ParseError, Parser as ParserTrait};
 use pest::Parser;
 use pest_derive::Parser;
+use std::collections::HashMap;
+use std::path::PathBuf;
+use std::rc::Rc;
 
 #[derive(Parser)]
 #[grammar = "grammar.pest"]
 struct ProgramParser;
 
 impl ParserTrait {
-    pub fn new(name: String) -> Self {
+    pub fn new(interner: SharedInterner, name: &str, path: PathBuf) -> Self {
         Self {
-            program: Program::new(name),
+            module: Module::new(&interner, name, path),
+            interner,
         }
     }
 
-    pub fn parse(mut self, code: &str) -> Result<Program, ParseError> {
+    pub fn parse(mut self, code: &str) -> Result<Module, ParseError> {
         let pairs = ProgramParser::parse(Rule::program, code)
             .map_err(|e| ParseError::UnexpectedToken(e.to_string()))?;
 
@@ -24,47 +29,52 @@ impl ParserTrait {
                     match inner.as_rule() {
                         Rule::function => {
                             if let Some(stmt_id) = self.parse_function(inner) {
-                                self.program.statements.push(stmt_id);
+                                self.module.body.push(stmt_id);
                             }
                         }
                         Rule::class => {
                             if let Some(stmt_id) = self.parse_class(inner) {
-                                self.program.statements.push(stmt_id);
+                                self.module.body.push(stmt_id);
                             }
                         }
                         Rule::assignment => {
                             if let Some(stmt_id) = self.parse_assignment(inner) {
-                                self.program.statements.push(stmt_id);
+                                self.module.body.push(stmt_id);
                             }
                         }
                         Rule::property_assign => {
                             if let Some(stmt_id) = self.parse_property_assign(inner) {
-                                self.program.statements.push(stmt_id);
+                                self.module.body.push(stmt_id);
                             }
                         }
                         Rule::if_stmt => {
                             if let Some(stmt_id) = self.parse_if_stmt(inner) {
-                                self.program.statements.push(stmt_id);
+                                self.module.body.push(stmt_id);
                             }
                         }
                         Rule::while_stmt => {
                             if let Some(stmt_id) = self.parse_while_stmt(inner) {
-                                self.program.statements.push(stmt_id);
+                                self.module.body.push(stmt_id);
                             }
                         }
                         Rule::for_stmt => {
                             if let Some(stmt_id) = self.parse_for_stmt(inner) {
-                                self.program.statements.push(stmt_id);
+                                self.module.body.push(stmt_id);
                             }
                         }
                         Rule::return_stmt => {
                             if let Some(stmt_id) = self.parse_return_stmt(inner) {
-                                self.program.statements.push(stmt_id);
+                                self.module.body.push(stmt_id);
                             }
                         }
                         Rule::expr_stmt => {
                             if let Some(stmt_id) = self.parse_expr_stmt(inner) {
-                                self.program.statements.push(stmt_id);
+                                self.module.body.push(stmt_id);
+                            }
+                        }
+                        Rule::import_stmt => {
+                            if let Some(stmt_id) = self.parse_import_stmt(inner) {
+                                self.module.body.push(stmt_id);
                             }
                         }
                         _ => {}
@@ -73,7 +83,7 @@ impl ParserTrait {
             }
         }
 
-        Ok(self.program)
+        Ok(self.module)
     }
 
     fn parse_function(&mut self, pair: pest::iterators::Pair<Rule>) -> Option<StmtId> {
@@ -90,17 +100,21 @@ impl ParserTrait {
                 }
                 Rule::return_type => {
                     let type_str = token.into_inner().next()?.as_str().to_string();
-                    return_type = Some(self.program.arena.resolve_or_intern_type(&type_str));
+                    return_type = Some(
+                        self.module
+                            .arena
+                            .resolve_or_intern_type(&self.interner, &type_str),
+                    );
                 }
                 Rule::block => {
                     let body = self.parse_block(token)?;
                     let body_id = self
-                        .program
+                        .module
                         .arena
                         .add_statement(StatementKind::Block(body), Span::default());
-
+                    let symbol_name = self.module.arena.intern_string(&self.interner, &name);
                     let func_def = FunctionDefinition {
-                        name: self.program.arena.intern_string(&name),
+                        name: symbol_name,
                         params,
                         return_type,
                         body: body_id,
@@ -108,8 +122,8 @@ impl ParserTrait {
                         module: None,
                     };
 
-                    self.program.functions.push(func_def.clone());
-                    let stmt_id = self.program.arena.add_statement(
+                    self.module.functions.insert(symbol_name, func_def.clone());
+                    let stmt_id = self.module.arena.add_statement(
                         StatementKind::FunctionDefinition(func_def),
                         Span::default(),
                     );
@@ -125,35 +139,78 @@ impl ParserTrait {
         let mut inner = pair.into_inner();
         let name = inner.next()?.as_str().to_string();
 
-        let mut fields = Vec::new();
-        let mut methods = Vec::new();
-
+        let mut fields = HashMap::new();
+        let mut methods = HashMap::new();
+        let mut constructor = None;
         while let Some(token) = inner.next() {
             match token.as_rule() {
                 Rule::class_field => {
                     if let Some(field) = self.parse_class_field(token) {
-                        fields.push(field);
+                        fields.insert(field.name, (field.visibility, field.default_value));
+                    }
+                }
+                Rule::constructor => {
+                    if let Some(mut method) = self.parse_constructor(token) {
+                        method.is_constructor = true;
+                        constructor = Some(FunctionDefinition {
+                            name: method.name,
+                            params: method.params.clone(),
+                            return_type: method.return_type,
+                            body: method.body,
+                            span: method.span,
+                            module: None,
+                        });
+                        methods.insert(
+                            method.name,
+                            (
+                                method.visibility,
+                                FunctionDefinition {
+                                    name: method.name,
+                                    params: method.params,
+                                    return_type: method.return_type,
+                                    body: method.body,
+                                    span: method.span,
+                                    module: None,
+                                },
+                            ),
+                        );
                     }
                 }
                 Rule::class_method => {
                     if let Some(method) = self.parse_class_method(token) {
-                        methods.push(method);
-                    }
+                        methods.insert(
+                            method.name,
+                            (
+                                method.visibility,
+                                FunctionDefinition {
+                                    name: method.name,
+                                    params: method.params,
+                                    return_type: method.return_type,
+                                    body: method.body,
+                                    span: method.span,
+                                    module: None,
+                                },
+                            ),
+                        );
+                    };
                 }
                 _ => {}
             }
         }
-
+        let symbol_name = self.module.arena.intern_string(&self.interner, &name);
         let class_def = ClassDefinition {
-            name: self.program.arena.intern_string(&name),
+            name: symbol_name,
             fields,
             methods,
             span: Span::default(),
+            constructor,
         };
 
-        self.program.classes.push(class_def.clone());
+        self.module
+            .classes
+            .insert(symbol_name, Rc::from(class_def.clone()));
         let stmt_id = self
-            .program
+            .module
             .arena
             .add_statement(StatementKind::ClassDefinition(class_def), Span::default());
         Some(stmt_id)
@@ -179,7 +236,11 @@ impl ParserTrait {
                     field_name = token.as_str().to_string();
                 }
                 Rule::type_name => {
-                    field_type = Some(self.program.arena.resolve_or_intern_type(token.as_str()));
+                    field_type = Some(
+                        self.module
+                            .arena
+                            .resolve_or_intern_type(&self.interner, token.as_str()),
+                    );
                 }
                 Rule::expression => {
                     default_value = Some(self.parse_expression(token)?);
@@ -189,7 +250,7 @@ impl ParserTrait {
         }
 
         Some(ClassField {
-            name: self.program.arena.intern_string(&field_name),
+            name: self.module.arena.intern_string(&self.interner, &field_name),
             field_type,
             visibility,
             default_value,
@@ -197,10 +258,9 @@ impl ParserTrait {
         })
     }
 
-    fn parse_class_method(&mut self, pair: pest::iterators::Pair<Rule>) -> Option<ClassMethod> {
+    fn parse_constructor(&mut self, pair: pest::iterators::Pair<Rule>) -> Option<ClassMethod> {
         let mut inner = pair.into_inner();
         let mut visibility = Visibility::Private;
-        let mut is_constructor = false;
         let mut method_name = String::new();
         let mut params = Vec::new();
         let mut return_type = None;
@@ -223,31 +283,91 @@ impl ParserTrait {
                 }
                 Rule::return_type => {
                     let type_str = token.into_inner().next()?.as_str().to_string();
-                    return_type = Some(self.program.arena.resolve_or_intern_type(&type_str));
+                    return_type = Some(
+                        self.module
+                            .arena
+                            .resolve_or_intern_type(&self.interner, &type_str),
+                    );
                 }
                 Rule::block => {
                     let block_stmts = self.parse_block(token)?;
                     body = Some(
-                        self.program
+                        self.module
                             .arena
                             .add_statement(StatementKind::Block(block_stmts), Span::default()),
                     );
                 }
-                _ => {
-                    if token.as_str() == "конструктор" {
-                        is_constructor = true;
-                    }
-                }
+                _ => {}
             }
         }
 
         Some(ClassMethod {
-            name: self.program.arena.intern_string(&method_name),
+            name: self
+                .module
+                .arena
+                .intern_string(&self.interner, &method_name),
             params,
             return_type,
             body: body?,
             visibility,
-            is_constructor,
+            is_constructor: false,
+            span: Span::default(),
+        })
+    }
+
+    fn parse_class_method(&mut self, pair: pest::iterators::Pair<Rule>) -> Option<ClassMethod> {
+        let mut inner = pair.into_inner();
+        let mut visibility = Visibility::Private;
+        let mut method_name = String::new();
+        let mut params = Vec::new();
+        let mut return_type = None;
+        let mut body = None;
+
+        while let Some(token) = inner.next() {
+            match token.as_rule() {
+                Rule::visibility => {
+                    visibility = if token.as_str() == "публичный" {
+                        Visibility::Public
+                    } else {
+                        Visibility::Private
+                    };
+                }
+                Rule::identifier => {
+                    method_name = token.as_str().to_string();
+                }
+                Rule::param_list => {
+                    params = self.parse_param_list(token);
+                }
+                Rule::return_type => {
+                    let type_str = token.into_inner().next()?.as_str().to_string();
+                    return_type = Some(
+                        self.module
+                            .arena
+                            .resolve_or_intern_type(&self.interner, &type_str),
+                    );
+                }
+                Rule::block => {
+                    let block_stmts = self.parse_block(token)?;
+                    body = Some(
+                        self.module
+                            .arena
+                            .add_statement(StatementKind::Block(block_stmts), Span::default()),
+                    );
+                }
+                _ => {}
+            }
+        }
+
+        Some(ClassMethod {
+            name: self
+                .module
+                .arena
+                .intern_string(&self.interner, &method_name),
+            params,
+            return_type,
+            body: body?,
+            visibility,
+            is_constructor: false,
             span: Span::default(),
         })
     }
@@ -264,13 +384,17 @@ impl ParserTrait {
                     .unwrap_or_default();
                 let param_type = if let Some(type_pair) = param_inner.next() {
                     let type_str = type_pair.as_str().to_string();
-                    self.program.arena.resolve_or_intern_type(&type_str)
+                    self.module
+                        .arena
+                        .resolve_or_intern_type(&self.interner, &type_str)
                 } else {
-                    self.program.arena.resolve_or_intern_type("неизвестно")
+                    self.module
+                        .arena
+                        .resolve_or_intern_type(&self.interner, "неизвестно")
                 };
 
                 params.push(Parameter {
-                    name: self.program.arena.intern_string(&name),
+                    name: self.module.arena.intern_string(&self.interner, &name),
                     param_type,
                     span: Span::default(),
                 });
@@ -330,7 +454,7 @@ impl ParserTrait {
     fn parse_assignment(&mut self, pair: pest::iterators::Pair<Rule>) -> Option<StmtId> {
         let mut inner = pair.into_inner();
         let name_str = inner.next()?.as_str().to_string();
-        let name = self.program.arena.intern_string(&name_str);
+        let name = self.module.arena.intern_string(&self.interner, &name_str);
 
         let mut type_hint = None;
         let mut value = None;
@@ -339,7 +463,11 @@ impl ParserTrait {
             match token.as_rule() {
                 Rule::type_hint => {
                     let type_str = token.into_inner().next()?.as_str().to_string();
-                    type_hint = Some(self.program.arena.resolve_or_intern_type(&type_str));
+                    type_hint = Some(
+                        self.module
+                            .arena
+                            .resolve_or_intern_type(&self.interner, &type_str),
+                    );
                 }
                 Rule::expression => {
                     value = self.parse_expression(token);
@@ -348,7 +476,7 @@ impl ParserTrait {
             }
         }
 
-        let stmt_id = self.program.arena.add_statement(
+        let stmt_id = self.module.arena.add_statement(
             StatementKind::Assign {
                 name,
                 type_hint,
@@ -361,27 +489,30 @@ impl ParserTrait {
 
     fn parse_property_assign(&mut self, pair: pest::iterators::Pair<Rule>) -> Option<StmtId> {
         let mut inner = pair.into_inner();
-        inner.next()?; // "это"
-        inner.next()?; // "."
-        let prop_name_str = inner.next()?.as_str().to_string();
-        let prop_name = self.program.arena.intern_string(&prop_name_str);
-        inner.next()?; // "="
-        let value_expr = self.parse_expression(inner.next()?)?;
 
-        let this_expr = self
-            .program
-            .arena
-            .add_expression(ExpressionKind::This, Span::default());
+        let postfix_pair = inner.next()?;
+        let postfix_expr = self.parse_postfix(postfix_pair)?;
 
-        let stmt_id = self.program.arena.add_statement(
-            StatementKind::PropertyAssign {
-                object: this_expr,
-                property: prop_name,
-                value: value_expr,
-            },
-            Span::default(),
-        );
-        Some(stmt_id)
+        if let ExpressionKind::PropertyAccess { object, property } =
+            &self.module.arena.expressions[postfix_expr as usize].kind
+        {
+            let object = *object;
+            let property = *property;
+
+            let value_expr = self.parse_expression(inner.next()?)?;
+
+            let stmt_id = self.module.arena.add_statement(
+                StatementKind::PropertyAssign {
+                    object,
+                    property,
+                    value: value_expr,
+                },
+                Span::default(),
+            );
+            Some(stmt_id)
+        } else {
+            None
+        }
     }
 
     fn parse_if_stmt(&mut self, pair: pest::iterators::Pair<Rule>) -> Option<StmtId> {
@@ -391,7 +522,7 @@ impl ParserTrait {
 
         let then_block = self.parse_block(inner.next()?)?;
         let then_body = self
-            .program
+            .module
             .arena
             .add_statement(StatementKind::Block(then_block), Span::default());
 
@@ -400,7 +531,7 @@ impl ParserTrait {
         if let Some(else_clause) = inner.next() {
             if else_clause.as_rule() == Rule::else_clause {
                 let mut clause_inner = else_clause.into_inner();
-                
+
                 if let Some(else_content) = clause_inner.next() {
                     match else_content.as_rule() {
                         Rule::else_if_clause => {
@@ -410,11 +541,11 @@ impl ParserTrait {
                         }
                         Rule::block => {
                             let else_block = self.parse_block(else_content)?;
-                            else_body = Some(
-                                self.program
-                                    .arena
-                                    .add_statement(StatementKind::Block(else_block), Span::default()),
-                            );
+                            else_body =
+                                Some(self.module.arena.add_statement(
+                                    StatementKind::Block(else_block),
+                                    Span::default(),
+                                ));
                         }
                         _ => {}
                     }
@@ -422,7 +553,7 @@ impl ParserTrait {
             }
         }
 
-        let stmt_id = self.program.arena.add_statement(
+        let stmt_id = self.module.arena.add_statement(
             StatementKind::If {
                 condition,
                 then_body,
@@ -440,12 +571,12 @@ impl ParserTrait {
 
         let block_stmts = self.parse_block(inner.next()?)?;
         let body = self
-            .program
+            .module
             .arena
             .add_statement(StatementKind::Block(block_stmts), Span::default());
 
         let stmt_id = self
-            .program
+            .module
             .arena
             .add_statement(StatementKind::While { condition, body }, Span::default());
         Some(stmt_id)
@@ -457,7 +588,10 @@ impl ParserTrait {
         let for_init = inner.next()?;
         let mut init_inner = for_init.into_inner();
         let variable_str = init_inner.next()?.as_str().to_string();
-        let variable = self.program.arena.intern_string(&variable_str);
+        let variable = self
+            .module
+            .arena
+            .intern_string(&self.interner, &variable_str);
         let init_expr = self.parse_expression(init_inner.next()?)?;
 
         let for_cond_token = inner.next()?;
@@ -477,9 +611,9 @@ impl ParserTrait {
                 let op_str = ca_inner.next()?.as_str().to_string();
                 let val_expr = self.parse_expression(ca_inner.next()?)?;
 
-                let var_sym = self.program.arena.intern_string(&var_str);
+                let var_sym = self.module.arena.intern_string(&self.interner, &var_str);
                 let var_expr = self
-                    .program
+                    .module
                     .arena
                     .add_expression(ExpressionKind::Identifier(var_sym), Span::default());
 
@@ -491,7 +625,7 @@ impl ParserTrait {
                     _ => BinaryOperator::Add,
                 };
 
-                self.program.arena.add_expression(
+                self.module.arena.add_expression(
                     ExpressionKind::Binary {
                         left: var_expr,
                         op: bin_op,
@@ -511,11 +645,11 @@ impl ParserTrait {
 
         let block_stmts = self.parse_block(inner.next()?)?;
         let body = self
-            .program
+            .module
             .arena
             .add_statement(StatementKind::Block(block_stmts), Span::default());
 
-        let stmt_id = self.program.arena.add_statement(
+        let stmt_id = self.module.arena.add_statement(
             StatementKind::For {
                 variable,
                 init: init_expr,
@@ -527,7 +661,7 @@ impl ParserTrait {
         );
         Some(stmt_id)
     }
-    
+
     fn parse_return_stmt(&mut self, pair: pest::iterators::Pair<Rule>) -> Option<StmtId> {
         let inner = pair.into_inner();
 
@@ -540,10 +674,36 @@ impl ParserTrait {
         }
 
         let stmt_id = self
-            .program
+            .module
             .arena
             .add_statement(StatementKind::Return(expr), Span::default());
         Some(stmt_id)
+    }
+
+    fn parse_import_stmt(&mut self, pair: pest::iterators::Pair<Rule>) -> Option<StmtId> {
+        let inner = pair.into_inner();
+
+        for token in inner {
+            if token.as_rule() == Rule::import_list {
+                let mut imports = Import {
+                    files: vec![],
+                    span: Default::default(),
+                };
+                for module in token.into_inner() {
+                    let mut chars = module.as_str().chars();
+                    chars.next();
+                    chars.next_back();
+
+                    imports.files.push(
+                        self.module
+                            .arena
+                            .intern_string(&self.interner, chars.as_str()),
+                    );
+                }
+                self.module.imports.push(imports);
+            }
+        }
+        None
     }
 
     fn parse_expr_stmt(&mut self, pair: pest::iterators::Pair<Rule>) -> Option<StmtId> {
@@ -553,7 +713,7 @@ impl ParserTrait {
             if token.as_rule() == Rule::expression {
                 let expr = self.parse_expression(token)?;
                 let stmt_id = self
-                    .program
+                    .module
                     .arena
                     .add_statement(StatementKind::Expression(expr), Span::default());
                 return Some(stmt_id);
@@ -579,7 +739,7 @@ impl ParserTrait {
         while let Some(token) = inner.next() {
             if token.as_str() == "или" {
                 let right = self.parse_logical_and(inner.next()?)?;
-                left = self.program.arena.add_expression(
+                left = self.module.arena.add_expression(
                     ExpressionKind::Binary {
                         op: BinaryOperator::Or,
                         left,
@@ -600,7 +760,7 @@ impl ParserTrait {
         while let Some(token) = inner.next() {
             if token.as_str() == "и" {
                 let right = self.parse_comparison(inner.next()?)?;
-                left = self.program.arena.add_expression(
+                left = self.module.arena.add_expression(
                     ExpressionKind::Binary {
                         op: BinaryOperator::And,
                         left,
@@ -631,7 +791,7 @@ impl ParserTrait {
                         _ => return None,
                     };
                     let right = self.parse_addition(inner.next()?)?;
-                    left = self.program.arena.add_expression(
+                    left = self.module.arena.add_expression(
                         ExpressionKind::Binary { op, left, right },
                         Span::default(),
                     );
@@ -656,7 +816,7 @@ impl ParserTrait {
                         _ => return None,
                     };
                     let right = self.parse_multiplication(inner.next()?)?;
-                    left = self.program.arena.add_expression(
+                    left = self.module.arena.add_expression(
                         ExpressionKind::Binary { op, left, right },
                         Span::default(),
                     );
@@ -682,7 +842,7 @@ impl ParserTrait {
                         _ => return None,
                     };
                     let right = self.parse_unary(inner.next()?)?;
-                    left = self.program.arena.add_expression(
+                    left = self.module.arena.add_expression(
                         ExpressionKind::Binary { op, left, right },
                         Span::default(),
                     );
@@ -710,7 +870,7 @@ impl ParserTrait {
                 Rule::postfix => {
                     let mut expr = self.parse_postfix(token)?;
                     if let Some(op) = unary_op {
-                        expr = self.program.arena.add_expression(
+                        expr = self.module.arena.add_expression(
                             ExpressionKind::Unary { op, operand: expr },
                             Span::default(),
                         );
@@ -742,7 +902,7 @@ impl ParserTrait {
                         }
                     }
 
-                    expr = self.program.arena.add_expression(
+                    expr = self.module.arena.add_expression(
                         ExpressionKind::FunctionCall {
                             function: expr,
                             args,
@@ -753,7 +913,10 @@ impl ParserTrait {
                 Rule::method_call => {
                     let mut method_inner = token.into_inner();
                     let method_name_str = method_inner.next()?.as_str().to_string();
-                    let method_name = self.program.arena.intern_string(&method_name_str);
+                    let method_name = self
+                        .module
+                        .arena
+                        .intern_string(&self.interner, &method_name_str);
 
                     let mut args = Vec::new();
                     if let Some(arg_list) = method_inner.next() {
@@ -766,7 +929,7 @@ impl ParserTrait {
                         }
                     }
 
-                    expr = self.program.arena.add_expression(
+                    expr = self.module.arena.add_expression(
                         ExpressionKind::MethodCall {
                             object: expr,
                             method: method_name,
@@ -777,8 +940,11 @@ impl ParserTrait {
                 }
                 Rule::property_access => {
                     let prop_name_str = token.into_inner().next()?.as_str().to_string();
-                    let prop_name = self.program.arena.intern_string(&prop_name_str);
-                    expr = self.program.arena.add_expression(
+                    let prop_name = self
+                        .module
+                        .arena
+                        .intern_string(&self.interner, &prop_name_str);
+                    expr = self.module.arena.add_expression(
                         ExpressionKind::PropertyAccess {
                             object: expr,
                             property: prop_name,
@@ -788,7 +954,7 @@ impl ParserTrait {
                 }
                 Rule::index_access => {
                     let index_expr = self.parse_expression(token.into_inner().next()?)?;
-                    expr = self.program.arena.add_expression(
+                    expr = self.module.arena.add_expression(
                         ExpressionKind::Index {
                             object: expr,
                             index: index_expr,
@@ -812,8 +978,24 @@ impl ParserTrait {
             }
             Rule::new_expr => {
                 let mut inner = pair.into_inner();
-                let class_name_str = inner.next()?.as_str().to_string();
-                let class_name = self.program.arena.intern_string(&class_name_str);
+                let qualified_name_pair = inner.next()?;
+
+                let class_name_str = if qualified_name_pair.as_rule() == Rule::qualified_name {
+                    let mut parts = Vec::new();
+                    for ident in qualified_name_pair.into_inner() {
+                        if ident.as_rule() == Rule::identifier {
+                            parts.push(ident.as_str().to_string());
+                        }
+                    }
+                    parts.join(".")
+                } else {
+                    qualified_name_pair.as_str().to_string()
+                };
+
+                let class_name = self
+                    .module
+                    .arena
+                    .intern_string(&self.interner, &class_name_str);
 
                 let mut args = Vec::new();
                 if let Some(arg_list) = inner.next() {
@@ -826,7 +1008,7 @@ impl ParserTrait {
                     }
                 }
 
-                Some(self.program.arena.add_expression(
+                Some(self.module.arena.add_expression(
                     ExpressionKind::ObjectCreation { class_name, args },
                     Span::default(),
                 ))
@@ -834,8 +1016,8 @@ impl ParserTrait {
             Rule::string_literal => {
                 let s = pair.as_str();
                 let trimmed = &s[1..s.len() - 1];
-                let text_symbol = self.program.arena.intern_string(trimmed);
-                Some(self.program.arena.add_expression(
+                let text_symbol = self.module.arena.intern_string(&self.interner, trimmed);
+                Some(self.module.arena.add_expression(
                     ExpressionKind::Literal(LiteralValue::Text(text_symbol)),
                     Span::default(),
                 ))
@@ -844,7 +1026,7 @@ impl ParserTrait {
                 let s = pair.as_str();
                 if s.contains('.') {
                     if let Ok(num) = s.parse::<f64>() {
-                        Some(self.program.arena.add_expression(
+                        Some(self.module.arena.add_expression(
                             ExpressionKind::Literal(LiteralValue::Float(num)),
                             Span::default(),
                         ))
@@ -853,7 +1035,7 @@ impl ParserTrait {
                     }
                 } else {
                     if let Ok(num) = s.parse::<i64>() {
-                        Some(self.program.arena.add_expression(
+                        Some(self.module.arena.add_expression(
                             ExpressionKind::Literal(LiteralValue::Number(num)),
                             Span::default(),
                         ))
@@ -864,9 +1046,9 @@ impl ParserTrait {
             }
             Rule::identifier => {
                 let name_str = pair.as_str().to_string();
-                let name = self.program.arena.intern_string(&name_str);
+                let name = self.module.arena.intern_string(&self.interner, &name_str);
                 Some(
-                    self.program
+                    self.module
                         .arena
                         .add_expression(ExpressionKind::Identifier(name), Span::default()),
                 )
@@ -874,11 +1056,21 @@ impl ParserTrait {
             Rule::bool_literal => {
                 let s = pair.as_str();
                 let boolean_val = s == "истина";
-                Some(self.program.arena.add_expression(
+                Some(self.module.arena.add_expression(
                     ExpressionKind::Literal(LiteralValue::Boolean(boolean_val)),
                     Span::default(),
                 ))
             }
+            Rule::empty_literal => Some(
+                self.module
+                    .arena
+                    .add_expression(ExpressionKind::Literal(LiteralValue::Unit), Span::default()),
+            ),
+            Rule::this_expr => Some(
+                self.module
+                    .arena
+                    .add_expression(ExpressionKind::This, Span::default()),
+            ),
             _ => None,
         }
     }

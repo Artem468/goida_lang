@@ -1,8 +1,9 @@
-use crate::ast::prelude::Program;
+use crate::interpreter::prelude::{Module, SharedInterner};
 
 #[derive(Debug)]
 pub struct Parser {
-    pub(crate) program: Program
+    pub(crate) module: Module,
+    pub(crate) interner: SharedInterner,
 }
 
 #[derive(Debug)]
