@@ -18,6 +18,9 @@ pub enum Value {
     Function(Rc<FunctionDefinition>),
     Builtin(BuiltinFn),
     Module(Symbol),
+    List(Rc<RefCell<Vec<Value>>>),
+    Array(Rc<Vec<Value>>),
+    Dict(Rc<RefCell<HashMap<String, Value>>>),
     Empty,
 }
 
