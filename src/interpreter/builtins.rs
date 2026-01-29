@@ -149,13 +149,10 @@ setup_builtins!(interpreter, {
     }
 
     "список" (arguments) -> Result<Value, RuntimeError> {
-        use std::rc::Rc;
-        use std::cell::RefCell;
         Ok(Value::List(Rc::new(RefCell::new(arguments))))
     }
 
     "массив" (arguments) -> Result<Value, RuntimeError> {
-        use std::rc::Rc;
         Ok(Value::Array(Rc::new(arguments)))
     }
 
