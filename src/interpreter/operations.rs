@@ -1,3 +1,5 @@
+use std::cell::RefCell;
+use std::rc::Rc;
 use crate::interpreter::structs::{Interpreter, RuntimeError, Value};
 use crate::traits::prelude::ValueOperations;
 
@@ -18,6 +20,23 @@ impl ValueOperations for Interpreter {
                 if *a { "истина" } else { "ложь" },
                 b
             ))),
+            (Value::List(a), Value::List(b)) => {
+                let mut new_vec = a.borrow().clone();
+                new_vec.extend_from_slice(&b.borrow());
+                Ok(Value::List(Rc::new(RefCell::new(new_vec))))
+            },
+            (Value::Dict(a), Value::Dict(b)) => {
+                let mut new_dict = a.borrow().clone();
+                for (k, v) in b.borrow().iter() {
+                    new_dict.insert(k.clone(), v.clone());
+                }
+                Ok(Value::Dict(Rc::new(RefCell::new(new_dict))))
+            },
+            (Value::Array(a), Value::Array(b)) => {
+                let mut new_vec = (**a).clone();
+                new_vec.extend_from_slice(b);
+                Ok(Value::Array(Rc::new(new_vec)))
+            },
             _ => Err(RuntimeError::TypeMismatch(
                 "Неподдерживаемые типы для операции сложения".to_string(),
             )),
