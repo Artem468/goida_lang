@@ -7,6 +7,7 @@ use std::cell::RefCell;
 use std::fmt::Debug;
 use std::sync::{Arc, RwLock};
 use string_interner::{DefaultSymbol as Symbol, StringInterner};
+use string_interner::backend::StringBackend;
 
 #[derive(Clone, Debug)]
 pub enum Value {
@@ -48,7 +49,7 @@ pub struct Environment {
     pub(crate) parent: Option<Box<Environment>>,
 }
 
-pub type SharedInterner = Arc<RwLock<StringInterner>>;
+pub type SharedInterner = Arc<RwLock<StringInterner<StringBackend>>>;
 
 #[derive(Debug)]
 pub struct Interpreter {

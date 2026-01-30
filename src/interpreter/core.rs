@@ -2,11 +2,11 @@ use crate::interpreter::prelude::{Environment, SharedInterner};
 use crate::interpreter::structs::{Interpreter, Module, RuntimeError, Value};
 use crate::parser::prelude::ParserStructs;
 use crate::traits::prelude::{CoreOperations, InterpreterClasses, StatementExecutor};
-use crate::ast::program::ClassDefinition;
 use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::Arc;
 use string_interner::DefaultSymbol as Symbol;
+
 impl CoreOperations for Interpreter {
     fn new(main_module: Module, interner: SharedInterner) -> Self {
         let mut modules = HashMap::new();
@@ -52,6 +52,21 @@ impl CoreOperations for Interpreter {
         }
 
         Ok(())
+    }
+
+    fn resolve_symbol(&self, symbol: Symbol) -> Option<String> {
+        self.interner
+            .read()
+            .expect("interner lock poisoned")
+            .resolve(symbol)
+            .map(|s| s.to_string())
+    }
+
+    fn intern_string(&self, s: &str) -> Symbol {
+        self.interner
+            .write()
+            .expect("interner lock poisoned")
+            .get_or_intern(s)
     }
 
     fn load_imports(&mut self, module: &Module) -> Result<(), RuntimeError> {
@@ -122,8 +137,8 @@ impl CoreOperations for Interpreter {
                             }
                         }
                     }
-                    Err(err) => {
-                        println!("{:#?}", err);
+                    Err(_) => {
+                        return Err(RuntimeError::InvalidOperation(format!("Не удалось спарсить файл импортироваемого модуля -> {path}")));
                     }
                 }
             }
@@ -143,43 +158,5 @@ impl CoreOperations for Interpreter {
             }
         }
         Ok(result)
-    }
-
-    fn resolve_symbol(&self, symbol: Symbol) -> Option<String> {
-        self.interner
-            .read()
-            .expect("interner lock poisoned")
-            .resolve(symbol)
-            .map(|s| s.to_string())
-    }
-
-    fn intern_string(&self, s: &str) -> Symbol {
-        self.interner
-            .write()
-            .expect("interner lock poisoned")
-            .get_or_intern(s)
-    }
-}
-
-impl Interpreter {
-    fn set_class_module(&self, class_def: Rc<ClassDefinition>, module: Symbol) -> Rc<ClassDefinition> {
-        let mut methods = HashMap::new();
-        for (method_name, (visibility, method_def)) in &class_def.methods {
-            let mut updated_method = method_def.clone();
-            updated_method.module = Some(module);
-            methods.insert(*method_name, (visibility.clone(), updated_method));
-        }
-
-        Rc::new(ClassDefinition {
-            name: class_def.name,
-            fields: class_def.fields.clone(),
-            methods,
-            constructor: class_def.constructor.as_ref().map(|constructor| {
-                let mut updated_constructor = constructor.clone();
-                updated_constructor.module = Some(module);
-                updated_constructor
-            }),
-            span: class_def.span,
-        })
     }
 }

@@ -1,8 +1,6 @@
 use crate::ast::prelude::{ClassDefinition, ExprId, FunctionDefinition, Visibility};
 use crate::interpreter::prelude::{ClassInstance, Environment, Interpreter, RuntimeError, Value};
-use crate::traits::prelude::{
-    CoreOperations, InterpreterClasses, StatementExecutor,
-};
+use crate::traits::prelude::{CoreOperations, InterpreterClasses, StatementExecutor};
 use std::collections::HashMap;
 use std::rc::Rc;
 use string_interner::DefaultSymbol as Symbol;
@@ -40,7 +38,9 @@ impl InterpreterClasses for Interpreter {
         if arguments.len() != method.params.len() {
             self.environment = local_env;
             let _ = std::mem::replace(&mut self.environment, previous_env);
-            return Err(RuntimeError::InvalidOperation("Неверное кол-во аргументов".into()));
+            return Err(RuntimeError::InvalidOperation(
+                "Неверное кол-во аргументов".into(),
+            ));
         }
 
         for (param, arg_value) in method.params.iter().zip(arguments.iter()) {
@@ -61,6 +61,31 @@ impl InterpreterClasses for Interpreter {
 
         self.environment = previous_env;
         Ok(result)
+    }
+
+    fn set_class_module(
+        &self,
+        class_def: Rc<ClassDefinition>,
+        module: Symbol,
+    ) -> Rc<ClassDefinition> {
+        let mut methods = HashMap::new();
+        for (method_name, (visibility, method_def)) in &class_def.methods {
+            let mut updated_method = method_def.clone();
+            updated_method.module = Some(module);
+            methods.insert(*method_name, (visibility.clone(), updated_method));
+        }
+
+        Rc::new(ClassDefinition {
+            name: class_def.name,
+            fields: class_def.fields.clone(),
+            methods,
+            constructor: class_def.constructor.as_ref().map(|constructor| {
+                let mut updated_constructor = constructor.clone();
+                updated_constructor.module = Some(module);
+                updated_constructor
+            }),
+            span: class_def.span,
+        })
     }
 }
 

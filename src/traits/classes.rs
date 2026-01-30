@@ -16,4 +16,10 @@ pub trait InterpreterClasses {
         this_obj: Value,
         current_module_id: Symbol,
     ) -> Result<Value, RuntimeError>;
+
+    fn set_class_module(
+        &self,
+        class_def: Rc<ClassDefinition>,
+        module: Symbol,
+    ) -> Rc<ClassDefinition>;
 }
