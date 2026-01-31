@@ -376,8 +376,8 @@ setup_builtins!(interpreter, {
                     Ok(old)
                 } else {
                     Err(RuntimeError::InvalidOperation(ErrorData::new(
-                span,
-                "Индекс за границами списка".to_string())))
+                    span,
+                    "Индекс за границами списка".to_string())))
                 }
             }
             Value::Dict(dict) => {
