@@ -4,6 +4,7 @@ mod macros;
 mod parser;
 mod traits;
 
+use crate::ast::prelude::{ErrorData, Span};
 use crate::parser::prelude::{ParseError, Parser as ProgramParser};
 use ariadne::{Color, Label, Report, ReportKind, Source};
 use clap::{Parser, Subcommand};
@@ -39,8 +40,7 @@ fn main() {
 
     match &cli.command {
         Some(Commands::Run { file }) => {
-            if let Err(e) = run_file(file) {
-                eprintln!("{}", e);
+            if let Err(_) = run_file(file) {
                 std::process::exit(1);
             }
         }
@@ -57,11 +57,34 @@ fn main() {
     }
 }
 
-fn run_file(filename: &str) -> Result<(), Box<dyn std::error::Error>> {
-    let content = fs::read_to_string(filename)
-        .map_err(|e| format!("Не удалось прочитать файл '{}': {}", filename, e))?;
+fn run_file(filename: &str) -> Result<(), (String, ErrorData)> {
+    let content = fs::read_to_string(filename).map_err(|e| {
+        (
+            format!("Не удалось прочитать файл '{}': {}", filename, e),
+            ErrorData::new(
+                Span::default(),
+                format!("Не удалось прочитать файл '{}': {}", filename, e),
+            ),
+        )
+    })?;
 
-    execute_code(&content, filename)
+    match execute_code(&content, filename) {
+        Ok(_) => Ok(()),
+        Err((msg, error)) => {
+            let _res = Err((msg.clone(), error.clone()));
+            Report::build(ReportKind::Error, error.location.as_ariadne(filename, content.as_str()))
+                .with_message(msg)
+                .with_label(
+                    Label::new(error.location.as_ariadne(filename, content.as_str()))
+                        .with_message(error.message)
+                        .with_color(Color::Red),
+                )
+                .finish()
+                .print((filename, Source::from(content)))
+                .expect("Can't build report message");
+            _res
+        }
+    }
 }
 
 fn run_repl() {
@@ -88,10 +111,9 @@ fn run_repl() {
                 if let Err(e) = execute_code_with_interpreter(
                     input,
                     "main",
-                    "main",
                     env::current_dir().expect("Не удалось получить текущую директорию"),
                 ) {
-                    eprintln!("Ошибка: {}", e);
+                    eprintln!("Ошибка: {}", e.0);
                 }
             }
             Err(e) => {
@@ -102,19 +124,18 @@ fn run_repl() {
     }
 }
 
-fn execute_code(code: &str, filename: &str) -> Result<(), Box<dyn std::error::Error>> {
+fn execute_code(code: &str, filename: &str) -> Result<(), (String, ErrorData)> {
     let _path = PathBuf::from(filename);
     let _path_clone = _path.clone();
     let file_stem = _path.file_stem().and_then(|s| s.to_str()).unwrap();
-    execute_code_with_interpreter(code, _path.to_str().unwrap(), file_stem, _path_clone)
+    execute_code_with_interpreter(code, file_stem, _path_clone)
 }
 
 fn execute_code_with_interpreter(
     code: &str,
-    path: &str,
     filename: &str,
     path_buf: PathBuf,
-) -> Result<(), Box<dyn std::error::Error>> {
+) -> Result<(), (String, ErrorData)> {
     let interner = Arc::new(RwLock::new(StringInterner::new()));
 
     let parser = ProgramParser::new(Arc::clone(&interner), filename, path_buf);
@@ -122,54 +143,44 @@ fn execute_code_with_interpreter(
         Ok(program) => {
             let mut interpreter = Interpreter::new(program.clone(), Arc::clone(&interner));
             interpreter.define_builtins();
-            interpreter.interpret(program).map_err(|e| {
-                let (msg, error) = match e {
-                    RuntimeError::UndefinedVariable(err) => (
-                        format!("Неопределенная переменная: {}", err.message), err
-                    ),
-                    RuntimeError::UndefinedFunction(err) => (
-                        format!("Неопределенная функция: {}", err.message), err
-                    ),
-                    RuntimeError::UndefinedMethod(err) => (format!("Неопределенный метод: {}", err.message), err),
-                    RuntimeError::TypeMismatch(err) => (format!("Несоответствие типов: {}", err.message), err),
-                    RuntimeError::DivisionByZero(err) => ("Деление на ноль".to_string(), err),
-                    RuntimeError::InvalidOperation(err) => (format!("Недопустимая операция: {}", err.message), err),
-                    RuntimeError::IOError(err) => (format!("Ошибка чтения файла: {}", err.message), err),
-                    RuntimeError::TypeError(err) => (format!("Недопустимый тип данных: {}", err.message), err),
-                    RuntimeError::Return(err, ..) => ("Неожиданный return".to_string(), err),
-                    RuntimeError::ImportError(err) => {
-                        let (msg, error) = match err {
-                            ParseError::UnexpectedToken(e) => ("Ошибка синтаксиса", e),
-                            ParseError::TypeError(e) => ("Ошибка типов", e),
-                        };
-                        (msg.to_string(), error)
-                    }
-                };
-                Report::build(ReportKind::Error, (filename, error.location.clone()))
-                    .with_message(msg)
-                    .with_label(
-                        Label::new((filename, error.location))
-                            .with_message(error.message)
-                            .with_color(Color::Red),
-                    )
-                    .finish()
-                    .print((filename, Source::from(code))).expect("Internal error in err info view");
-            }).expect("Can't unwrap block");
+            interpreter.interpret(program).map_err(|e| match e {
+                RuntimeError::UndefinedVariable(err) => {
+                    (format!("Неопределенная переменная: {}", err.message), err)
+                }
+                RuntimeError::UndefinedFunction(err) => {
+                    (format!("Неопределенная функция: {}", err.message), err)
+                }
+                RuntimeError::UndefinedMethod(err) => {
+                    (format!("Неопределенный метод: {}", err.message), err)
+                }
+                RuntimeError::TypeMismatch(err) => {
+                    (format!("Несоответствие типов: {}", err.message), err)
+                }
+                RuntimeError::DivisionByZero(err) => ("Деление на ноль".to_string(), err),
+                RuntimeError::InvalidOperation(err) => {
+                    (format!("Недопустимая операция: {}", err.message), err)
+                }
+                RuntimeError::IOError(err) => {
+                    (format!("Ошибка чтения файла: {}", err.message), err)
+                }
+                RuntimeError::TypeError(err) => {
+                    (format!("Недопустимый тип данных: {}", err.message), err)
+                }
+                RuntimeError::Return(err, ..) => ("Неожиданный return".to_string(), err),
+                RuntimeError::ImportError(err) => {
+                    let (msg, error) = match err {
+                        ParseError::UnexpectedToken(e) => ("Ошибка синтаксиса", e),
+                        ParseError::TypeError(e) => ("Ошибка типов", e),
+                    };
+                    (msg.to_string(), error)
+                }
+            })?;
         }
         Err(err) => {
-            let (msg, error) = match err {
-                ParseError::UnexpectedToken(e) => ("Ошибка синтаксиса", e),
-                ParseError::TypeError(e) => ("Ошибка типов", e),
-            };
-            Report::build(ReportKind::Error, (filename, error.location.clone()))
-                .with_message(msg)
-                .with_label(
-                    Label::new((filename, error.location))
-                        .with_message(error.message)
-                        .with_color(Color::Red),
-                )
-                .finish()
-                .print((filename, Source::from(code)))?;
+            return match err {
+                ParseError::UnexpectedToken(e) => Err(("Ошибка синтаксиса".into(), e)),
+                ParseError::TypeError(e) => Err(("Ошибка типов".into(), e)),
+            }
         }
     }
 

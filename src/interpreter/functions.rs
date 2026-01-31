@@ -35,7 +35,7 @@ impl InterpreterFunctions for Interpreter {
         let mut result = Value::Empty;
         match self.execute_statement(function.body, current_module_id) {
             Ok(()) => {}
-            Err(RuntimeError::Return(err, val)) => return Err(err),
+            Err(RuntimeError::Return(_, val)) => result = val,
             Err(e) => {
                 self.environment = parent_env;
                 return Err(e);
@@ -73,10 +73,9 @@ impl InterpreterFunctions for Interpreter {
             )));
         }
 
-        let current_module = self
-            .modules
-            .get(&current_module_id)
-            .ok_or_else(|| RuntimeError::InvalidOperation("Текущий модуль не найден".into()))?;
+        let current_module = self.modules.get(&current_module_id).ok_or_else(|| {
+            RuntimeError::InvalidOperation(ErrorData::new(span, "Текущий модуль не найден".into()))
+        })?;
 
         if let Some(function) = current_module.functions.get(&name) {
             let func_clone = function.clone();
@@ -100,7 +99,7 @@ impl InterpreterFunctions for Interpreter {
         }
 
         if let Some(builtin_fn) = self.builtins.get(&name) {
-            return builtin_fn(self, arguments);
+            return builtin_fn(self, arguments, span);
         }
 
         Err(RuntimeError::UndefinedFunction(ErrorData::new(

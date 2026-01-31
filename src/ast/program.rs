@@ -46,14 +46,14 @@ pub struct ClassInstance {
     pub class_ref: Rc<ClassDefinition>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ErrorData {
-    pub location: Range<usize>,
+    pub location: Span,
     pub message: String,
 }
 
 impl ErrorData {
-    pub fn new(location: Range<usize>, message: String) -> ErrorData {
+    pub fn new(location: Span, message: String) -> ErrorData {
         ErrorData { location, message }
     }
 }

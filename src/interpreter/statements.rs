@@ -1,4 +1,4 @@
-use crate::ast::prelude::{ErrorData, ExpressionKind, StatementKind, StmtId};
+use crate::ast::prelude::{ErrorData, ExpressionKind, Span, StatementKind, StmtId};
 use crate::interpreter::prelude::{Environment, Interpreter, RuntimeError, Value};
 use crate::traits::prelude::{CoreOperations, ExpressionEvaluator, StatementExecutor};
 use string_interner::DefaultSymbol;
@@ -10,14 +10,16 @@ impl StatementExecutor for Interpreter {
         current_module_id: DefaultSymbol,
     ) -> Result<(), RuntimeError> {
         let stmt_kind = {
-            let module = self
-                .modules
-                .get(&current_module_id)
-                .ok_or_else(|| RuntimeError::InvalidOperation("Модуль не найден".into()))?;
+            let module = self.modules.get(&current_module_id).ok_or_else(|| {
+                RuntimeError::InvalidOperation(ErrorData::new(
+                    Span::default(),
+                    "Модуль не найден".into(),
+                ))
+            })?;
             module.arena.get_statement(stmt_id).unwrap().clone()
         };
 
-        match stmt_kind {
+        match stmt_kind.kind {
             StatementKind::Expression(expr_id) => {
                 self.evaluate_expression(expr_id, current_module_id)?;
                 Ok(())
@@ -26,7 +28,7 @@ impl StatementExecutor for Interpreter {
             StatementKind::Assign { name, value, .. } => {
                 let val = self.evaluate_expression(value, current_module_id)?;
 
-                if let Err(_) = self.environment.set(name, val.clone()) {
+                if let Err(_) = self.environment.set(name, val.clone(), stmt_kind.span) {
                     self.environment.define(name, val);
                 }
                 Ok(())
@@ -109,10 +111,10 @@ impl StatementExecutor for Interpreter {
                 } else {
                     Value::Empty
                 };
-                Err(RuntimeError::Return((
-                    ErrorData::new(stmt_kind.span.into(), value.to_string()),
+                Err(RuntimeError::Return(
+                    ErrorData::new(stmt_kind.span, value.to_string()),
                     value,
-                )))
+                ))
             }
 
             StatementKind::PropertyAssign {
@@ -122,15 +124,16 @@ impl StatementExecutor for Interpreter {
             } => {
                 let property_name = self.resolve_symbol(property).unwrap();
                 let obj_expr = {
-                    let module = self
-                        .modules
-                        .get(&current_module_id)
-                        .ok_or_else(|| RuntimeError::InvalidOperation("Модуль не найден".into()))?;
-                    module.arena.get_expression(object).unwrap().kind.clone()
+                    let module = self.modules.get(&current_module_id).ok_or_else(|| {
+                        RuntimeError::InvalidOperation(ErrorData::new(
+                            stmt_kind.span,
+                            "Модуль не найден".into(),
+                        ))
+                    })?;
+                    module.arena.get_expression(object).unwrap().clone()
                 };
-                let is_external = !matches!(obj_expr, ExpressionKind::This);
+                let is_external = !matches!(obj_expr.kind, ExpressionKind::This);
 
-                // Проверяем, находимся ли мы внутри метода класса (this доступен в окружении)
                 let this_sym = self.intern_string("this");
                 let is_inside_method = self.environment.get(&this_sym).is_some();
                 let is_external = is_external && !is_inside_method;
@@ -142,14 +145,17 @@ impl StatementExecutor for Interpreter {
                     let mut instance = instance_ref.borrow_mut();
                     if !(*instance).is_field_accessible(&property, is_external) {
                         return Err(RuntimeError::InvalidOperation(ErrorData::new(
-                            stmt_kind.span.into(),
+                            obj_expr.span,
                             format!("Поле '{}' недоступно", property_name),
                         )));
                     }
                     instance.set_field_value(property, value_result);
                     Ok(())
                 } else {
-                    Err(RuntimeError::TypeMismatch("Ожидался объект".into()))
+                    Err(RuntimeError::TypeMismatch(ErrorData::new(
+                        obj_expr.span,
+                        "Ожидался объект".into(),
+                    )))
                 }
             }
 

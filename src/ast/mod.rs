@@ -6,4 +6,3 @@ pub mod program;
 pub mod span;
 pub mod prelude;
 pub mod class;
-mod source_map;

@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::rc::Rc;
 
-use crate::ast::prelude::{AstArena, ClassDefinition, ErrorData, FunctionDefinition, Import, StmtId};
+use crate::ast::prelude::{AstArena, ClassDefinition, ErrorData, FunctionDefinition, Import, Span, StmtId};
 pub(crate) use crate::ast::program::ClassInstance;
 use std::cell::RefCell;
 use std::fmt::Debug;
@@ -28,7 +28,7 @@ pub enum Value {
 
 #[derive(Clone)]
 pub struct BuiltinFn(
-    pub Arc<dyn Fn(&Interpreter, Vec<Value>) -> Result<Value, RuntimeError> + Send + Sync>,
+    pub Arc<dyn Fn(&Interpreter, Vec<Value>, Span) -> Result<Value, RuntimeError> + Send + Sync>,
 );
 
 #[derive(Debug)]

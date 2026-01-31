@@ -1,4 +1,4 @@
-use crate::ast::prelude::{ClassDefinition, ExprId, FunctionDefinition, Visibility};
+use crate::ast::prelude::{ClassDefinition, ErrorData, ExprId, FunctionDefinition, Span, Visibility};
 use crate::interpreter::prelude::{ClassInstance, Environment, Interpreter, RuntimeError, Value};
 use crate::traits::prelude::{CoreOperations, InterpreterClasses, StatementExecutor};
 use std::collections::HashMap;
@@ -26,6 +26,7 @@ impl InterpreterClasses for Interpreter {
         arguments: Vec<Value>,
         this_obj: Value,
         current_module_id: Symbol,
+        span: Span
     ) -> Result<Value, RuntimeError> {
         let method_module = method.module.unwrap_or(current_module_id);
 
@@ -39,8 +40,10 @@ impl InterpreterClasses for Interpreter {
             self.environment = local_env;
             let _ = std::mem::replace(&mut self.environment, previous_env);
             return Err(RuntimeError::InvalidOperation(
-                "Неверное кол-во аргументов".into(),
-            ));
+                ErrorData::new(
+                    span.into(),
+                    "Неверное кол-во аргументов".into(),
+            )));
         }
 
         for (param, arg_value) in method.params.iter().zip(arguments.iter()) {
@@ -52,7 +55,7 @@ impl InterpreterClasses for Interpreter {
         let mut result = Value::Empty;
         match self.execute_statement(method.body, method_module) {
             Ok(()) => {}
-            Err(RuntimeError::Return(val)) => result = val,
+            Err(RuntimeError::Return(_, val)) => result = val,
             Err(e) => {
                 self.environment = previous_env;
                 return Err(e);

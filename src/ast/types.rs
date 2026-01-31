@@ -7,6 +7,7 @@ pub type TypeId = u32;
 pub enum DataType {
     Primitive(PrimitiveType),
     List(Box<DataType>),
+    Array(Box<DataType>),
     Dict {
         key: Box<DataType>,
         value: Box<DataType>,
@@ -16,6 +17,7 @@ pub enum DataType {
         return_type: Box<DataType>,
     },
     Object(Symbol),
+    Any,
     Unit,
 }
 
@@ -33,7 +35,7 @@ impl fmt::Display for PrimitiveType {
             PrimitiveType::Number => write!(f, "число"),
             PrimitiveType::Boolean => write!(f, "логическое"),
             PrimitiveType::Text => write!(f, "текст"),
-            &PrimitiveType::Float => write!(f, "дробь"),
+            PrimitiveType::Float => write!(f, "дробь"),
         }
     }
 }

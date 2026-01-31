@@ -1,3 +1,5 @@
+use std::ops::Range;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Span {
     pub start: u32,
@@ -6,10 +8,7 @@ pub struct Span {
 
 impl Default for Span {
     fn default() -> Self {
-        Self {
-            start: 0,
-            end: 0,
-        }
+        Self { start: 0, end: 0 }
     }
 }
 
@@ -41,8 +40,25 @@ impl<'a> From<pest::Span<'a>> for Span {
     }
 }
 
-impl From<Span> for std::ops::Range<u32> {
+impl From<Span> for Range<usize> {
     fn from(span: Span) -> Self {
-        span.start..span.end
+        span.start as usize..span.end as usize
+    }
+}
+
+impl Span {
+    pub(crate) fn as_ariadne<'a>(&self, file: &'a str, code: &str) -> (&'a str, Range<usize>) {
+        let start = self.start as usize;
+        let end = self.end as usize;
+
+        let char_start = code
+            .get(..start)
+            .map(|s| s.chars().count())
+            .unwrap_or(0);
+        let char_end = code
+            .get(..end)
+            .map(|s| s.chars().count())
+            .unwrap_or(char_start);
+        (file, char_start..char_end)
     }
 }

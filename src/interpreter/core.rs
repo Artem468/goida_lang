@@ -1,8 +1,10 @@
+use crate::ast::prelude::{ErrorData, Span};
 use crate::interpreter::prelude::{Environment, SharedInterner};
 use crate::interpreter::structs::{Interpreter, Module, RuntimeError, Value};
 use crate::parser::prelude::Parser;
 use crate::traits::prelude::{CoreOperations, InterpreterClasses, StatementExecutor};
 use std::collections::HashMap;
+use std::path::Path;
 use std::rc::Rc;
 use std::sync::Arc;
 use string_interner::DefaultSymbol as Symbol;
@@ -29,10 +31,8 @@ impl CoreOperations for Interpreter {
 
         for (function_name, function_fn) in &module.functions {
             let func_value = Value::Function(Rc::new(function_fn.clone()));
-            self.environment.define(
-                function_name.clone(),
-                func_value.clone(),
-            );
+            self.environment
+                .define(function_name.clone(), func_value.clone());
             if let Some(mod_entry) = self.modules.get_mut(&module.name) {
                 mod_entry.globals.insert(*function_name, func_value);
             }
@@ -45,7 +45,7 @@ impl CoreOperations for Interpreter {
 
         for &stmt_id in &module.body {
             match self.execute_statement(stmt_id, module.name) {
-                Err(RuntimeError::Return(_)) => {}
+                Err(RuntimeError::Return(..)) => {}
                 Err(e) => return Err(e),
                 Ok(()) => {}
             }
@@ -76,60 +76,61 @@ impl CoreOperations for Interpreter {
                     .arena
                     .resolve_symbol(&self.interner, *path_symbol)
                     .unwrap();
-                let relative_path = std::path::Path::new(&path);
-                let module_dir = module.path.parent().unwrap_or_else(|| std::path::Path::new("."));
+                let relative_path = Path::new(&path);
+                let module_dir = module.path.parent().unwrap_or_else(|| Path::new("."));
                 let full_path = module_dir.join(relative_path).with_extension("goida");
                 let file_stem =
                     full_path
                         .file_stem()
                         .and_then(|s| s.to_str())
                         .ok_or_else(|| {
-                            RuntimeError::InvalidOperation(format!(
-                                "Невозможно получить имя модуля из пути: {}",
-                                full_path.display()
+                            RuntimeError::InvalidOperation(ErrorData::new(
+                                import.span,
+                                format!(
+                                    "Невозможно получить имя модуля из пути: {}",
+                                    full_path.display()
+                                ),
                             ))
                         })?;
                 let code = std::fs::read_to_string(&full_path).map_err(|err| {
-                    RuntimeError::IOError(format!("{} | {err}", full_path.display()))
+                    RuntimeError::IOError(ErrorData::new(
+                        import.span,
+                        format!("{} | {err}", full_path.display()),
+                    ))
                 })?;
 
-                let parser = Parser::Parser::new(
-                    Arc::clone(&self.interner),
-                    file_stem,
-                    full_path.clone(),
-                );
+                let parser = Parser::new(Arc::clone(&self.interner), file_stem, full_path.clone());
                 match parser.parse(code.as_str()) {
                     Ok(new_module) => {
                         let module_symbol = self.interner.write().unwrap().get_or_intern(file_stem);
-                        
+
                         if self.modules.contains_key(&module_symbol) {
                             continue;
                         }
-                        
+
                         self.modules.insert(module_symbol, new_module.clone());
-                        
+
                         self.load_imports(&new_module)?;
-                        
+
                         for &stmt_id in &new_module.body {
                             self.execute_statement(stmt_id, module_symbol)?;
                         }
-                        
+
                         for (_class_name, class_def) in &new_module.classes {
-                            let class_def_with_module = self.set_class_module(class_def.clone(), module_symbol);
+                            let class_def_with_module =
+                                self.set_class_module(class_def.clone(), module_symbol);
                             self.register_class(class_def_with_module, module_symbol)?;
                         }
-                        
+
                         for (function_name, function_fn) in &new_module.functions {
                             let func_value = Value::Function(Rc::new(function_fn.clone()));
-                            self.environment.define(
-                                function_name.clone(),
-                                func_value.clone(),
-                            );
+                            self.environment
+                                .define(function_name.clone(), func_value.clone());
                             if let Some(module) = self.modules.get_mut(&module_symbol) {
                                 module.globals.insert(*function_name, func_value);
                             }
                         }
-                        
+
                         let imported_globals = self.collect_imported_globals(&new_module)?;
                         if let Some(module) = self.modules.get_mut(&module_symbol) {
                             for (sym, val) in imported_globals {
@@ -146,7 +147,10 @@ impl CoreOperations for Interpreter {
         Ok(())
     }
 
-    fn collect_imported_globals(&self, module: &Module) -> Result<Vec<(Symbol, Value)>, RuntimeError> {
+    fn collect_imported_globals(
+        &self,
+        module: &Module,
+    ) -> Result<Vec<(Symbol, Value)>, RuntimeError> {
         let mut result = Vec::new();
         for import in &module.imports {
             for &imp_mod_sym in &import.files {

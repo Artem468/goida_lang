@@ -1,5 +1,6 @@
 use std::fmt;
 use std::fmt::Debug;
+use crate::ast::prelude::Span;
 use crate::interpreter::prelude::{BuiltinFn, Interpreter, RuntimeError, Value};
 
 impl Debug for BuiltinFn {
@@ -9,7 +10,7 @@ impl Debug for BuiltinFn {
 }
 
 impl std::ops::Deref for BuiltinFn {
-    type Target = dyn Fn(&Interpreter, Vec<Value>) -> Result<Value, RuntimeError> + Send + Sync;
+    type Target = dyn Fn(&Interpreter, Vec<Value>, Span) -> Result<Value, RuntimeError> + Send + Sync;
     fn deref(&self) -> &Self::Target {
         &*self.0
     }

@@ -12,7 +12,6 @@ pub struct AstArena {
     pub expressions: Vec<ExpressionNode>,
     pub statements: Vec<StatementNode>,
     pub types: Vec<DataType>,
-    pub spans: Vec<Span>,
     type_cache: HashMap<Symbol, TypeId>,
 }
 
@@ -22,7 +21,6 @@ impl AstArena {
             expressions: Vec::new(),
             statements: Vec::new(),
             types: Vec::new(),
-            spans: Vec::new(),
             type_cache: HashMap::new(),
         }
     }
@@ -62,6 +60,18 @@ impl AstArena {
             "логическое" => DataType::Primitive(PrimitiveType::Boolean),
             "текст" => DataType::Primitive(PrimitiveType::Text),
             "дробь" => DataType::Primitive(PrimitiveType::Float),
+            "список" => DataType::List(Box::new(DataType::Any)),
+            "массив" => DataType::Array(Box::new(DataType::Any)),
+            "словарь" => DataType::Dict {
+                key: Box::new(DataType::Any),
+                value: Box::new(DataType::Any),
+            },
+            "функция" => DataType::Function {
+                params: Vec::new(),
+                return_type: Box::new(DataType::Any),
+            },
+            "пустота" => DataType::Unit,
+            "неизвестно" => DataType::Any,
             _ => DataType::Object(symbol),
         };
 
@@ -83,11 +93,18 @@ impl AstArena {
     }
 
     pub fn intern_string(&self, interner: &SharedInterner, s: &str) -> Symbol {
-        interner.write().expect("interner lock poisoned").get_or_intern(s)
+        interner
+            .write()
+            .expect("interner lock poisoned")
+            .get_or_intern(s)
     }
 
     pub fn resolve_symbol(&self, interner: &SharedInterner, symbol: Symbol) -> Option<String> {
-        interner.read().expect("interner lock poisoned").resolve(symbol).map(|s| s.to_string())
+        interner
+            .read()
+            .expect("interner lock poisoned")
+            .resolve(symbol)
+            .map(|s| s.to_string())
     }
 
     pub fn optimize_constants(&mut self) {
