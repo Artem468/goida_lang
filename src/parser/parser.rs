@@ -95,7 +95,7 @@ impl ParserTrait {
                 }
             }
         }
-
+        self.module.arena.optimize_all(&self.interner);
         Ok(self.module)
     }
 
