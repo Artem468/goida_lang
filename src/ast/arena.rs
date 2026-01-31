@@ -88,8 +88,11 @@ impl AstArena {
         self.statements.get(id as usize)
     }
 
-    pub fn get_type(&self, id: TypeId) -> Option<&DataType> {
-        self.types.get(id as usize)
+    pub fn find_type_by_name(&self, interner: &SharedInterner, name: &str) -> Option<TypeId> {
+        let lock = interner.read().expect("interner lock poisoned");
+        let symbol = lock.get(name)?;
+
+        self.type_cache.get(&symbol).copied()
     }
 
     pub fn intern_string(&self, interner: &SharedInterner, s: &str) -> Symbol {
@@ -107,16 +110,22 @@ impl AstArena {
             .map(|s| s.to_string())
     }
 
-    pub fn optimize_constants(&mut self) {
+    pub fn optimize_all(&mut self, interner: &SharedInterner) {
         for i in 0..self.expressions.len() {
-            if let ExpressionKind::Binary { op, left, right } = self.expressions[i].kind {
-                let left_val = self.get_expression(left).and_then(|e| e.kind.as_literal());
-                let right_val = self.get_expression(right).and_then(|e| e.kind.as_literal());
+            self.optimize_expression(i as ExprId, interner);
+        }
+    }
 
-                if let (Some(l), Some(r)) = (left_val, right_val) {
-                    if let Some(result) = self.fold_binary_constants(op, l, r) {
-                        self.expressions[i].kind = ExpressionKind::Literal(result);
-                    }
+    fn optimize_expression(&mut self, id: ExprId, interner: &SharedInterner) {
+        let node = &self.expressions[id as usize];
+
+        if let ExpressionKind::Binary { op, left, right } = node.kind {
+            let left_lit = self.get_expression(left).and_then(|e| e.kind.as_literal()).cloned();
+            let right_lit = self.get_expression(right).and_then(|e| e.kind.as_literal()).cloned();
+
+            if let (Some(l), Some(r)) = (left_lit, right_lit) {
+                if let Some(folded) = self.fold_binary_constants(interner, op, &l, &r) {
+                    self.expressions[id as usize].kind = ExpressionKind::Literal(folded);
                 }
             }
         }
@@ -124,6 +133,7 @@ impl AstArena {
 
     fn fold_binary_constants(
         &self,
+        interner: &SharedInterner,
         op: BinaryOperator,
         left: &LiteralValue,
         right: &LiteralValue,
@@ -134,14 +144,19 @@ impl AstArena {
                 BinaryOperator::Sub => Some(LiteralValue::Number(l - r)),
                 BinaryOperator::Mul => Some(LiteralValue::Number(l * r)),
                 BinaryOperator::Div if *r != 0 => Some(LiteralValue::Number(l / r)),
-                BinaryOperator::Eq => Some(LiteralValue::Boolean(l == r)),
-                BinaryOperator::Lt => Some(LiteralValue::Boolean(l < r)),
                 _ => None,
+            },
+            (LiteralValue::Text(l_sym), LiteralValue::Text(r_sym)) if op == BinaryOperator::Add => {
+                let l_str = self.resolve_symbol(interner, *l_sym)?;
+                let r_str = self.resolve_symbol(interner, *r_sym)?;
+                let combined = format!("{}{}", l_str, r_str);
+                let new_sym = self.intern_string(interner, &combined);
+
+                Some(LiteralValue::Text(new_sym))
             },
             (LiteralValue::Boolean(l), LiteralValue::Boolean(r)) => match op {
                 BinaryOperator::And => Some(LiteralValue::Boolean(*l && *r)),
                 BinaryOperator::Or => Some(LiteralValue::Boolean(*l || *r)),
-                BinaryOperator::Eq => Some(LiteralValue::Boolean(l == r)),
                 _ => None,
             },
             _ => None,

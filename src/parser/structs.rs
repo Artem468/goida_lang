@@ -11,4 +11,5 @@ pub struct Parser {
 pub enum ParseError {
     UnexpectedToken(ErrorData),
     TypeError(ErrorData),
+    InvalidSyntax(ErrorData)
 }

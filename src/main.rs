@@ -169,8 +169,9 @@ fn execute_code_with_interpreter(
                 RuntimeError::Return(err, ..) => ("Неожиданный return".to_string(), err),
                 RuntimeError::ImportError(err) => {
                     let (msg, error) = match err {
-                        ParseError::UnexpectedToken(e) => ("Ошибка синтаксиса", e),
+                        ParseError::UnexpectedToken(e) => ("Неожиданный токен", e),
                         ParseError::TypeError(e) => ("Ошибка типов", e),
+                        ParseError::InvalidSyntax(e) => ("Ошибка синтаксиса".into(), e),
                     };
                     (msg.to_string(), error)
                 }
@@ -178,8 +179,9 @@ fn execute_code_with_interpreter(
         }
         Err(err) => {
             return match err {
-                ParseError::UnexpectedToken(e) => Err(("Ошибка синтаксиса".into(), e)),
+                ParseError::UnexpectedToken(e) => Err(("Неожиданный токен".into(), e)),
                 ParseError::TypeError(e) => Err(("Ошибка типов".into(), e)),
+                ParseError::InvalidSyntax(e) => Err(("Ошибка синтаксиса".into(), e)),
             }
         }
     }
