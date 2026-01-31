@@ -31,7 +31,6 @@ impl SourceCode {
         (line, col)
     }
 
-    /// Безопасно извлекает текст подстроки (для кириллицы)
     pub fn get_text(&self, span: Span) -> String {
         self.text
             .chars()

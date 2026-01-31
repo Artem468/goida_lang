@@ -4,7 +4,8 @@ mod macros;
 mod parser;
 mod traits;
 
-use crate::parser::prelude::ParserStructs;
+use crate::parser::prelude::{ParseError, Parser as ProgramParser};
+use ariadne::{Color, Label, Report, ReportKind, Source};
 use clap::{Parser, Subcommand};
 use interpreter::prelude::{Interpreter, RuntimeError};
 use std::io::{self, Write};
@@ -87,6 +88,7 @@ fn run_repl() {
                 if let Err(e) = execute_code_with_interpreter(
                     input,
                     "main",
+                    "main",
                     env::current_dir().expect("Не удалось получить текущую директорию"),
                 ) {
                     eprintln!("Ошибка: {}", e);
@@ -104,38 +106,71 @@ fn execute_code(code: &str, filename: &str) -> Result<(), Box<dyn std::error::Er
     let _path = PathBuf::from(filename);
     let _path_clone = _path.clone();
     let file_stem = _path.file_stem().and_then(|s| s.to_str()).unwrap();
-    execute_code_with_interpreter(code, file_stem, _path_clone)
+    execute_code_with_interpreter(code, _path.to_str().unwrap(), file_stem, _path_clone)
 }
 
 fn execute_code_with_interpreter(
     code: &str,
+    path: &str,
     filename: &str,
     path_buf: PathBuf,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let interner = Arc::new(RwLock::new(StringInterner::new()));
 
-    let parser = ParserStructs::Parser::new(Arc::clone(&interner), filename, path_buf);
+    let parser = ProgramParser::new(Arc::clone(&interner), filename, path_buf);
     match parser.parse(code) {
         Ok(program) => {
             let mut interpreter = Interpreter::new(program.clone(), Arc::clone(&interner));
             interpreter.define_builtins();
-            interpreter.interpret(program).map_err(|e| match e {
-                RuntimeError::UndefinedVariable(name) => {
-                    format!("Неопределенная переменная: {}", name)
-                }
-                RuntimeError::UndefinedFunction(name) => {
-                    format!("Неопределенная функция: {}", name)
-                }
-                RuntimeError::UndefinedMethod(name) => format!("Неопределенный метод: {}", name),
-                RuntimeError::TypeMismatch(msg) => format!("Несоответствие типов: {}", msg),
-                RuntimeError::DivisionByZero => "Деление на ноль".to_string(),
-                RuntimeError::InvalidOperation(msg) => format!("Недопустимая операция: {}", msg),
-                RuntimeError::IOError(msg) => format!("Ошибка чтения файла: {}", msg),
-                RuntimeError::TypeError(msg) => format!("Недопустимый тип данных: {}", msg),
-                RuntimeError::Return(_) => "Неожиданный return".to_string(),
-            })?;
+            interpreter.interpret(program).map_err(|e| {
+                let (msg, error) = match e {
+                    RuntimeError::UndefinedVariable(err) => (
+                        format!("Неопределенная переменная: {}", err.message), err
+                    ),
+                    RuntimeError::UndefinedFunction(err) => (
+                        format!("Неопределенная функция: {}", err.message), err
+                    ),
+                    RuntimeError::UndefinedMethod(err) => (format!("Неопределенный метод: {}", err.message), err),
+                    RuntimeError::TypeMismatch(err) => (format!("Несоответствие типов: {}", err.message), err),
+                    RuntimeError::DivisionByZero(err) => ("Деление на ноль".to_string(), err),
+                    RuntimeError::InvalidOperation(err) => (format!("Недопустимая операция: {}", err.message), err),
+                    RuntimeError::IOError(err) => (format!("Ошибка чтения файла: {}", err.message), err),
+                    RuntimeError::TypeError(err) => (format!("Недопустимый тип данных: {}", err.message), err),
+                    RuntimeError::Return(err, ..) => ("Неожиданный return".to_string(), err),
+                    RuntimeError::ImportError(err) => {
+                        let (msg, error) = match err {
+                            ParseError::UnexpectedToken(e) => ("Ошибка синтаксиса", e),
+                            ParseError::TypeError(e) => ("Ошибка типов", e),
+                        };
+                        (msg.to_string(), error)
+                    }
+                };
+                Report::build(ReportKind::Error, (filename, error.location.clone()))
+                    .with_message(msg)
+                    .with_label(
+                        Label::new((filename, error.location))
+                            .with_message(error.message)
+                            .with_color(Color::Red),
+                    )
+                    .finish()
+                    .print((filename, Source::from(code))).expect("Internal error in err info view");
+            }).expect("Can't unwrap block");
         }
-        Err(err) => eprintln!("{:#?}", err),
+        Err(err) => {
+            let (msg, error) = match err {
+                ParseError::UnexpectedToken(e) => ("Ошибка синтаксиса", e),
+                ParseError::TypeError(e) => ("Ошибка типов", e),
+            };
+            Report::build(ReportKind::Error, (filename, error.location.clone()))
+                .with_message(msg)
+                .with_label(
+                    Label::new((filename, error.location))
+                        .with_message(error.message)
+                        .with_color(Color::Red),
+                )
+                .finish()
+                .print((filename, Source::from(code)))?;
+        }
     }
 
     Ok(())

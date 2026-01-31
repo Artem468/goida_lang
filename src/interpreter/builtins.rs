@@ -359,9 +359,6 @@ setup_builtins!(interpreter, {
     }
 
     "ключи" (arguments) -> Result<Value, RuntimeError> {
-        use std::rc::Rc;
-        use std::cell::RefCell;
-        
         if arguments.len() != 1 {
             return Err(RuntimeError::InvalidOperation(
                 "Функция 'ключи' ожидает 1 аргумент (словарь)".to_string()
@@ -383,9 +380,6 @@ setup_builtins!(interpreter, {
     }
 
     "значения" (arguments) -> Result<Value, RuntimeError> {
-        use std::rc::Rc;
-        use std::cell::RefCell;
-        
         if arguments.len() != 1 {
             return Err(RuntimeError::InvalidOperation(
                 "Функция 'значения' ожидает 1 аргумент (словарь)".to_string()

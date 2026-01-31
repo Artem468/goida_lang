@@ -1,5 +1,5 @@
 use string_interner::DefaultSymbol as Symbol;
-use crate::ast::prelude::{FunctionDefinition};
+use crate::ast::prelude::{FunctionDefinition, Span};
 use crate::interpreter::prelude::{RuntimeError, Value};
 
 pub trait InterpreterFunctions {
@@ -8,11 +8,13 @@ pub trait InterpreterFunctions {
         function: FunctionDefinition,
         arguments: Vec<Value>,
         current_module_id: Symbol,
+        span: Span
     ) -> Result<Value, RuntimeError>;
     fn call_function_by_name(
         &mut self,
         name: Symbol,
         arguments: Vec<Value>,
         current_module_id: Symbol,
+        span: Span
     ) -> Result<Value, RuntimeError>;
 }

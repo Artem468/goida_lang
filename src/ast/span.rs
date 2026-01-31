@@ -41,3 +41,8 @@ impl<'a> From<pest::Span<'a>> for Span {
     }
 }
 
+impl From<Span> for std::ops::Range<u32> {
+    fn from(span: Span) -> Self {
+        span.start..span.end
+    }
+}

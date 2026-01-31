@@ -1,6 +1,7 @@
 use crate::ast::prelude::*;
 use crate::interpreter::prelude::{Module, SharedInterner};
-use crate::parser::structs::{ParseError, Parser as ParserTrait};
+use crate::parser::prelude::{ParseError, Parser as ParserTrait};
+use pest::error::ErrorVariant;
 use pest::Parser;
 use pest_derive::Parser;
 use std::collections::HashMap;
@@ -20,8 +21,28 @@ impl ParserTrait {
     }
 
     pub fn parse(mut self, code: &str) -> Result<Module, ParseError> {
-        let pairs = ProgramParser::parse(Rule::program, code)
-            .map_err(|e| ParseError::UnexpectedToken(e.to_string()))?;
+        let pairs = ProgramParser::parse(Rule::program, code).map_err(|e| {
+            let message = match e.variant {
+                ErrorVariant::ParsingError {..} => {
+                    "Проверьте правильность выражения".into()
+                }
+                ErrorVariant::CustomError { message } => message,
+            };
+
+            let range = match e.location {
+                pest::error::InputLocation::Pos(pos) => {
+                    let char_start = code.get(..pos).map(|s| s.chars().count()).unwrap_or(0);
+                    let char_end = code.get(..pos).map(|s| s.chars().count()).unwrap_or(char_start);
+                    char_end..char_end
+                },
+                pest::error::InputLocation::Span((start, end)) => {
+                    let char_start = code.get(..start).map(|s| s.chars().count()).unwrap_or(0);
+                    let char_end = code.get(..end).map(|s| s.chars().count()).unwrap_or(char_start);
+                    char_start..char_end
+                },
+            };
+            ParseError::UnexpectedToken(ErrorData::new(range, message))
+        })?;
 
         for pair in pairs {
             if pair.as_rule() == Rule::program {
@@ -554,11 +575,11 @@ impl ParserTrait {
                         }
                         Rule::block => {
                             let else_block = self.parse_block(else_content)?;
-                            else_body =
-                                Some(self.module.arena.add_statement(
-                                    StatementKind::Block(else_block),
-                                    else_span,
-                                ));
+                            else_body = Some(
+                                self.module
+                                    .arena
+                                    .add_statement(StatementKind::Block(else_block), else_span),
+                            );
                         }
                         _ => {}
                     }
@@ -821,10 +842,10 @@ impl ParserTrait {
                         _ => return None,
                     };
                     let right = self.parse_addition(inner.next()?)?;
-                    left = self.module.arena.add_expression(
-                        ExpressionKind::Binary { op, left, right },
-                        cmp_span,
-                    );
+                    left = self
+                        .module
+                        .arena
+                        .add_expression(ExpressionKind::Binary { op, left, right }, cmp_span);
                 }
                 _ => {}
             }
@@ -847,10 +868,10 @@ impl ParserTrait {
                         _ => return None,
                     };
                     let right = self.parse_multiplication(inner.next()?)?;
-                    left = self.module.arena.add_expression(
-                        ExpressionKind::Binary { op, left, right },
-                        add_span,
-                    );
+                    left = self
+                        .module
+                        .arena
+                        .add_expression(ExpressionKind::Binary { op, left, right }, add_span);
                 }
                 _ => {}
             }
@@ -874,10 +895,10 @@ impl ParserTrait {
                         _ => return None,
                     };
                     let right = self.parse_unary(inner.next()?)?;
-                    left = self.module.arena.add_expression(
-                        ExpressionKind::Binary { op, left, right },
-                        mul_span,
-                    );
+                    left = self
+                        .module
+                        .arena
+                        .add_expression(ExpressionKind::Binary { op, left, right }, mul_span);
                 }
                 _ => {}
             }

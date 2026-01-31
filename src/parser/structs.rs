@@ -1,3 +1,4 @@
+use crate::ast::prelude::ErrorData;
 use crate::interpreter::prelude::{Module, SharedInterner};
 
 #[derive(Debug)]
@@ -8,7 +9,6 @@ pub struct Parser {
 
 #[derive(Debug)]
 pub enum ParseError {
-    UnexpectedToken(String),
-    InternalError(String),
-    TypeError(String),
+    UnexpectedToken(ErrorData),
+    TypeError(ErrorData),
 }

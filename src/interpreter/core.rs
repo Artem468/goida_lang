@@ -1,6 +1,6 @@
 use crate::interpreter::prelude::{Environment, SharedInterner};
 use crate::interpreter::structs::{Interpreter, Module, RuntimeError, Value};
-use crate::parser::prelude::ParserStructs;
+use crate::parser::prelude::Parser;
 use crate::traits::prelude::{CoreOperations, InterpreterClasses, StatementExecutor};
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -93,7 +93,7 @@ impl CoreOperations for Interpreter {
                     RuntimeError::IOError(format!("{} | {err}", full_path.display()))
                 })?;
 
-                let parser = ParserStructs::Parser::new(
+                let parser = Parser::Parser::new(
                     Arc::clone(&self.interner),
                     file_stem,
                     full_path.clone(),
@@ -137,8 +137,8 @@ impl CoreOperations for Interpreter {
                             }
                         }
                     }
-                    Err(_) => {
-                        return Err(RuntimeError::InvalidOperation(format!("Не удалось спарсить файл импортироваемого модуля -> {path}")));
+                    Err(err) => {
+                        return Err(RuntimeError::ImportError(err));
                     }
                 }
             }

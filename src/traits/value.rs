@@ -2,17 +2,18 @@ use crate::interpreter::prelude::RuntimeError;
 use crate::interpreter::structs::Value;
 use std::fmt;
 use std::rc::Rc;
+use crate::ast::prelude::Span;
 
 pub trait ValueOperations {
-    fn add_values(&self, left: Value, right: Value) -> Result<Value, RuntimeError>;
-    fn subtract_values(&self, left: Value, right: Value) -> Result<Value, RuntimeError>;
-    fn multiply_values(&self, left: Value, right: Value) -> Result<Value, RuntimeError>;
-    fn divide_values(&self, left: Value, right: Value) -> Result<Value, RuntimeError>;
-    fn modulo_values(&self, left: Value, right: Value) -> Result<Value, RuntimeError>;
-    fn compare_greater(&self, left: Value, right: Value) -> Result<Value, RuntimeError>;
-    fn compare_less(&self, left: Value, right: Value) -> Result<Value, RuntimeError>;
-    fn compare_greater_equal(&self, left: Value, right: Value) -> Result<Value, RuntimeError>;
-    fn compare_less_equal(&self, left: Value, right: Value) -> Result<Value, RuntimeError>;
+    fn add_values(&self, left: Value, right: Value, span: Span) -> Result<Value, RuntimeError>;
+    fn subtract_values(&self, left: Value, right: Value, span: Span) -> Result<Value, RuntimeError>;
+    fn multiply_values(&self, left: Value, right: Value, span: Span) -> Result<Value, RuntimeError>;
+    fn divide_values(&self, left: Value, right: Value, span: Span) -> Result<Value, RuntimeError>;
+    fn modulo_values(&self, left: Value, right: Value, span: Span) -> Result<Value, RuntimeError>;
+    fn compare_greater(&self, left: Value, right: Value, span: Span) -> Result<Value, RuntimeError>;
+    fn compare_less(&self, left: Value, right: Value, span: Span) -> Result<Value, RuntimeError>;
+    fn compare_greater_equal(&self, left: Value, right: Value, span: Span) -> Result<Value, RuntimeError>;
+    fn compare_less_equal(&self, left: Value, right: Value, span: Span) -> Result<Value, RuntimeError>;
 }
 
 impl Value {
