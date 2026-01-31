@@ -1,12 +1,14 @@
 use std::collections::HashMap;
 use std::rc::Rc;
 
-use crate::ast::prelude::{AstArena, ClassDefinition, FunctionDefinition, Import, StmtId};
+use crate::ast::prelude::{AstArena, ClassDefinition, ErrorData, FunctionDefinition, Import, Span, StmtId};
 pub(crate) use crate::ast::program::ClassInstance;
 use std::cell::RefCell;
 use std::fmt::Debug;
 use std::sync::{Arc, RwLock};
 use string_interner::{DefaultSymbol as Symbol, StringInterner};
+use string_interner::backend::StringBackend;
+use crate::parser::structs::ParseError;
 
 #[derive(Clone, Debug)]
 pub enum Value {
@@ -26,20 +28,21 @@ pub enum Value {
 
 #[derive(Clone)]
 pub struct BuiltinFn(
-    pub Arc<dyn Fn(&Interpreter, Vec<Value>) -> Result<Value, RuntimeError> + Send + Sync>,
+    pub Arc<dyn Fn(&Interpreter, Vec<Value>, Span) -> Result<Value, RuntimeError> + Send + Sync>,
 );
 
 #[derive(Debug)]
 pub enum RuntimeError {
-    UndefinedVariable(String),
-    UndefinedFunction(String),
-    UndefinedMethod(String),
-    TypeMismatch(String),
-    DivisionByZero,
-    InvalidOperation(String),
-    Return(Value),
-    TypeError(String),
-    IOError(String),
+    UndefinedVariable(ErrorData),
+    UndefinedFunction(ErrorData),
+    UndefinedMethod(ErrorData),
+    TypeMismatch(ErrorData),
+    DivisionByZero(ErrorData),
+    InvalidOperation(ErrorData),
+    Return(ErrorData, Value),
+    TypeError(ErrorData),
+    IOError(ErrorData),
+    ImportError(ParseError),
 }
 
 #[derive(Clone, Debug)]
@@ -48,7 +51,7 @@ pub struct Environment {
     pub(crate) parent: Option<Box<Environment>>,
 }
 
-pub type SharedInterner = Arc<RwLock<StringInterner>>;
+pub type SharedInterner = Arc<RwLock<StringInterner<StringBackend>>>;
 
 #[derive(Debug)]
 pub struct Interpreter {

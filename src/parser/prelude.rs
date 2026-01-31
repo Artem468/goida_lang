@@ -1,1 +1,1 @@
-pub use super::structs as ParserStructs;
+pub use super::structs::*;

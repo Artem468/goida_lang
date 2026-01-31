@@ -1,6 +1,7 @@
+use crate::ast::prelude::{ErrorData, Span};
 use crate::interpreter::prelude::{Environment, RuntimeError, Value};
 use std::collections::HashMap;
-use string_interner::{DefaultSymbol as Symbol};
+use string_interner::DefaultSymbol as Symbol;
 
 impl Environment {
     pub(crate) fn new() -> Self {
@@ -31,14 +32,22 @@ impl Environment {
         }
     }
 
-    pub(crate) fn set(&mut self, name: Symbol, value: Value) -> Result<(), RuntimeError> {
+    pub(crate) fn set(
+        &mut self,
+        name: Symbol,
+        value: Value,
+        span: Span,
+    ) -> Result<(), RuntimeError> {
         if self.variables.contains_key(&name) {
             self.variables.insert(name, value);
             Ok(())
         } else if let Some(parent) = &mut self.parent {
-            parent.set(name, value)
+            parent.set(name, value, span)
         } else {
-            Err(RuntimeError::UndefinedVariable("Переменная не найдена".into()))
+            Err(RuntimeError::UndefinedVariable(ErrorData::new(
+                span,
+                "Переменная не найдена".into(),
+            )))
         }
     }
 }

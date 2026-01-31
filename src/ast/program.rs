@@ -2,6 +2,7 @@ use crate::ast::class::Visibility;
 use crate::ast::prelude::{ExprId, Span, StmtId, TypeId};
 use crate::interpreter::prelude::Value;
 use std::collections::HashMap;
+use std::ops::Range;
 use std::rc::Rc;
 use string_interner::DefaultSymbol as Symbol;
 
@@ -41,6 +42,18 @@ pub struct ClassDefinition {
 pub struct ClassInstance {
     pub class_name: Symbol,
     pub fields: HashMap<Symbol, Option<ExprId>>,
-    pub field_values: HashMap<Symbol, Value>,  // Вычисленные значения полей
+    pub field_values: HashMap<Symbol, Value>,
     pub class_ref: Rc<ClassDefinition>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ErrorData {
+    pub location: Span,
+    pub message: String,
+}
+
+impl ErrorData {
+    pub fn new(location: Span, message: String) -> ErrorData {
+        ErrorData { location, message }
+    }
 }
