@@ -51,6 +51,6 @@ jobs:
               with:
                   name: linux-binary
                   path: |
-                      target/release/goida
+                      target/release/goida_lang
                       target/release/*.rlib
                       target/release/*.d
