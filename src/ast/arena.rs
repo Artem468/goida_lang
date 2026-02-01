@@ -47,35 +47,13 @@ impl AstArena {
         id
     }
 
-    pub fn resolve_or_intern_type(&mut self, interner: &SharedInterner, name: &str) -> TypeId {
-        let mut lock = interner.write().expect("interner lock poisoned");
-        let symbol = lock.get_or_intern(name);
-
+    pub fn register_custom_type(&mut self, interner: &SharedInterner, name: &str) -> TypeId {
+        let symbol = self.intern_string(interner, name);
         if let Some(&id) = self.type_cache.get(&symbol) {
             return id;
         }
 
-        let new_type = match name {
-            "число" => DataType::Primitive(PrimitiveType::Number),
-            "логическое" => DataType::Primitive(PrimitiveType::Boolean),
-            "текст" => DataType::Primitive(PrimitiveType::Text),
-            "дробь" => DataType::Primitive(PrimitiveType::Float),
-            "список" => DataType::List(Box::new(DataType::Any)),
-            "массив" => DataType::Array(Box::new(DataType::Any)),
-            "словарь" => DataType::Dict {
-                key: Box::new(DataType::Any),
-                value: Box::new(DataType::Any),
-            },
-            "функция" => DataType::Function {
-                params: Vec::new(),
-                return_type: Box::new(DataType::Any),
-            },
-            "пустота" => DataType::Unit,
-            "неизвестно" => DataType::Any,
-            _ => DataType::Object(symbol),
-        };
-
-        let id = self.add_type(new_type);
+        let id = self.add_type(DataType::Object(symbol));
         self.type_cache.insert(symbol, id);
         id
     }
@@ -160,6 +138,23 @@ impl AstArena {
                 _ => None,
             },
             _ => None,
+        }
+    }
+
+    pub fn init_builtins(&mut self, interner: &SharedInterner) {
+        let builtins = [
+            ("число", DataType::Primitive(PrimitiveType::Number)),
+            ("текст", DataType::Primitive(PrimitiveType::Text)),
+            ("логическое", DataType::Primitive(PrimitiveType::Boolean)),
+            ("дробь", DataType::Primitive(PrimitiveType::Float)),
+            ("пустота", DataType::Unit),
+            ("неизвестно", DataType::Any),
+        ];
+
+        for (name, dt) in builtins {
+            let symbol = self.intern_string(interner, name);
+            let id = self.add_type(dt);
+            self.type_cache.insert(symbol, id);
         }
     }
 }
