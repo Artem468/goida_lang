@@ -145,7 +145,7 @@ impl AstArena {
         let builtins = [
             ("число", DataType::Primitive(PrimitiveType::Number)),
             ("текст", DataType::Primitive(PrimitiveType::Text)),
-            ("логическое", DataType::Primitive(PrimitiveType::Boolean)),
+            ("логический", DataType::Primitive(PrimitiveType::Boolean)),
             ("дробь", DataType::Primitive(PrimitiveType::Float)),
             ("пустота", DataType::Unit),
             ("неизвестно", DataType::Any),
