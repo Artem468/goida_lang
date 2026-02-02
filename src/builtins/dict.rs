@@ -1,0 +1,96 @@
+use std::cell::RefCell;
+use std::collections::HashMap;
+use crate::ast::prelude::{ClassDefinition, ErrorData, Span, Visibility};
+use crate::interpreter::prelude::{BuiltinFn, RuntimeError, SharedInterner, Value};
+use std::rc::Rc;
+use std::sync::Arc;
+use crate::ast::program::MethodType;
+
+pub fn setup_dict_class(interner: &SharedInterner) -> Rc<ClassDefinition> {
+    let mut methods = HashMap::new();
+    let name = interner.write().expect("interner lock poisoned").get_or_intern("Словарь");
+
+    // 1. set(key: Text, value: Any) -> Empty
+    methods.insert(interner.write().expect("interner lock poisoned").get_or_intern("задать"), (Visibility::Public, MethodType::Native(BuiltinFn(Arc::new(|_interp, args, span| {
+        if let (Some(Value::Dict(dict)), Some(Value::Text(key)), Some(val)) = (args.get(0), args.get(1), args.get(2)) {
+            dict.borrow_mut().insert(key.clone(), val.clone());
+            Ok(Value::Empty)
+        } else {
+            Err(RuntimeError::TypeError(ErrorData::new(span, "Использование: dict.set(string, value)".into())))
+        }
+    })))));
+
+    // 2. get(key: Text, default?: Any) -> Any
+    methods.insert(interner.write().expect("interner lock poisoned").get_or_intern("получить"), (Visibility::Public, MethodType::Native(BuiltinFn(Arc::new(|_interp, args, span| {
+        if let (Some(Value::Dict(dict)), Some(Value::Text(key))) = (args.get(0), args.get(1)) {
+            let dict = dict.borrow();
+            if let Some(val) = dict.get(key) {
+                Ok(val.clone())
+            } else {
+                // Если есть 3-й аргумент — возвращаем его как дефолт, иначе Empty
+                Ok(args.get(2).cloned().unwrap_or(Value::Empty))
+            }
+        } else {
+            Err(RuntimeError::TypeError(ErrorData::new(span, "Использование: dict.get(string, default?)".into())))
+        }
+    })))));
+
+    // 3. has(key: Text) -> Boolean
+    methods.insert(interner.write().expect("interner lock poisoned").get_or_intern("имеет"), (Visibility::Public, MethodType::Native(BuiltinFn(Arc::new(|_interp, args, span| {
+        if let (Some(Value::Dict(dict)), Some(Value::Text(key))) = (args.get(0), args.get(1)) {
+            Ok(Value::Boolean(dict.borrow().contains_key(key)))
+        } else {
+            Err(RuntimeError::TypeError(ErrorData::new(span, "Использование: dict.has(string)".into())))
+        }
+    })))));
+
+    // 4. keys() -> List<Text>
+    methods.insert(interner.write().expect("interner lock poisoned").get_or_intern("ключи"), (Visibility::Public, MethodType::Native(BuiltinFn(Arc::new(|_interp, args, span| {
+        if let Some(Value::Dict(dict)) = args.get(0) {
+            let keys: Vec<Value> = dict.borrow().keys()
+                .map(|k| Value::Text(k.clone()))
+                .collect();
+            Ok(Value::List(Rc::new(RefCell::new(keys))))
+        } else {
+            Err(RuntimeError::TypeError(ErrorData::new(span, "Ожидался Dict".into())))
+        }
+    })))));
+
+    // values() -> List<Any>
+    methods.insert(interner.write().expect("interner lock poisoned").get_or_intern("значения"), (Visibility::Public, MethodType::Native(BuiltinFn(Arc::new(|_interp, args, span| {
+        if let Some(Value::Dict(dict)) = args.get(0) {
+            let values: Vec<Value> = dict.borrow().values()
+                .cloned()
+                .collect();
+            Ok(Value::List(Rc::new(RefCell::new(values))))
+        } else {
+            Err(RuntimeError::TypeError(ErrorData::new(span, "Ожидался Dict".into())))
+        }
+    })))));
+
+    // 5. remove(key: Text) -> Any
+    methods.insert(interner.write().expect("interner lock poisoned").get_or_intern("удалить"), (Visibility::Public, MethodType::Native(BuiltinFn(Arc::new(|_interp, args, span| {
+        if let (Some(Value::Dict(dict)), Some(Value::Text(key))) = (args.get(0), args.get(1)) {
+            Ok(dict.borrow_mut().remove(key).unwrap_or(Value::Empty))
+        } else {
+            Err(RuntimeError::TypeError(ErrorData::new(span, "Использование: dict.remove(string)".into())))
+        }
+    })))));
+
+    // 6. len() -> Number
+    methods.insert(interner.write().expect("interner lock poisoned").get_or_intern("длина"), (Visibility::Public, MethodType::Native(BuiltinFn(Arc::new(|_interp, args, span| {
+        if let Some(Value::Dict(dict)) = args.get(0) {
+            Ok(Value::Number(dict.borrow().len() as i64))
+        } else {
+            Err(RuntimeError::TypeError(ErrorData::new(span, "Ожидался Dict".into())))
+        }
+    })))));
+
+    Rc::new(ClassDefinition {
+        name,
+        fields: HashMap::new(),
+        methods,
+        constructor: None,
+        span: Span::default(),
+    })
+}

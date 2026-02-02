@@ -55,6 +55,7 @@ pub type SharedInterner = Arc<RwLock<StringInterner<StringBackend>>>;
 
 #[derive(Debug)]
 pub struct Interpreter {
+    pub(crate) std_classes: HashMap<Symbol, Rc<ClassDefinition>>,
     pub(crate) builtins: HashMap<Symbol, BuiltinFn>,
     pub(crate) modules: HashMap<Symbol, Module>,
     pub(crate) interner: SharedInterner,

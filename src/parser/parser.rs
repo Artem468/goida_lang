@@ -7,6 +7,8 @@ use pest_derive::Parser;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::rc::Rc;
+use string_interner::DefaultSymbol;
+use crate::ast::program::MethodType;
 
 #[derive(Parser)]
 #[grammar = "grammar.pest"]
@@ -167,7 +169,7 @@ impl ParserTrait {
             .as_str();
 
         let mut fields = HashMap::new();
-        let mut methods = HashMap::new();
+        let mut methods: HashMap<DefaultSymbol, (Visibility, MethodType)> = HashMap::new();
         let mut constructor = None;
         while let Some(token) = inner.next() {
             match token.as_rule() {
@@ -185,7 +187,7 @@ impl ParserTrait {
                         body: method.body,
                         span: method.span,
                         module: None,
-                    });
+                    }.into());
                     methods.insert(
                         method.name,
                         (
@@ -197,7 +199,7 @@ impl ParserTrait {
                                 body: method.body,
                                 span: method.span,
                                 module: None,
-                            },
+                            }.into(),
                         ),
                     );
                 }
@@ -215,7 +217,7 @@ impl ParserTrait {
                                 body: method.body,
                                 span: method.span,
                                 module: None,
-                            },
+                            }.into(),
                         ),
                     );
                 }

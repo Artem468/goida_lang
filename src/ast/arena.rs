@@ -144,9 +144,12 @@ impl AstArena {
     pub fn init_builtins(&mut self, interner: &SharedInterner) {
         let builtins = [
             ("число", DataType::Primitive(PrimitiveType::Number)),
-            ("текст", DataType::Primitive(PrimitiveType::Text)),
+            ("строка", DataType::Primitive(PrimitiveType::Text)),
             ("логический", DataType::Primitive(PrimitiveType::Boolean)),
             ("дробь", DataType::Primitive(PrimitiveType::Float)),
+            ("список", DataType::List(Box::new(DataType::Any))),
+            ("массив", DataType::Array(Box::new(DataType::Any))),
+            ("словарь", DataType::Dict { key: Box::new(DataType::Any), value: Box::new(DataType::Any) }),
             ("пустота", DataType::Unit),
             ("неизвестно", DataType::Any),
         ];

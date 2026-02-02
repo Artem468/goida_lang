@@ -3,6 +3,7 @@ mod interpreter;
 mod macros;
 mod parser;
 mod traits;
+mod builtins;
 
 use crate::ast::prelude::{ErrorData, Span};
 use crate::parser::prelude::{ParseError, Parser as ProgramParser};

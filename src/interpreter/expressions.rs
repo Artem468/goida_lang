@@ -1,6 +1,6 @@
-use crate::ast::prelude::{
-    BinaryOperator, ErrorData, ExprId, ExpressionKind, LiteralValue, Span, UnaryOperator,
-};
+use std::cell::RefCell;
+use std::rc::Rc;
+use crate::ast::prelude::{BinaryOperator, ErrorData, ExprId, ExpressionKind, LiteralValue, Span, UnaryOperator, Visibility};
 use crate::interpreter::structs::{Interpreter, RuntimeError, Value};
 use crate::traits::prelude::{
     CoreOperations, ExpressionEvaluator, InterpreterClasses, InterpreterFunctions, ValueOperations,
@@ -321,122 +321,89 @@ impl ExpressionEvaluator for Interpreter {
                 }
             }
 
-            ExpressionKind::MethodCall {
-                object,
-                method,
-                args,
-            } => {
+            ExpressionKind::MethodCall { object, method, args } => {
                 let obj_expr = {
                     let module = self.modules.get(&current_module_id).ok_or_else(|| {
-                        RuntimeError::InvalidOperation(ErrorData::new(
-                            expr_kind.span,
-                            "Модуль не найден".into(),
-                        ))
+                        RuntimeError::InvalidOperation(ErrorData::new(expr_kind.span, "Модуль не найден".into()))
                     })?;
-                    module.arena.get_expression(expr_id).unwrap().clone()
+                    module.arena.get_expression(object).unwrap().clone()
                 };
+
                 let mut arguments = Vec::new();
                 for arg_id in args {
                     arguments.push(self.evaluate_expression(arg_id, current_module_id)?);
                 }
 
-                match self.evaluate_expression(object, current_module_id) {
-                    Ok(Value::Object(instance_ref)) => {
-                        let instance = instance_ref.borrow();
+                let target_value = self.evaluate_expression(object, current_module_id)?;
+                
+                if let Some(class_def) = self.get_class_for_value(&target_value) {
+                    if let Some((visibility, method_type)) = class_def.methods.get(&method) {
                         let is_external = !matches!(obj_expr.kind, ExpressionKind::This);
-
-                        if !instance.is_method_accessible(&method, is_external) {
+                        
+                        if is_external && matches!(visibility, Visibility::Private) {
                             let m_name = self.resolve_symbol(method).unwrap();
                             return Err(RuntimeError::InvalidOperation(ErrorData::new(
                                 obj_expr.span,
-                                format!("Метод '{}' недоступен", m_name),
+                                format!("Метод '{}' является приватным", m_name),
                             )));
                         }
 
-                        if let Some(method_def) = instance.get_method(&method) {
-                            let method_def = method_def.clone();
-                            let method_module = method_def.module.unwrap_or(current_module_id);
+                        let method_type = method_type.clone();
+                        let method_module = method_type.get_module().unwrap_or(current_module_id);
 
-                            drop(instance);
-
-                            self.call_method(
-                                method_def,
-                                arguments,
-                                Value::Object(instance_ref),
-                                method_module,
-                                obj_expr.span,
-                            )
-                        } else {
-                            let m_name = self.resolve_symbol(method).unwrap();
-                            Err(RuntimeError::UndefinedFunction(ErrorData::new(
-                                obj_expr.span,
-                                format!("Метод '{}' не найден", m_name),
-                            )))
-                        }
+                        return self.call_method(
+                            method_type,
+                            arguments,
+                            target_value,
+                            method_module,
+                            obj_expr.span,
+                        );
                     }
-
-                    Ok(Value::Module(mod_symbol)) => {
+                }
+                
+                match target_value {
+                    Value::Module(mod_symbol) => {
                         if let Some(target_module) = self.modules.get(&mod_symbol) {
                             if let Some(function) = target_module.functions.get(&method) {
-                                self.call_function(
+                                return self.call_function(
                                     function.clone(),
                                     arguments,
                                     mod_symbol,
                                     obj_expr.span,
-                                )
+                                );
                             } else {
                                 let m_name = self.resolve_symbol(method).unwrap();
                                 let mod_name = self.resolve_symbol(mod_symbol).unwrap();
-                                Err(RuntimeError::UndefinedFunction(ErrorData::new(
-                                    expr_kind.span.into(),
-                                    format!(
-                                        "Функция '{}' не найдена в модуле '{}'",
-                                        m_name, mod_name
-                                    ),
-                                )))
+                                return Err(RuntimeError::UndefinedFunction(ErrorData::new(
+                                    expr_kind.span,
+                                    format!("Функция '{}' не найдена в модуле '{}'", m_name, mod_name),
+                                )));
                             }
-                        } else {
-                            let mod_name = self.resolve_symbol(mod_symbol).unwrap();
-                            Err(RuntimeError::InvalidOperation(ErrorData::new(
-                                expr_kind.span.into(),
-                                format!("Модуль '{}' не найден", mod_name),
-                            )))
                         }
                     }
-
                     _ => {
                         if let ExpressionKind::Identifier(mod_symbol) = obj_expr.kind {
                             if let Some(target_module) = self.modules.get(&mod_symbol) {
-                                return if let Some(function) = target_module.functions.get(&method)
-                                {
-                                    self.call_function(
+                                if let Some(function) = target_module.functions.get(&method) {
+                                    return self.call_function(
                                         function.clone(),
                                         arguments,
                                         mod_symbol,
                                         obj_expr.span,
-                                    )
-                                } else {
-                                    let m_name = self.resolve_symbol(method).unwrap();
-                                    let mod_name = self.resolve_symbol(mod_symbol).unwrap();
-                                    Err(RuntimeError::UndefinedFunction(ErrorData::new(
-                                        expr_kind.span,
-                                        format!(
-                                            "Функция '{}' не найдена в модуле '{}'",
-                                            m_name, mod_name
-                                        ),
-                                    )))
-                                };
+                                    );
+                                }
                             }
                         }
-
-                        Err(RuntimeError::TypeMismatch(ErrorData::new(
-                            expr_kind.span,
-                            "Попытка вызова метода у значения, не являющегося объектом или модулем"
-                                .into(),
-                        )))
                     }
                 }
+                
+                let m_name = self.resolve_symbol(method).unwrap();
+                Err(RuntimeError::UndefinedMethod(ErrorData::new(
+                    expr_kind.span,
+                    format!("Не удалось вызвать '{}': цель не является объектом или модулем", m_name),
+                )))
             }
+
 
             ExpressionKind::ObjectCreation { class_name, args } => {
                 let mut arguments = Vec::new();
@@ -505,10 +472,10 @@ impl ExpressionEvaluator for Interpreter {
                 };
 
                 let instance = class_rc.create_instance();
-                let instance_ref = std::rc::Rc::new(std::cell::RefCell::new(instance));
+                let instance_ref = Rc::new(RefCell::new(instance));
 
                 if let Some(constructor) = class_rc.constructor.clone() {
-                    let constructor_module = constructor.module.unwrap_or(definition_module);
+                    let constructor_module = constructor.get_module().unwrap_or(definition_module);
 
                     self.call_method(
                         constructor,

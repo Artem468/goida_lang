@@ -101,7 +101,7 @@ impl TryFrom<Value> for f64 {
             Value::Number(data) => Ok(data as f64),
             Value::Text(data) => data
                 .parse()
-                .map_err(|_| format!("Не удалось преобразовать текст '{}' в дробное число", data)),
+                .map_err(|_| format!("Не удалось преобразовать строку '{}' в дробное число", data)),
             Value::Boolean(b) => Ok(if b { 1.0 } else { 0.0 }),
             _ => Err("Тип не может быть приведен к дробному числу".into()),
         }
@@ -116,7 +116,7 @@ impl TryFrom<Value> for i64 {
             Value::Float(data) => Ok(data as i64),
             Value::Number(data) => Ok(data),
             Value::Text(data) => data.parse().map_err(|_| {
-                format!("Не удалось преобразовать текст '{}' в целое число", data)
+                format!("Не удалось преобразовать строку '{}' в целое число", data)
             }),
             Value::Boolean(b) => Ok(if b { 1 } else { 0 }),
             _ => Err("Тип не может быть приведен к целому числу".into()),
