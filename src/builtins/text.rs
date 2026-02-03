@@ -1,10 +1,9 @@
 use crate::ast::prelude::{ClassDefinition, ErrorData, Span, Visibility};
 use crate::interpreter::prelude::{BuiltinFn, RuntimeError, SharedInterner, Value};
-use std::cell::RefCell;
-use std::rc::Rc;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
+use string_interner::DefaultSymbol as Symbol;
 
-pub fn setup_text_class(interner: &SharedInterner) -> Rc<ClassDefinition> {
+pub fn setup_text_class(interner: &SharedInterner) -> (Symbol, Arc<RwLock<ClassDefinition>>){
     let name = interner
         .write()
         .expect("interner lock poisoned")
@@ -24,7 +23,13 @@ pub fn setup_text_class(interner: &SharedInterner) -> Rc<ClassDefinition> {
 
             let data_sym = _interp.interner.write().unwrap().get_or_intern("__data");
             instance
-                .borrow_mut()
+                .write()
+                .map_err(|_| {
+                    RuntimeError::Panic(ErrorData::new(
+                        Span::default(),
+                        "Сбой блокировки в реализации строк".into(),
+                    ))
+                })?
                 .field_values
                 .insert(data_sym, Value::Text(content));
         }
@@ -65,7 +70,7 @@ pub fn setup_text_class(interner: &SharedInterner) -> Rc<ClassDefinition> {
                     .split(sep)
                     .map(|part| Value::Text(part.to_string()))
                     .collect();
-                Ok(Value::List(Rc::new(RefCell::new(parts))))
+                Ok(Value::List(Arc::new(RwLock::new(parts))))
             } else {
                 Err(RuntimeError::TypeError(ErrorData::new(
                     span,
@@ -157,5 +162,5 @@ pub fn setup_text_class(interner: &SharedInterner) -> Rc<ClassDefinition> {
         })),
     );
 
-    Rc::new(class_def)
+    (name, Arc::new(RwLock::new(class_def)))
 }

@@ -2,7 +2,7 @@ use crate::ast::class::Visibility;
 use crate::ast::prelude::{ExprId, Span, StmtId, TypeId};
 use crate::interpreter::prelude::{BuiltinFn, Value};
 use std::collections::HashMap;
-use std::rc::Rc;
+use std::sync::{Arc, RwLock};
 use string_interner::DefaultSymbol as Symbol;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -30,25 +30,31 @@ pub struct Import {
 
 #[derive(Clone, Debug)]
 pub enum MethodType {
-    User(FunctionDefinition),
-    Native(BuiltinFn),
+    User(Arc<FunctionDefinition>),
+    Native(Arc<BuiltinFn>),
 }
 
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, Debug)]
 pub struct ClassDefinition {
     pub name: Symbol,
-    pub fields: HashMap<Symbol, (Visibility, bool, Option<ExprId>)>,
+    pub fields: HashMap<Symbol, (Visibility, bool, FieldData)>,
     pub methods: HashMap<Symbol, (Visibility, bool, MethodType)>,
     pub constructor: Option<MethodType>,
     pub span: Span,
 }
 
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, Debug)]
+pub enum FieldData {
+    Expression(Option<ExprId>),
+    Value(Arc<RwLock<Value>>),
+}
+
+#[derive(Clone, Debug)]
 pub struct ClassInstance {
     pub class_name: Symbol,
     pub fields: HashMap<Symbol, Option<ExprId>>,
     pub field_values: HashMap<Symbol, Value>,
-    pub class_ref: Rc<ClassDefinition>,
+    pub class_ref: Arc<RwLock<ClassDefinition>>,
 }
 
 #[derive(Debug, Clone)]

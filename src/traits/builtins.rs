@@ -34,6 +34,6 @@ impl PartialEq for MethodType {
 
 impl From<BuiltinFn> for MethodType {
     fn from(builtin: BuiltinFn) -> Self {
-        MethodType::Native(builtin)
+        MethodType::Native(Arc::new(builtin))
     }
 }

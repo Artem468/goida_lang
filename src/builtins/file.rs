@@ -3,10 +3,10 @@ use crate::ast::program::MethodType;
 use crate::interpreter::prelude::{BuiltinFn, RuntimeError, SharedInterner, Value};
 use std::fs;
 use std::io::Write;
-use std::rc::Rc;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
+use string_interner::DefaultSymbol as Symbol;
 
-pub fn setup_file_class(interner_ref: &SharedInterner) -> Rc<ClassDefinition> {
+pub fn setup_file_class(interner_ref: &SharedInterner) -> (Symbol, Arc<RwLock<ClassDefinition>>) {
     let name = interner_ref.write().unwrap().get_or_intern("Файл");
 
     let mut class_def = ClassDefinition::new(name, Span::default());
@@ -16,7 +16,13 @@ pub fn setup_file_class(interner_ref: &SharedInterner) -> Rc<ClassDefinition> {
         {
             let path_sym = interp.interner.write().unwrap().get_or_intern("путь");
             instance
-                .borrow_mut()
+                .write()
+                .map_err(|_| {
+                    RuntimeError::Panic(ErrorData::new(
+                        Span::default(),
+                        "Сбой блокировки в реализации файла".into(),
+                    ))
+                })?
                 .field_values
                 .insert(path_sym, Value::Text(path.clone()));
             Ok(Value::Empty)
@@ -28,15 +34,24 @@ pub fn setup_file_class(interner_ref: &SharedInterner) -> Rc<ClassDefinition> {
         }
     })));
 
-    let get_path = |args: &Vec<Value>| -> Option<String> {
+    let get_path = |args: &Vec<Value>| -> Result<String, RuntimeError> {
         if let Some(Value::Object(instance)) = args.get(0) {
-            for (_, val) in &instance.borrow().field_values {
+            for (_, val) in &instance
+                .read()
+                .map_err(|_| {
+                    RuntimeError::Panic(ErrorData::new(
+                        Span::default(),
+                        "Сбой блокировки в реализации файла".into(),
+                    ))
+                })?
+                .field_values
+            {
                 if let Value::Text(p) = val {
-                    return Some(p.clone());
+                    return Ok(p.clone());
                 }
             }
         }
-        None
+        Err(RuntimeError::InvalidOperation(ErrorData::new(Span::default(), "Путь не найден".into())))
     };
 
     // --- .существует() -> Bool ---
@@ -56,10 +71,7 @@ pub fn setup_file_class(interner_ref: &SharedInterner) -> Rc<ClassDefinition> {
         Visibility::Public,
         false,
         BuiltinFn(Arc::new(move |_, args, span| {
-            let path = get_path(&args).ok_or(RuntimeError::IOError(ErrorData::new(
-                span,
-                "Путь не найден".into(),
-            )))?;
+            let path = get_path(&args)?;
             let content = fs::read_to_string(path)
                 .map_err(|e| RuntimeError::IOError(ErrorData::new(span, e.to_string())))?;
             Ok(Value::Text(content))
@@ -72,10 +84,7 @@ pub fn setup_file_class(interner_ref: &SharedInterner) -> Rc<ClassDefinition> {
         Visibility::Public,
         false,
         BuiltinFn(Arc::new(move |_, args, span| {
-            let path = get_path(&args).ok_or(RuntimeError::IOError(ErrorData::new(
-                span,
-                "Путь не найден".into(),
-            )))?;
+            let path = get_path(&args)?;
             let text = if let Some(t) = args.get(1) {
                 t.to_string()
             } else {
@@ -98,11 +107,8 @@ pub fn setup_file_class(interner_ref: &SharedInterner) -> Rc<ClassDefinition> {
         interner_ref.write().unwrap().get_or_intern("дописать"),
         Visibility::Public,
         false,
-        MethodType::Native(BuiltinFn(Arc::new(move |_, args, span| {
-            let path = get_path(&args).ok_or(RuntimeError::IOError(ErrorData::new(
-                span,
-                "Путь не найден".into(),
-            )))?;
+        MethodType::Native(Arc::from(BuiltinFn(Arc::new(move |_, args, span| {
+            let path = get_path(&args)?;
             let text = if let Some(t) = args.get(1) {
                 t.to_string()
             } else {
@@ -122,7 +128,7 @@ pub fn setup_file_class(interner_ref: &SharedInterner) -> Rc<ClassDefinition> {
             file.write_all(text.as_bytes())
                 .map_err(|e| RuntimeError::IOError(ErrorData::new(span, e.to_string())))?;
             Ok(Value::Empty)
-        }))),
+        })))),
     );
 
     // --- .удалить() ---
@@ -131,15 +137,12 @@ pub fn setup_file_class(interner_ref: &SharedInterner) -> Rc<ClassDefinition> {
         Visibility::Public,
         false,
         BuiltinFn(Arc::new(move |_, args, span| {
-            let path = get_path(&args).ok_or(RuntimeError::IOError(ErrorData::new(
-                span,
-                "Путь не найден".into(),
-            )))?;
+            let path = get_path(&args)?;
             fs::remove_file(path)
                 .map_err(|e| RuntimeError::IOError(ErrorData::new(span, e.to_string())))?;
             Ok(Value::Empty)
         })),
     );
 
-    Rc::new(class_def)
+    (name, Arc::new(RwLock::new(class_def)))
 }

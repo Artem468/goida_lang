@@ -1,11 +1,10 @@
 use crate::ast::prelude::{ClassDefinition, ErrorData, Span, Visibility};
 use crate::interpreter::prelude::{BuiltinFn, RuntimeError, SharedInterner, Value};
 use crate::traits::prelude::CoreOperations;
-use std::cell::RefCell;
-use std::rc::Rc;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
+use string_interner::DefaultSymbol as Symbol;
 
-pub fn setup_list_class(interner: &SharedInterner) -> Rc<ClassDefinition> {
+pub fn setup_list_class(interner: &SharedInterner) -> (Symbol, Arc<RwLock<ClassDefinition>>) {
     let name = interner
         .write()
         .expect("interner lock poisoned")
@@ -18,11 +17,17 @@ pub fn setup_list_class(interner: &SharedInterner) -> Rc<ClassDefinition> {
         // args[1..] - это элементы: новый Список(1, 2, 3)
         if let Some(Value::Object(instance)) = args.get(0) {
             let items = args[1..].to_vec();
-            let internal_list = Value::List(Rc::new(RefCell::new(items)));
+            let internal_list = Value::List(Arc::new(RwLock::new(items)));
 
             let data_sym = _interp.intern_string("__data");
             instance
-                .borrow_mut()
+                .write()
+                .map_err(|_| {
+                    RuntimeError::Panic(ErrorData::new(
+                        Span::default(),
+                        "Сбой блокировки в реализации списка".into(),
+                    ))
+                })?
                 .field_values
                 .insert(data_sym, internal_list);
         }
@@ -39,7 +44,14 @@ pub fn setup_list_class(interner: &SharedInterner) -> Rc<ClassDefinition> {
         false,
         BuiltinFn(Arc::new(|_interp, args, span| {
             if let (Some(Value::List(list)), Some(val)) = (args.get(0), args.get(1)) {
-                list.borrow_mut().push(val.clone());
+                list.write()
+                    .map_err(|_| {
+                        RuntimeError::Panic(ErrorData::new(
+                            Span::default(),
+                            "Сбой блокировки в реализации списка".into(),
+                        ))
+                    })?
+                    .push(val.clone());
                 Ok(Value::Empty)
             } else {
                 Err(RuntimeError::TypeError(ErrorData::new(
@@ -62,7 +74,12 @@ pub fn setup_list_class(interner: &SharedInterner) -> Rc<ClassDefinition> {
             if let (Some(Value::List(list)), Some(Value::Number(idx)), Some(new_val)) =
                 (args.get(0), args.get(1), args.get(2))
             {
-                let mut vec = list.borrow_mut();
+                let mut vec = list.write().map_err(|_| {
+                    RuntimeError::Panic(ErrorData::new(
+                        Span::default(),
+                        "Сбой блокировки в реализации списка".into(),
+                    ))
+                })?;
                 let i = *idx as usize;
                 if i < vec.len() {
                     vec[i] = new_val.clone();
@@ -92,7 +109,15 @@ pub fn setup_list_class(interner: &SharedInterner) -> Rc<ClassDefinition> {
         false,
         BuiltinFn(Arc::new(|_interp, args, span| {
             if let Some(Value::List(list)) = args.get(0) {
-                let length = list.borrow().len();
+                let length = list
+                    .read()
+                    .map_err(|_| {
+                        RuntimeError::Panic(ErrorData::new(
+                            Span::default(),
+                            "Сбой блокировки в реализации списка".into(),
+                        ))
+                    })?
+                    .len();
                 Ok(Value::Number(length as i64))
             } else {
                 Err(RuntimeError::TypeError(ErrorData::new(
@@ -113,7 +138,12 @@ pub fn setup_list_class(interner: &SharedInterner) -> Rc<ClassDefinition> {
         false,
         BuiltinFn(Arc::new(|_interp, args, span| {
             if let Some(Value::List(list)) = args.get(0) {
-                let mut vec = list.borrow_mut();
+                let mut vec = list.write().map_err(|_| {
+                    RuntimeError::Panic(ErrorData::new(
+                        Span::default(),
+                        "Сбой блокировки в реализации списка".into(),
+                    ))
+                })?;
                 if vec.is_empty() {
                     return Err(RuntimeError::InvalidOperation(ErrorData::new(
                         span,
@@ -150,7 +180,14 @@ pub fn setup_list_class(interner: &SharedInterner) -> Rc<ClassDefinition> {
         false,
         BuiltinFn(Arc::new(|_interp, args, span| {
             if let Some(Value::List(list)) = args.get(0) {
-                list.borrow_mut().clear();
+                list.write()
+                    .map_err(|_| {
+                        RuntimeError::Panic(ErrorData::new(
+                            Span::default(),
+                            "Сбой блокировки в реализации списка".into(),
+                        ))
+                    })?
+                    .clear();
                 Ok(Value::Empty)
             } else {
                 Err(RuntimeError::TypeError(ErrorData::new(
@@ -171,7 +208,12 @@ pub fn setup_list_class(interner: &SharedInterner) -> Rc<ClassDefinition> {
         false,
         BuiltinFn(Arc::new(|_interp, args, span| {
             if let (Some(Value::List(list)), Some(Value::Text(sep))) = (args.get(0), args.get(1)) {
-                let vec = list.borrow();
+                let vec = list.read().map_err(|_| {
+                    RuntimeError::Panic(ErrorData::new(
+                        Span::default(),
+                        "Сбой блокировки в реализации списка".into(),
+                    ))
+                })?;
                 let res = vec
                     .iter()
                     .map(|v| v.to_string())
@@ -198,7 +240,12 @@ pub fn setup_list_class(interner: &SharedInterner) -> Rc<ClassDefinition> {
         BuiltinFn(Arc::new(|_interp, args, span| {
             if let (Some(Value::List(list)), Some(Value::Number(idx))) = (args.get(0), args.get(1))
             {
-                let vec = list.borrow();
+                let vec = list.read().map_err(|_| {
+                    RuntimeError::Panic(ErrorData::new(
+                        Span::default(),
+                        "Сбой блокировки в реализации списка".into(),
+                    ))
+                })?;
                 vec.get(*idx as usize).cloned().ok_or_else(|| {
                     RuntimeError::InvalidOperation(ErrorData::new(span, "Индекс вне границ".into()))
                 })
@@ -211,5 +258,5 @@ pub fn setup_list_class(interner: &SharedInterner) -> Rc<ClassDefinition> {
         })),
     );
 
-    Rc::new(class_def)
+    (name, Arc::new(RwLock::new(class_def)))
 }

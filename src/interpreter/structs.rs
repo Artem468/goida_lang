@@ -1,15 +1,13 @@
 use std::any::Any;
 use std::collections::HashMap;
-use std::rc::Rc;
 
 use crate::ast::prelude::{AstArena, ClassDefinition, ErrorData, FunctionDefinition, Import, Span, StmtId};
 pub(crate) use crate::ast::program::ClassInstance;
-use std::cell::RefCell;
+use crate::parser::structs::ParseError;
 use std::fmt::Debug;
 use std::sync::{Arc, RwLock};
-use string_interner::{DefaultSymbol as Symbol, StringInterner};
 use string_interner::backend::StringBackend;
-use crate::parser::structs::ParseError;
+use string_interner::{DefaultSymbol as Symbol, StringInterner};
 
 #[derive(Clone, Debug)]
 pub enum Value {
@@ -17,14 +15,14 @@ pub enum Value {
     Float(f64),
     Text(String),
     Boolean(bool),
-    Object(Rc<RefCell<ClassInstance>>),
-    Class(Rc<ClassDefinition>),
-    Function(Rc<FunctionDefinition>),
+    Object(Arc<RwLock<ClassInstance>>),
+    Class(Arc<RwLock<ClassDefinition>>),
+    Function(Arc<FunctionDefinition>),
     Builtin(BuiltinFn),
     Module(Symbol),
-    List(Rc<RefCell<Vec<Value>>>),
-    Array(Rc<Vec<Value>>),
-    Dict(Rc<RefCell<HashMap<String, Value>>>),
+    List(Arc<RwLock<Vec<Value>>>),
+    Array(Arc<Vec<Value>>),
+    Dict(Arc<RwLock<HashMap<String, Value>>>),
     NativeResource(Arc<RwLock<Box<dyn Any + Send + Sync>>>),
     Empty,
 }
@@ -46,6 +44,7 @@ pub enum RuntimeError {
     TypeError(ErrorData),
     IOError(ErrorData),
     ImportError(ParseError),
+    Panic(ErrorData),
 }
 
 #[derive(Clone, Debug)]
@@ -58,7 +57,7 @@ pub type SharedInterner = Arc<RwLock<StringInterner<StringBackend>>>;
 
 #[derive(Debug)]
 pub struct Interpreter {
-    pub(crate) std_classes: HashMap<Symbol, Rc<ClassDefinition>>,
+    pub(crate) std_classes: HashMap<Symbol, Arc<RwLock<ClassDefinition>>>,
     pub(crate) builtins: HashMap<Symbol, BuiltinFn>,
     pub(crate) modules: HashMap<Symbol, Module>,
     pub(crate) interner: SharedInterner,
@@ -72,7 +71,7 @@ pub struct Module {
     pub arena: AstArena,
 
     pub functions: HashMap<Symbol, FunctionDefinition>,
-    pub classes: HashMap<Symbol, Rc<ClassDefinition>>,
+    pub classes: HashMap<Symbol, Arc<RwLock<ClassDefinition>>>,
 
     pub body: Vec<StmtId>,
     pub imports: Vec<Import>,

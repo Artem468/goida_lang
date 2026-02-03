@@ -157,6 +157,9 @@ fn execute_code_with_interpreter(
                 RuntimeError::TypeMismatch(err) => {
                     (format!("Несоответствие типов: {}", err.message), err)
                 }
+                RuntimeError::Panic(err) => {
+                    (format!("Паника: {}", err.message), err)
+                }
                 RuntimeError::DivisionByZero(err) => ("Деление на ноль".to_string(), err),
                 RuntimeError::InvalidOperation(err) => {
                     (format!("Недопустимая операция: {}", err.message), err)

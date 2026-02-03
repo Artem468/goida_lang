@@ -1,5 +1,6 @@
 use string_interner::DefaultSymbol;
 use crate::ast::prelude::{ExprId, ExpressionKind, LiteralValue};
+use crate::ast::program::FieldData;
 use crate::interpreter::prelude::{RuntimeError, Value, Module};
 
 pub trait ExpressionEvaluator {
@@ -18,5 +19,11 @@ impl ExpressionKind {
         } else {
             None
         }
+    }
+}
+
+impl From<Option<ExprId>> for FieldData {
+    fn from(expr: Option<ExprId>) -> Self {
+        FieldData::Expression(expr)
     }
 }

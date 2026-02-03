@@ -5,7 +5,7 @@ use pest::error::ErrorVariant;
 use pest::Parser;
 use pest_derive::Parser;
 use std::path::PathBuf;
-use std::rc::Rc;
+use std::sync::{Arc, RwLock};
 
 #[derive(Parser)]
 #[grammar = "grammar.pest"]
@@ -216,7 +216,7 @@ impl ParserTrait {
 
         self.module
             .classes
-            .insert(symbol_name, Rc::from(class_def.clone()));
+            .insert(symbol_name, Arc::from(RwLock::new(class_def.clone())));
         let stmt_id = self
             .module
             .arena

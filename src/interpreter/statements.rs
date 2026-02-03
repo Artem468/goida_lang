@@ -142,7 +142,12 @@ impl StatementExecutor for Interpreter {
                 let value_result = self.evaluate_expression(value, current_module_id)?;
 
                 if let Value::Object(instance_ref) = obj_value {
-                    let mut instance = instance_ref.borrow_mut();
+                    let mut instance = instance_ref.write().map_err(|_| {
+                        RuntimeError::Panic(ErrorData::new(
+                            Span::default(),
+                            "Сбой блокировки при выполнение инструкций".into(),
+                        ))
+                    })?;
                     if !(*instance).is_field_accessible(&property, is_external) {
                         return Err(RuntimeError::InvalidOperation(ErrorData::new(
                             obj_expr.span,
