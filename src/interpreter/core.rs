@@ -21,10 +21,12 @@ impl CoreOperations for Interpreter {
         let list_class = setup_list_class(&interner);
         let array_class = setup_array_class(&interner);
         let dict_class = setup_dict_class(&interner);
+        let file_class = setup_file_class(&interner);
         std_classes.insert(string_class.name, string_class);
         std_classes.insert(list_class.name, list_class);
         std_classes.insert(array_class.name, array_class);
         std_classes.insert(dict_class.name, dict_class);
+        std_classes.insert(file_class.name, file_class);
 
         Interpreter {
             std_classes,
@@ -181,6 +183,7 @@ impl CoreOperations for Interpreter {
         let class_name = match value {
             Value::Text(_) => "Строка",
             Value::List(_) => "Список",
+            Value::Array(_) => "Массив",
             Value::Dict(_) => "Словарь",
             Value::Float(_) => "Дробь",
             Value::Number(_) => "Число",

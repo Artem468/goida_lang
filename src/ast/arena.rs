@@ -152,6 +152,13 @@ impl AstArena {
             ("словарь", DataType::Dict { key: Box::new(DataType::Any), value: Box::new(DataType::Any) }),
             ("пустота", DataType::Unit),
             ("неизвестно", DataType::Any),
+            ("функция", DataType::Function { params: vec![], return_type: Box::new(DataType::Any) }),
+            
+            ("Строка", DataType::Primitive(PrimitiveType::Text)),
+            ("Список", DataType::List(Box::new(DataType::Any))),
+            ("Массив", DataType::Array(Box::new(DataType::Any))),
+            ("Словарь", DataType::Dict { key: Box::new(DataType::Any), value: Box::new(DataType::Any) }),
+            ("Файл", DataType::Object(self.intern_string(interner, "Файл"))),
         ];
 
         for (name, dt) in builtins {

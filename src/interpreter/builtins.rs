@@ -175,6 +175,9 @@ setup_builtins!(interpreter, {
             Value::Dict(_) => {
                 Ok(Value::Text("словарь".to_string()))
             },
+            Value::NativeResource(_) => {
+                Ok(Value::Text("ресурс".to_string()))
+            }
             Value::Empty => {
                 Ok(Value::Text("пустота".to_string()))
             }
