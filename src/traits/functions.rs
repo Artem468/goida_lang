@@ -1,3 +1,4 @@
+use std::sync::Arc;
 use string_interner::DefaultSymbol as Symbol;
 use crate::ast::prelude::{FunctionDefinition, Span};
 use crate::ast::program::MethodType;
@@ -22,6 +23,6 @@ pub trait InterpreterFunctions {
 
 impl From<FunctionDefinition> for MethodType {
     fn from(func: FunctionDefinition) -> Self {
-        MethodType::User(func)
+        MethodType::User(Arc::new(func))
     }
 }

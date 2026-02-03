@@ -1,13 +1,13 @@
 use crate::ast::prelude::{ClassDefinition, ErrorData};
+use crate::ast::program::FieldData;
 use crate::builtins::prelude::*;
 use crate::interpreter::prelude::{Environment, SharedInterner};
 use crate::interpreter::structs::{Interpreter, Module, RuntimeError, Value};
 use crate::parser::prelude::Parser;
-use crate::traits::prelude::{CoreOperations, InterpreterClasses, StatementExecutor};
+use crate::traits::prelude::{CoreOperations, ExpressionEvaluator, InterpreterClasses, StatementExecutor};
 use std::collections::HashMap;
 use std::path::Path;
-use std::rc::Rc;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 use string_interner::DefaultSymbol as Symbol;
 
 impl CoreOperations for Interpreter {
@@ -17,16 +17,16 @@ impl CoreOperations for Interpreter {
 
         let mut std_classes = HashMap::new();
 
-        let string_class = setup_text_class(&interner);
-        let list_class = setup_list_class(&interner);
-        let array_class = setup_array_class(&interner);
-        let dict_class = setup_dict_class(&interner);
-        let file_class = setup_file_class(&interner);
-        std_classes.insert(string_class.name, string_class);
-        std_classes.insert(list_class.name, list_class);
-        std_classes.insert(array_class.name, array_class);
-        std_classes.insert(dict_class.name, dict_class);
-        std_classes.insert(file_class.name, file_class);
+        let (string_name, string_class) = setup_text_class(&interner);
+        let (list_name, list_class) = setup_list_class(&interner);
+        let (array_name, array_class) = setup_array_class(&interner);
+        let (dict_name, dict_class) = setup_dict_class(&interner);
+        let (file_name, file_class) = setup_file_class(&interner);
+        std_classes.insert(string_name, string_class);
+        std_classes.insert(list_name, list_class);
+        std_classes.insert(array_name, array_class);
+        std_classes.insert(dict_name, dict_class);
+        std_classes.insert(file_name, file_class);
 
         Interpreter {
             std_classes,
@@ -41,11 +41,30 @@ impl CoreOperations for Interpreter {
         self.load_imports(&module)?;
 
         for (class_name, class_def) in &module.classes {
-            self.register_class(class_def.clone(), *class_name)?;
+            let class_value = Value::Class(class_def.clone());
+            self.environment
+                .define(class_name.clone(), class_value.clone());
+            if let Some(mod_entry) = self.modules.get_mut(&module.name) {
+                mod_entry.globals.insert(*class_name, class_value);
+            }
+
+            let fields = class_def.read().unwrap().fields.clone();
+            for (name, (_, is_static, data)) in fields {
+                if is_static {
+                    if let FieldData::Expression(Some(expr_id)) = data {
+                        let val = self.evaluate_expression(expr_id, module.name)?;
+
+                        if let Some((_, _, target_data)) = class_def.write().unwrap().fields.get_mut(&name) {
+                            *target_data = FieldData::Value(Arc::new(RwLock::new(val)));
+                        }
+                    }
+                }
+            }
+
         }
 
         for (function_name, function_fn) in &module.functions {
-            let func_value = Value::Function(Rc::new(function_fn.clone()));
+            let func_value = Value::Function(Arc::new(function_fn.clone()));
             self.environment
                 .define(function_name.clone(), func_value.clone());
             if let Some(mod_entry) = self.modules.get_mut(&module.name) {
@@ -56,6 +75,17 @@ impl CoreOperations for Interpreter {
         for (builtin_name, builtin_fn) in &self.builtins.clone() {
             self.environment
                 .define(builtin_name.clone(), Value::Builtin(builtin_fn.clone()));
+        }
+
+        for (name_symbol, class_def) in &self.std_classes.clone() {
+            self.environment
+                .define(*name_symbol, Value::Class(class_def.clone()));
+
+            if let Some(mod_entry) = self.modules.get_mut(&module.name) {
+                mod_entry
+                    .globals
+                    .insert(*name_symbol, Value::Class(class_def.clone()));
+            }
         }
 
         for &stmt_id in &module.body {
@@ -134,11 +164,15 @@ impl CoreOperations for Interpreter {
                         for (_class_name, class_def) in &new_module.classes {
                             let class_def_with_module =
                                 self.set_class_module(class_def.clone(), module_symbol);
-                            self.register_class(class_def_with_module, module_symbol)?;
+                            if let Some(module) = self.modules.get_mut(&module_symbol) {
+                                module
+                                    .classes
+                                    .insert(class_def_with_module.read().unwrap().name, class_def.clone());
+                            }
                         }
 
                         for (function_name, function_fn) in &new_module.functions {
-                            let func_value = Value::Function(Rc::new(function_fn.clone()));
+                            let func_value = Value::Function(Arc::new(function_fn.clone()));
                             self.environment
                                 .define(function_name.clone(), func_value.clone());
                             if let Some(module) = self.modules.get_mut(&module_symbol) {
@@ -179,7 +213,7 @@ impl CoreOperations for Interpreter {
         Ok(result)
     }
 
-    fn get_class_for_value(&self, value: &Value) -> Option<Rc<ClassDefinition>> {
+    fn get_class_for_value(&self, value: &Value) -> Option<Arc<RwLock<ClassDefinition>>> {
         let class_name = match value {
             Value::Text(_) => "Строка",
             Value::List(_) => "Список",
@@ -188,7 +222,8 @@ impl CoreOperations for Interpreter {
             Value::Float(_) => "Дробь",
             Value::Number(_) => "Число",
             Value::Boolean(_) => "Логический",
-            Value::Object(inst) => return Some(inst.borrow().class_ref.clone()),
+            Value::Object(inst) => return Some(inst.read().unwrap().class_ref.clone()),
+            Value::Class(class_def) => return Some(class_def.clone()),
             _ => return None,
         };
 

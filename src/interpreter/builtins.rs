@@ -1,12 +1,11 @@
-use crate::ast::prelude::ErrorData;
+use crate::ast::prelude::{ErrorData, Span};
 use crate::interpreter::prelude::{BuiltinFn, Interpreter, RuntimeError, Value};
 use crate::traits::prelude::CoreOperations;
 use crate::{define_builtin, setup_builtins};
-use std::cell::RefCell;
 use std::collections::HashMap;
 use std::io;
 use std::io::Write;
-use std::rc::Rc;
+use std::sync::{Arc, RwLock};
 
 setup_builtins!(interpreter, {
     "печать" (arguments, span) {
@@ -132,12 +131,34 @@ setup_builtins!(interpreter, {
                      format!(
                          "объект \"{}\"",
                          interpreter
-                         .resolve_symbol(obj.borrow().class_name)
+                         .resolve_symbol(obj.read().map_err(|_| {
+                        RuntimeError::Panic(ErrorData::new(
+                            Span::default(),
+                            "Сбой блокировки в реализации функции 'тип'".into(),
+                    ))
+                })?.class_name)
                          .ok_or_else(|| RuntimeError::InvalidOperation(ErrorData::new(
                             span,
                             "Тип не найден".into())))?.to_string()
                     )
                  )
+            ),
+            Value::Class(cls) => Ok(
+                Value::Text(
+                    format!(
+                        "класс \"{}\"",
+                        interpreter
+                            .resolve_symbol(cls.read().map_err(|_| {
+                        RuntimeError::Panic(ErrorData::new(
+                            Span::default(),
+                            "Сбой блокировки в реализации функции 'тип'".into(),
+                    ))
+                })?.name)
+                            .ok_or_else(|| RuntimeError::InvalidOperation(ErrorData::new(
+                                span,
+                                "Тип не найден".into())))?.to_string()
+                    )
+                )
             ),
             Value::Function(obj) => Ok(
                 Value::Text(
@@ -185,11 +206,11 @@ setup_builtins!(interpreter, {
     }
 
     "список" (arguments, span) -> Result<Value, RuntimeError> {
-        Ok(Value::List(Rc::new(RefCell::new(arguments))))
+        Ok(Value::List(Arc::new(RwLock::new(arguments))))
     }
 
     "массив" (arguments, span) -> Result<Value, RuntimeError> {
-        Ok(Value::Array(Rc::new(arguments)))
+        Ok(Value::Array(Arc::new(arguments)))
     }
 
     "словарь" (arguments, span) -> Result<Value, RuntimeError> {
@@ -210,6 +231,6 @@ setup_builtins!(interpreter, {
             dict.insert(key, value);
         }
 
-        Ok(Value::Dict(Rc::new(RefCell::new(dict))))
+        Ok(Value::Dict(Arc::new(RwLock::new(dict))))
     }
 });

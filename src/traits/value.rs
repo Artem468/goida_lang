@@ -1,8 +1,9 @@
 use crate::ast::prelude::Span;
+use crate::ast::program::FieldData;
 use crate::interpreter::prelude::RuntimeError;
 use crate::interpreter::structs::Value;
 use std::fmt;
-use std::rc::Rc;
+use std::sync::{Arc, RwLock};
 
 pub trait ValueOperations {
     fn add_values(&self, left: Value, right: Value, span: Span) -> Result<Value, RuntimeError>;
@@ -43,11 +44,12 @@ impl Value {
                 }
             }
             Value::Object(obj) => format!("<Объект {:p}>", obj),
+            Value::Class(cls) => format!("<Класс {:p}>", cls),
             Value::Function(func) => format!("<Функция {:p}>", func),
             Value::Builtin(func) => format!("<Встроенная функция {:p}>", func),
             Value::Module(_) => "<Модуль>".to_string(),
             Value::List(list) => {
-                let items = list.borrow();
+                let items = list.read().unwrap();
                 let strings: Vec<String> = items.iter().map(|v| v.to_string()).collect();
                 format!("[{}]", strings.join(", "))
             }
@@ -56,7 +58,7 @@ impl Value {
                 format!("[{}]", strings.join(", "))
             }
             Value::Dict(dict) => {
-                let items = dict.borrow();
+                let items = dict.read().unwrap();
                 let mut pairs: Vec<String> = items
                     .iter()
                     .map(|(k, v)| format!("\"{}\": {}", k, v.to_string()))
@@ -76,12 +78,13 @@ impl Value {
             Value::Float(n) => *n != 0.0,
             Value::Text(s) => !s.is_empty(),
             Value::Object(_) => true,
+            Value::Class(_) => true,
             Value::Function(_) => true,
             Value::Builtin(_) => true,
             Value::Module(_) => true,
-            Value::List(list) => !list.borrow().is_empty(),
+            Value::List(list) => !list.read().unwrap().is_empty(),
             Value::Array(array) => !array.is_empty(),
-            Value::Dict(dict) => !dict.borrow().is_empty(),
+            Value::Dict(dict) => !dict.read().unwrap().is_empty(),
             Value::NativeResource(_) => true,
             Value::Empty => false,
         }
@@ -117,9 +120,9 @@ impl TryFrom<Value> for i64 {
         match value {
             Value::Float(data) => Ok(data as i64),
             Value::Number(data) => Ok(data),
-            Value::Text(data) => data.parse().map_err(|_| {
-                format!("Не удалось преобразовать строку '{}' в целое число", data)
-            }),
+            Value::Text(data) => data
+                .parse()
+                .map_err(|_| format!("Не удалось преобразовать строку '{}' в целое число", data)),
             Value::Boolean(b) => Ok(if b { 1 } else { 0 }),
             _ => Err("Тип не может быть приведен к целому числу".into()),
         }
@@ -144,12 +147,15 @@ impl TryFrom<Value> for bool {
             Value::Number(n) => Ok(n != 0),
             Value::Float(f) => Ok(f != 0.0 && !f.is_nan()),
             Value::Text(s) => Ok(!s.is_empty()),
-            Value::List(list) => Ok(!list.borrow().is_empty()),
+            Value::List(list) => Ok(!list.read().unwrap().is_empty()),
             Value::Array(array) => Ok(!array.is_empty()),
-            Value::Dict(dict) => Ok(!dict.borrow().is_empty()),
-            Value::Object(_) | Value::Function(_) | Value::Builtin(_) | Value::Module(_) | Value::NativeResource(_) => {
-                Ok(true)
-            }
+            Value::Dict(dict) => Ok(!dict.read().unwrap().is_empty()),
+            Value::Object(_)
+            | Value::Class(_)
+            | Value::Function(_)
+            | Value::Builtin(_)
+            | Value::Module(_)
+            | Value::NativeResource(_) => Ok(true),
         }
     }
 }
@@ -161,14 +167,20 @@ impl PartialEq for Value {
             (Value::Float(a), Value::Float(b)) => a == b,
             (Value::Text(a), Value::Text(b)) => a == b,
             (Value::Boolean(a), Value::Boolean(b)) => a == b,
-            (Value::Object(a), Value::Object(b)) => Rc::ptr_eq(a, b),
-            (Value::Function(a), Value::Function(b)) => Rc::ptr_eq(a, b),
+            (Value::Object(a), Value::Object(b)) => Arc::ptr_eq(a, b),
+            (Value::Function(a), Value::Function(b)) => Arc::ptr_eq(a, b),
             (Value::Module(a), Value::Module(b)) => a == b,
-            (Value::List(a), Value::List(b)) => Rc::ptr_eq(a, b),
-            (Value::Array(a), Value::Array(b)) => Rc::ptr_eq(a, b),
-            (Value::Dict(a), Value::Dict(b)) => Rc::ptr_eq(a, b),
+            (Value::List(a), Value::List(b)) => Arc::ptr_eq(a, b),
+            (Value::Array(a), Value::Array(b)) => Arc::ptr_eq(a, b),
+            (Value::Dict(a), Value::Dict(b)) => Arc::ptr_eq(a, b),
             (Value::Empty, Value::Empty) => true,
             _ => false,
         }
+    }
+}
+
+impl From<Arc<RwLock<Value>>> for FieldData {
+    fn from(lock: Arc<RwLock<Value>>) -> Self {
+        FieldData::Value(lock)
     }
 }
