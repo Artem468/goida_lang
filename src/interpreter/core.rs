@@ -1,4 +1,5 @@
-use crate::ast::prelude::{ErrorData, Span};
+use crate::ast::prelude::{ClassDefinition, ErrorData};
+use crate::builtins::prelude::*;
 use crate::interpreter::prelude::{Environment, SharedInterner};
 use crate::interpreter::structs::{Interpreter, Module, RuntimeError, Value};
 use crate::parser::prelude::Parser;
@@ -14,7 +15,21 @@ impl CoreOperations for Interpreter {
         let mut modules = HashMap::new();
         modules.insert(main_module.name, main_module);
 
+        let mut std_classes = HashMap::new();
+
+        let string_class = setup_text_class(&interner);
+        let list_class = setup_list_class(&interner);
+        let array_class = setup_array_class(&interner);
+        let dict_class = setup_dict_class(&interner);
+        let file_class = setup_file_class(&interner);
+        std_classes.insert(string_class.name, string_class);
+        std_classes.insert(list_class.name, list_class);
+        std_classes.insert(array_class.name, array_class);
+        std_classes.insert(dict_class.name, dict_class);
+        std_classes.insert(file_class.name, file_class);
+
         Interpreter {
+            std_classes,
             builtins: HashMap::new(),
             modules,
             interner,
@@ -162,5 +177,22 @@ impl CoreOperations for Interpreter {
             }
         }
         Ok(result)
+    }
+
+    fn get_class_for_value(&self, value: &Value) -> Option<Rc<ClassDefinition>> {
+        let class_name = match value {
+            Value::Text(_) => "Строка",
+            Value::List(_) => "Список",
+            Value::Array(_) => "Массив",
+            Value::Dict(_) => "Словарь",
+            Value::Float(_) => "Дробь",
+            Value::Number(_) => "Число",
+            Value::Boolean(_) => "Логический",
+            Value::Object(inst) => return Some(inst.borrow().class_ref.clone()),
+            _ => return None,
+        };
+
+        let symbol = self.interner.read().unwrap().get(class_name)?;
+        self.std_classes.get(&symbol).cloned()
     }
 }

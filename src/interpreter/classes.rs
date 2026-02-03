@@ -4,6 +4,7 @@ use crate::traits::prelude::{CoreOperations, InterpreterClasses, StatementExecut
 use std::collections::HashMap;
 use std::rc::Rc;
 use string_interner::DefaultSymbol as Symbol;
+use crate::ast::program::MethodType;
 
 impl InterpreterClasses for Interpreter {
     /// Регистрируем класс в текущем модуле
@@ -22,48 +23,53 @@ impl InterpreterClasses for Interpreter {
     /// Вызываем метод
     fn call_method(
         &mut self,
-        method: FunctionDefinition,
+        method: MethodType,
         arguments: Vec<Value>,
         this_obj: Value,
         current_module_id: Symbol,
         span: Span
     ) -> Result<Value, RuntimeError> {
-        let method_module = method.module.unwrap_or(current_module_id);
+        match method {
+            MethodType::User(func) => {
+                let method_module = func.module.unwrap_or(current_module_id);
 
-        let previous_env = std::mem::replace(&mut self.environment, Environment::new());
-        let mut local_env = Environment::with_parent(previous_env.clone());
+                let previous_env = std::mem::replace(&mut self.environment, Environment::new());
+                let mut local_env = Environment::with_parent(previous_env.clone());
 
-        let this_sym = self.intern_string("this");
-        local_env.define(this_sym, this_obj);
+                let this_sym = self.intern_string("this");
+                local_env.define(this_sym, this_obj);
 
-        if arguments.len() != method.params.len() {
-            self.environment = local_env;
-            let _ = std::mem::replace(&mut self.environment, previous_env);
-            return Err(RuntimeError::InvalidOperation(
-                ErrorData::new(
-                    span.into(),
-                    "Неверное кол-во аргументов".into(),
-            )));
-        }
+                if arguments.len() != func.params.len() {
+                    self.environment = previous_env;
+                    return Err(RuntimeError::InvalidOperation(ErrorData::new(
+                        span,
+                        format!("Ожидалось {} аргументов, получено {}", func.params.len(), arguments.len()),
+                    )));
+                }
 
-        for (param, arg_value) in method.params.iter().zip(arguments.iter()) {
-            local_env.define(param.name, arg_value.clone());
-        }
+                for (param, arg_value) in func.params.iter().zip(arguments.iter()) {
+                    local_env.define(param.name, arg_value.clone());
+                }
 
-        self.environment = local_env;
+                self.environment = local_env;
 
-        let mut result = Value::Empty;
-        match self.execute_statement(method.body, method_module) {
-            Ok(()) => {}
-            Err(RuntimeError::Return(_, val)) => result = val,
-            Err(e) => {
+                let mut result = Ok(Value::Empty);
+                match self.execute_statement(func.body, method_module) {
+                    Ok(()) => {}
+                    Err(RuntimeError::Return(_, val)) => result = Ok(val),
+                    Err(e) => result = Err(e),
+                }
+
                 self.environment = previous_env;
-                return Err(e);
+                result
+            }
+
+            MethodType::Native(builtin) => {
+                let mut final_args = vec![this_obj];
+                final_args.extend(arguments);
+                builtin(self, final_args, span)
             }
         }
-
-        self.environment = previous_env;
-        Ok(result)
     }
 
     fn set_class_module(
@@ -72,9 +78,15 @@ impl InterpreterClasses for Interpreter {
         module: Symbol,
     ) -> Rc<ClassDefinition> {
         let mut methods = HashMap::new();
-        for (method_name, (visibility, method_def)) in &class_def.methods {
-            let mut updated_method = method_def.clone();
-            updated_method.module = Some(module);
+        for (method_name, (visibility, method_type)) in &class_def.methods {
+            let updated_method = match method_type {
+                MethodType::User(func_def) => {
+                    let mut updated_func = func_def.clone();
+                    updated_func.module = Some(module);
+                    MethodType::User(updated_func)
+                }
+                MethodType::Native(builtin) => MethodType::Native(builtin.clone()),
+            };
             methods.insert(*method_name, (visibility.clone(), updated_method));
         }
 
@@ -83,8 +95,14 @@ impl InterpreterClasses for Interpreter {
             fields: class_def.fields.clone(),
             methods,
             constructor: class_def.constructor.as_ref().map(|constructor| {
-                let mut updated_constructor = constructor.clone();
-                updated_constructor.module = Some(module);
+                let updated_constructor = match constructor {
+                    MethodType::User(func_def) => {
+                        let mut updated_func = func_def.clone();
+                        updated_func.module = Some(module);
+                        MethodType::User(updated_func)
+                    }
+                    MethodType::Native(builtin) => MethodType::Native(builtin.clone()),
+                };
                 updated_constructor
             }),
             span: class_def.span,
@@ -140,20 +158,8 @@ impl ClassInstance {
         }
     }
 
-    /// Проверить доступность метода (приватный или публичный доступ)
-    pub fn is_method_accessible(&self, method_name: &Symbol, is_external_access: bool) -> bool {
-        if let Some((visibility, _)) = self.class_ref.methods.get(method_name) {
-            match visibility {
-                Visibility::Public => true,
-                Visibility::Private => !is_external_access,
-            }
-        } else {
-            false
-        }
-    }
-
     /// Получить метод по имени
-    pub fn get_method(&self, method_name: &Symbol) -> Option<&FunctionDefinition> {
+    pub fn get_method(&self, method_name: &Symbol) -> Option<&MethodType> {
         self.class_ref
             .methods
             .get(method_name)
@@ -161,7 +167,7 @@ impl ClassInstance {
     }
 
     /// Получить конструктор класса
-    pub fn get_constructor(&self) -> Option<&FunctionDefinition> {
+    pub fn get_constructor(&self) -> Option<&MethodType> {
         self.class_ref.constructor.as_ref()
     }
 }
@@ -190,12 +196,12 @@ impl ClassDefinition {
 
     /// Добавить метод в класс
     pub fn add_method(&mut self, name: Symbol, visibility: Visibility, method: FunctionDefinition) {
-        self.methods.insert(name, (visibility, method));
+        self.methods.insert(name, (visibility, method.into()));
     }
 
     /// Установить конструктор
     pub fn set_constructor(&mut self, constructor: FunctionDefinition) {
-        self.constructor = Some(constructor);
+        self.constructor = Some(constructor.into());
     }
 
     /// Создать экземпляр класса

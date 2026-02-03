@@ -42,8 +42,8 @@ impl Value {
                     "ложь".to_string()
                 }
             }
-            Value::Object(obj) => format!("<Объект {:p}>", Rc::as_ptr(obj)),
-            Value::Function(func) => format!("<Функция {:p}>", Rc::as_ptr(func)),
+            Value::Object(obj) => format!("<Объект {:p}>", obj),
+            Value::Function(func) => format!("<Функция {:p}>", func),
             Value::Builtin(func) => format!("<Встроенная функция {:p}>", func),
             Value::Module(_) => "<Модуль>".to_string(),
             Value::List(list) => {
@@ -64,6 +64,7 @@ impl Value {
                 pairs.sort();
                 format!("{{{}}}", pairs.join(", "))
             }
+            Value::NativeResource(resource) => format!("<Ресурс {:p}>", resource),
             Value::Empty => "пустота".to_string(),
         }
     }
@@ -81,6 +82,7 @@ impl Value {
             Value::List(list) => !list.borrow().is_empty(),
             Value::Array(array) => !array.is_empty(),
             Value::Dict(dict) => !dict.borrow().is_empty(),
+            Value::NativeResource(_) => true,
             Value::Empty => false,
         }
     }
@@ -101,7 +103,7 @@ impl TryFrom<Value> for f64 {
             Value::Number(data) => Ok(data as f64),
             Value::Text(data) => data
                 .parse()
-                .map_err(|_| format!("Не удалось преобразовать текст '{}' в дробное число", data)),
+                .map_err(|_| format!("Не удалось преобразовать строку '{}' в дробное число", data)),
             Value::Boolean(b) => Ok(if b { 1.0 } else { 0.0 }),
             _ => Err("Тип не может быть приведен к дробному числу".into()),
         }
@@ -116,7 +118,7 @@ impl TryFrom<Value> for i64 {
             Value::Float(data) => Ok(data as i64),
             Value::Number(data) => Ok(data),
             Value::Text(data) => data.parse().map_err(|_| {
-                format!("Не удалось преобразовать текст '{}' в целое число", data)
+                format!("Не удалось преобразовать строку '{}' в целое число", data)
             }),
             Value::Boolean(b) => Ok(if b { 1 } else { 0 }),
             _ => Err("Тип не может быть приведен к целому числу".into()),
@@ -145,7 +147,7 @@ impl TryFrom<Value> for bool {
             Value::List(list) => Ok(!list.borrow().is_empty()),
             Value::Array(array) => Ok(!array.is_empty()),
             Value::Dict(dict) => Ok(!dict.borrow().is_empty()),
-            Value::Object(_) | Value::Function(_) | Value::Builtin(_) | Value::Module(_) => {
+            Value::Object(_) | Value::Function(_) | Value::Builtin(_) | Value::Module(_) | Value::NativeResource(_) => {
                 Ok(true)
             }
         }

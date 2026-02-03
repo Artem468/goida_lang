@@ -34,7 +34,7 @@ impl fmt::Display for PrimitiveType {
         match self {
             PrimitiveType::Number => write!(f, "число"),
             PrimitiveType::Boolean => write!(f, "логическое"),
-            PrimitiveType::Text => write!(f, "текст"),
+            PrimitiveType::Text => write!(f, "строка"),
             PrimitiveType::Float => write!(f, "дробь"),
         }
     }

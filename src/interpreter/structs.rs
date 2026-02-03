@@ -1,3 +1,4 @@
+use std::any::Any;
 use std::collections::HashMap;
 use std::rc::Rc;
 
@@ -23,6 +24,7 @@ pub enum Value {
     List(Rc<RefCell<Vec<Value>>>),
     Array(Rc<Vec<Value>>),
     Dict(Rc<RefCell<HashMap<String, Value>>>),
+    NativeResource(Arc<RwLock<Box<dyn Any + Send + Sync>>>),
     Empty,
 }
 
@@ -55,6 +57,7 @@ pub type SharedInterner = Arc<RwLock<StringInterner<StringBackend>>>;
 
 #[derive(Debug)]
 pub struct Interpreter {
+    pub(crate) std_classes: HashMap<Symbol, Rc<ClassDefinition>>,
     pub(crate) builtins: HashMap<Symbol, BuiltinFn>,
     pub(crate) modules: HashMap<Symbol, Module>,
     pub(crate) interner: SharedInterner,

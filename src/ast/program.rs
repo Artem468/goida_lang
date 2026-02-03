@@ -1,8 +1,7 @@
 use crate::ast::class::Visibility;
 use crate::ast::prelude::{ExprId, Span, StmtId, TypeId};
-use crate::interpreter::prelude::Value;
+use crate::interpreter::prelude::{BuiltinFn, Value};
 use std::collections::HashMap;
-use std::ops::Range;
 use std::rc::Rc;
 use string_interner::DefaultSymbol as Symbol;
 
@@ -29,12 +28,18 @@ pub struct Import {
     pub span: Span,
 }
 
+#[derive(Clone, Debug)]
+pub enum MethodType {
+    User(FunctionDefinition),
+    Native(BuiltinFn),
+}
+
 #[derive(Clone, PartialEq, Debug)]
 pub struct ClassDefinition {
     pub name: Symbol,
     pub fields: HashMap<Symbol, (Visibility, Option<ExprId>)>,
-    pub methods: HashMap<Symbol, (Visibility, FunctionDefinition)>,
-    pub constructor: Option<FunctionDefinition>,
+    pub methods: HashMap<Symbol, (Visibility, MethodType)>,
+    pub constructor: Option<MethodType>,
     pub span: Span,
 }
 

@@ -1,5 +1,6 @@
 use string_interner::DefaultSymbol as Symbol;
 use crate::ast::prelude::{FunctionDefinition, Span};
+use crate::ast::program::MethodType;
 use crate::interpreter::prelude::{RuntimeError, Value};
 
 pub trait InterpreterFunctions {
@@ -17,4 +18,10 @@ pub trait InterpreterFunctions {
         current_module_id: Symbol,
         span: Span
     ) -> Result<Value, RuntimeError>;
+}
+
+impl From<FunctionDefinition> for MethodType {
+    fn from(func: FunctionDefinition) -> Self {
+        MethodType::User(func)
+    }
 }
