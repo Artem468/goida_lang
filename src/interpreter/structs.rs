@@ -18,6 +18,7 @@ pub enum Value {
     Text(String),
     Boolean(bool),
     Object(Rc<RefCell<ClassInstance>>),
+    Class(Rc<ClassDefinition>),
     Function(Rc<FunctionDefinition>),
     Builtin(BuiltinFn),
     Module(Symbol),

@@ -43,6 +43,7 @@ impl Value {
                 }
             }
             Value::Object(obj) => format!("<Объект {:p}>", obj),
+            Value::Class(cls) => format!("<Класс {:p}>", cls),
             Value::Function(func) => format!("<Функция {:p}>", func),
             Value::Builtin(func) => format!("<Встроенная функция {:p}>", func),
             Value::Module(_) => "<Модуль>".to_string(),
@@ -76,6 +77,7 @@ impl Value {
             Value::Float(n) => *n != 0.0,
             Value::Text(s) => !s.is_empty(),
             Value::Object(_) => true,
+            Value::Class(_) => true,
             Value::Function(_) => true,
             Value::Builtin(_) => true,
             Value::Module(_) => true,
@@ -147,7 +149,7 @@ impl TryFrom<Value> for bool {
             Value::List(list) => Ok(!list.borrow().is_empty()),
             Value::Array(array) => Ok(!array.is_empty()),
             Value::Dict(dict) => Ok(!dict.borrow().is_empty()),
-            Value::Object(_) | Value::Function(_) | Value::Builtin(_) | Value::Module(_) | Value::NativeResource(_) => {
+            Value::Object(_) | Value::Class(_) | Value::Function(_) | Value::Builtin(_) | Value::Module(_) | Value::NativeResource(_) => {
                 Ok(true)
             }
         }

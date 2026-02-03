@@ -35,7 +35,7 @@ class_item = _{
 }
 
 class_field = {
-    visibility? ~ identifier ~ ":" ~ type_name ~ ("=" ~ expression)? ~ ";"
+    visibility? ~ static_mod? ~ identifier ~ ":" ~ type_name ~ ("=" ~ expression)? ~ ";"
 }
 
 constructor = {
@@ -43,7 +43,7 @@ constructor = {
 }
 
 class_method = {
-    visibility? ~ "функция" ~ identifier ~ "(" ~ param_list? ~ ")" ~ return_type? ~ block
+    visibility? ~ static_mod? ~ "функция" ~ identifier ~ "(" ~ param_list? ~ ")" ~ return_type? ~ block
 }
 
 // === Statements ===
@@ -240,6 +240,8 @@ return_type = {
 type_name = @{
     identifier
 }
+
+static_mod = @{ "статичный" }
 
 visibility = @{
     "публичный" | "приватный"

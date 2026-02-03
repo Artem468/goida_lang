@@ -12,6 +12,7 @@ pub struct ClassField {
     pub name: Symbol,
     pub field_type: Option<TypeId>,
     pub visibility: Visibility,
+    pub is_static: bool,
     pub default_value: Option<ExprId>,
     pub span: Span,
 }
@@ -23,6 +24,7 @@ pub struct ClassMethod {
     pub return_type: Option<TypeId>,
     pub body: StmtId,
     pub visibility: Visibility,
+    pub is_static: bool,
     pub is_constructor: bool,
     pub span: Span,
 }

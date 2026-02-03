@@ -139,6 +139,18 @@ setup_builtins!(interpreter, {
                     )
                  )
             ),
+            Value::Class(cls) => Ok(
+                Value::Text(
+                    format!(
+                        "класс \"{}\"",
+                        interpreter
+                            .resolve_symbol(cls.name)
+                            .ok_or_else(|| RuntimeError::InvalidOperation(ErrorData::new(
+                                span,
+                                "Тип не найден".into())))?.to_string()
+                    )
+                )
+            ),
             Value::Function(obj) => Ok(
                 Value::Text(
                     format!(

@@ -41,7 +41,12 @@ impl CoreOperations for Interpreter {
         self.load_imports(&module)?;
 
         for (class_name, class_def) in &module.classes {
-            self.register_class(class_def.clone(), *class_name)?;
+            let class_value = Value::Class(class_def.clone());
+            self.environment
+                .define(class_name.clone(), class_value.clone());
+            if let Some(mod_entry) = self.modules.get_mut(&module.name) {
+                mod_entry.globals.insert(*class_name, class_value);
+            }
         }
 
         for (function_name, function_fn) in &module.functions {
@@ -56,6 +61,17 @@ impl CoreOperations for Interpreter {
         for (builtin_name, builtin_fn) in &self.builtins.clone() {
             self.environment
                 .define(builtin_name.clone(), Value::Builtin(builtin_fn.clone()));
+        }
+
+        for (name_symbol, class_def) in &self.std_classes.clone() {
+            self.environment
+                .define(*name_symbol, Value::Class(class_def.clone()));
+
+            if let Some(mod_entry) = self.modules.get_mut(&module.name) {
+                mod_entry
+                    .globals
+                    .insert(*name_symbol, Value::Class(class_def.clone()));
+            }
         }
 
         for &stmt_id in &module.body {
@@ -134,7 +150,11 @@ impl CoreOperations for Interpreter {
                         for (_class_name, class_def) in &new_module.classes {
                             let class_def_with_module =
                                 self.set_class_module(class_def.clone(), module_symbol);
-                            self.register_class(class_def_with_module, module_symbol)?;
+                            if let Some(module) = self.modules.get_mut(&module_symbol) {
+                                module
+                                    .classes
+                                    .insert(class_def_with_module.name, class_def.clone());
+                            }
                         }
 
                         for (function_name, function_fn) in &new_module.functions {
@@ -189,6 +209,7 @@ impl CoreOperations for Interpreter {
             Value::Number(_) => "Число",
             Value::Boolean(_) => "Логический",
             Value::Object(inst) => return Some(inst.borrow().class_ref.clone()),
+            Value::Class(class_def) => return Some(class_def.clone()),
             _ => return None,
         };
 

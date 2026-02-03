@@ -1,25 +1,12 @@
-use crate::ast::prelude::{ClassDefinition, ErrorData, ExprId, FunctionDefinition, Span, Visibility};
+use crate::ast::prelude::{ClassDefinition, ErrorData, ExprId, Span, Visibility};
+use crate::ast::program::MethodType;
 use crate::interpreter::prelude::{ClassInstance, Environment, Interpreter, RuntimeError, Value};
 use crate::traits::prelude::{CoreOperations, InterpreterClasses, StatementExecutor};
 use std::collections::HashMap;
 use std::rc::Rc;
 use string_interner::DefaultSymbol as Symbol;
-use crate::ast::program::MethodType;
 
 impl InterpreterClasses for Interpreter {
-    /// Регистрируем класс в текущем модуле
-    fn register_class(
-        &mut self,
-        class_def: Rc<ClassDefinition>,
-        current_module_id: Symbol,
-    ) -> Result<(), RuntimeError> {
-        if let Some(module) = self.modules.get_mut(&current_module_id) {
-            module.classes.insert(class_def.name, class_def.clone());
-        }
-
-        Ok(())
-    }
-
     /// Вызываем метод
     fn call_method(
         &mut self,
@@ -78,7 +65,7 @@ impl InterpreterClasses for Interpreter {
         module: Symbol,
     ) -> Rc<ClassDefinition> {
         let mut methods = HashMap::new();
-        for (method_name, (visibility, method_type)) in &class_def.methods {
+        for (method_name, (visibility, is_static, method_type)) in &class_def.methods {
             let updated_method = match method_type {
                 MethodType::User(func_def) => {
                     let mut updated_func = func_def.clone();
@@ -87,7 +74,7 @@ impl InterpreterClasses for Interpreter {
                 }
                 MethodType::Native(builtin) => MethodType::Native(builtin.clone()),
             };
-            methods.insert(*method_name, (visibility.clone(), updated_method));
+            methods.insert(*method_name, (visibility.clone(), *is_static, updated_method));
         }
 
         Rc::new(ClassDefinition {
@@ -115,7 +102,7 @@ impl ClassInstance {
     pub fn new(class_name: Symbol, class_ref: Rc<ClassDefinition>) -> Self {
         let mut fields = HashMap::new();
 
-        for (field_name, (_, default_value)) in &class_ref.fields {
+        for (field_name, (_, _, default_value)) in &class_ref.fields {
             if let Some(default) = default_value {
                 fields.insert(field_name.clone(), Some(default.clone()));
             } else {
@@ -148,7 +135,7 @@ impl ClassInstance {
 
     /// Проверить доступность поля (приватный или публичный доступ)
     pub fn is_field_accessible(&self, field_name: &Symbol, is_external_access: bool) -> bool {
-        if let Some((visibility, _)) = self.class_ref.fields.get(field_name) {
+        if let Some((visibility, _, _)) = self.class_ref.fields.get(field_name) {
             match visibility {
                 Visibility::Public => true,
                 Visibility::Private => !is_external_access,
@@ -163,7 +150,7 @@ impl ClassInstance {
         self.class_ref
             .methods
             .get(method_name)
-            .map(|(_, func)| func)
+            .map(|(_, _, func)| func)
     }
 
     /// Получить конструктор класса
@@ -174,13 +161,13 @@ impl ClassInstance {
 
 impl ClassDefinition {
     /// Создать новый класс
-    pub fn new(name: Symbol) -> Self {
+    pub fn new(name: Symbol, span: Span) -> Self {
         Self {
             name,
             fields: HashMap::new(),
             methods: HashMap::new(),
             constructor: None,
-            span: Default::default(),
+            span,
         }
     }
 
@@ -189,18 +176,19 @@ impl ClassDefinition {
         &mut self,
         name: Symbol,
         visibility: Visibility,
+        is_static: bool,
         default_value: Option<ExprId>,
     ) {
-        self.fields.insert(name, (visibility, default_value));
+        self.fields.insert(name, (visibility, is_static, default_value));
     }
 
     /// Добавить метод в класс
-    pub fn add_method(&mut self, name: Symbol, visibility: Visibility, method: FunctionDefinition) {
-        self.methods.insert(name, (visibility, method.into()));
+    pub fn add_method<F: Into<MethodType>>(&mut self, name: Symbol, visibility: Visibility, is_static: bool, method: F) {
+        self.methods.insert(name, (visibility, is_static, method.into()));
     }
 
     /// Установить конструктор
-    pub fn set_constructor(&mut self, constructor: FunctionDefinition) {
+    pub fn set_constructor<F: Into<MethodType>>(&mut self, constructor: F) {
         self.constructor = Some(constructor.into());
     }
 

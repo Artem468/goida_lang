@@ -4,11 +4,8 @@ use crate::parser::prelude::{ParseError, Parser as ParserTrait};
 use pest::error::ErrorVariant;
 use pest::Parser;
 use pest_derive::Parser;
-use std::collections::HashMap;
 use std::path::PathBuf;
 use std::rc::Rc;
-use string_interner::DefaultSymbol;
-use crate::ast::program::MethodType;
 
 #[derive(Parser)]
 #[grammar = "grammar.pest"]
@@ -167,72 +164,55 @@ impl ParserTrait {
                 ParseError::InvalidSyntax(ErrorData::new(class_span, "Ожидалось имя класса".into()))
             })?
             .as_str();
+        self.module.arena.register_custom_type(&self.interner, name);
+        let symbol_name = self.module.arena.intern_string(&self.interner, name);
+        let mut class_def = ClassDefinition::new(symbol_name, class_span);
 
-        let mut fields = HashMap::new();
-        let mut methods: HashMap<DefaultSymbol, (Visibility, MethodType)> = HashMap::new();
-        let mut constructor = None;
         while let Some(token) = inner.next() {
             match token.as_rule() {
                 Rule::class_field => {
                     let field = self.parse_class_field(token)?;
-                    fields.insert(field.name, (field.visibility, field.default_value));
+                    class_def.add_field(
+                        field.name,
+                        field.visibility,
+                        field.is_static,
+                        field.default_value,
+                    );
                 }
                 Rule::constructor => {
                     let mut method = self.parse_constructor(token)?;
                     method.is_constructor = true;
-                    constructor = Some(FunctionDefinition {
-                        name: method.name,
-                        params: method.params.clone(),
-                        return_type: method.return_type,
-                        body: method.body,
-                        span: method.span,
-                        module: None,
-                    }.into());
-                    methods.insert(
-                        method.name,
-                        (
-                            method.visibility,
-                            FunctionDefinition {
-                                name: method.name,
-                                params: method.params,
-                                return_type: method.return_type,
-                                body: method.body,
-                                span: method.span,
-                                module: None,
-                            }.into(),
-                        ),
+                    class_def.set_constructor(
+                        FunctionDefinition {
+                            name: method.name,
+                            params: method.params.clone(),
+                            return_type: method.return_type,
+                            body: method.body,
+                            span: method.span,
+                            module: None,
+                        },
                     );
                 }
 
                 Rule::class_method => {
                     let method = self.parse_class_method(token)?;
-                    methods.insert(
+                    class_def.add_method(
                         method.name,
-                        (
-                            method.visibility,
-                            FunctionDefinition {
-                                name: method.name,
-                                params: method.params,
-                                return_type: method.return_type,
-                                body: method.body,
-                                span: method.span,
-                                module: None,
-                            }.into(),
-                        ),
+                        method.visibility,
+                        method.is_static,
+                        FunctionDefinition {
+                            name: method.name,
+                            params: method.params,
+                            return_type: method.return_type,
+                            body: method.body,
+                            span: method.span,
+                            module: None,
+                        }
                     );
                 }
                 _ => {}
             }
         }
-        self.module.arena.register_custom_type(&self.interner, name);
-        let symbol_name = self.module.arena.intern_string(&self.interner, name);
-        let class_def = ClassDefinition {
-            name: symbol_name,
-            fields,
-            methods,
-            span: class_span,
-            constructor,
-        };
 
         self.module
             .classes
@@ -251,6 +231,7 @@ impl ParserTrait {
         let field_span: Span = pair.as_span().into();
         let mut inner = pair.into_inner();
         let mut visibility = Visibility::Private;
+        let mut is_static = false;
         let mut field_name = String::new();
         let mut field_type = None;
         let mut default_value = None;
@@ -263,6 +244,9 @@ impl ParserTrait {
                     } else {
                         Visibility::Private
                     };
+                }
+                Rule::static_mod => {
+                    is_static = true;
                 }
                 Rule::identifier => {
                     field_name = token.as_str().to_string();
@@ -293,6 +277,7 @@ impl ParserTrait {
             name: self.module.arena.intern_string(&self.interner, &field_name),
             field_type,
             visibility,
+            is_static,
             default_value,
             span: field_span,
         })
@@ -305,6 +290,7 @@ impl ParserTrait {
         let constructor_span: Span = pair.as_span().into();
         let mut inner = pair.into_inner();
         let mut visibility = Visibility::Private;
+        let mut is_static = false;
         let mut method_name = String::new();
         let mut params = Vec::new();
         let mut return_type = None;
@@ -319,6 +305,9 @@ impl ParserTrait {
                     } else {
                         Visibility::Private
                     };
+                }
+                Rule::static_mod => {
+                    is_static = true;
                 }
                 Rule::identifier => {
                     method_name = token.as_str().to_string();
@@ -369,6 +358,7 @@ impl ParserTrait {
                 ))
             })?,
             visibility,
+            is_static,
             is_constructor: false,
             span: constructor_span,
         })
@@ -381,6 +371,7 @@ impl ParserTrait {
         let method_span: Span = pair.as_span().into();
         let mut inner = pair.into_inner();
         let mut visibility = Visibility::Private;
+        let mut is_static = false;
         let mut method_name = String::new();
         let mut params = Vec::new();
         let mut return_type = None;
@@ -395,6 +386,9 @@ impl ParserTrait {
                     } else {
                         Visibility::Private
                     };
+                }
+                Rule::static_mod => {
+                    is_static = true;
                 }
                 Rule::identifier => {
                     method_name = token.as_str().to_string();
@@ -445,6 +439,7 @@ impl ParserTrait {
                 ))
             })?,
             visibility,
+            is_static,
             is_constructor: false,
             span: method_span,
         })

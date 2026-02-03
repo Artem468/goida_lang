@@ -37,8 +37,8 @@ pub enum MethodType {
 #[derive(Clone, PartialEq, Debug)]
 pub struct ClassDefinition {
     pub name: Symbol,
-    pub fields: HashMap<Symbol, (Visibility, Option<ExprId>)>,
-    pub methods: HashMap<Symbol, (Visibility, MethodType)>,
+    pub fields: HashMap<Symbol, (Visibility, bool, Option<ExprId>)>,
+    pub methods: HashMap<Symbol, (Visibility, bool, MethodType)>,
     pub constructor: Option<MethodType>,
     pub span: Span,
 }
