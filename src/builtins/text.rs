@@ -9,7 +9,23 @@ use crate::ast::program::MethodType;
 pub fn setup_text_class(interner: &SharedInterner) -> Rc<ClassDefinition> {
     let mut methods = HashMap::new();
     let name = interner.write().expect("interner lock poisoned").get_or_intern("Строка");
-    
+
+    let string_constructor = MethodType::Native(BuiltinFn(Arc::new(|_interp, args, _span| {
+        if let Some(Value::Object(instance)) = args.get(0) {
+            let content = match args.get(1) {
+                Some(Value::Text(s)) => s.clone(),
+                Some(Value::Number(n)) => n.to_string(),
+                Some(Value::Float(f)) => f.to_string(),
+                Some(Value::Boolean(b)) => b.to_string(),
+                _ => String::new(),
+            };
+
+            let data_sym = _interp.interner.write().unwrap().get_or_intern("__data");
+            instance.borrow_mut().field_values.insert(data_sym, Value::Text(content));
+        }
+        Ok(Value::Empty)
+    })));
+
     // len() -> Number
     methods.insert(interner.write().expect("interner lock poisoned").get_or_intern("длина"), (Visibility::Public, MethodType::Native(BuiltinFn(Arc::new(|_interp, args, span| {
         if let Some(Value::Text(s)) = args.get(0) {
@@ -71,7 +87,7 @@ pub fn setup_text_class(interner: &SharedInterner) -> Rc<ClassDefinition> {
         name,
         fields: HashMap::new(),
         methods,
-        constructor: None,
+        constructor: Some(string_constructor),
         span: Span::default(),
     })
 }

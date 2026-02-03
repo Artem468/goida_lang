@@ -9,6 +9,17 @@ pub fn setup_array_class(interner: &SharedInterner) -> Rc<ClassDefinition> {
     let mut methods = HashMap::new();
     let name = interner.write().expect("interner lock poisoned").get_or_intern("Массив");
 
+    let array_constructor = MethodType::Native(BuiltinFn(Arc::new(|_interp, args, _span| {
+        if let Some(Value::Object(instance)) = args.get(0) {
+            let items = args[1..].to_vec();
+            let internal_array = Value::Array(Rc::new(items));
+
+            let data_sym = _interp.interner.write().unwrap().get_or_intern("__data");
+            instance.borrow_mut().field_values.insert(data_sym, internal_array);
+        }
+        Ok(Value::Empty)
+    })));
+
     // len() - Получить длину
     methods.insert(interner.write().expect("interner lock poisoned").get_or_intern("длина"), (Visibility::Public, MethodType::Native(BuiltinFn(Arc::new(|_interp, args, span| {
         if let Some(Value::List(list)) = args.get(0) {
@@ -49,7 +60,7 @@ pub fn setup_array_class(interner: &SharedInterner) -> Rc<ClassDefinition> {
         name,
         fields: HashMap::new(),
         methods,
-        constructor: None,
+        constructor: Some(array_constructor),
         span: Span::default(),
     })
 }

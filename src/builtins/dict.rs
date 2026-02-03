@@ -10,6 +10,19 @@ pub fn setup_dict_class(interner: &SharedInterner) -> Rc<ClassDefinition> {
     let mut methods = HashMap::new();
     let name = interner.write().expect("interner lock poisoned").get_or_intern("Словарь");
 
+    let dict_constructor = MethodType::Native(BuiltinFn(Arc::new(|_interp, args, span| {
+        if let Some(Value::Object(instance)) = args.get(0) {
+            // Создаем пустую HashMap (или наполняем из аргументов, если нужно)
+            let internal_dict = Value::Dict(Rc::new(RefCell::new(HashMap::new())));
+
+            let data_sym = _interp.interner.write().unwrap().get_or_intern("__data");
+            instance.borrow_mut().field_values.insert(data_sym, internal_dict);
+            Ok(Value::Empty)
+        } else {
+            Err(RuntimeError::TypeError(ErrorData::new(span, "Ошибка конструктора Dict".into())))
+        }
+    })));
+
     // 1. set(key: Text, value: Any) -> Empty
     methods.insert(interner.write().expect("interner lock poisoned").get_or_intern("задать"), (Visibility::Public, MethodType::Native(BuiltinFn(Arc::new(|_interp, args, span| {
         if let (Some(Value::Dict(dict)), Some(Value::Text(key)), Some(val)) = (args.get(0), args.get(1), args.get(2)) {
@@ -90,7 +103,7 @@ pub fn setup_dict_class(interner: &SharedInterner) -> Rc<ClassDefinition> {
         name,
         fields: HashMap::new(),
         methods,
-        constructor: None,
+        constructor: Some(dict_constructor),
         span: Span::default(),
     })
 }

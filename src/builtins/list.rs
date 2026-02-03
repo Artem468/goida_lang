@@ -1,13 +1,28 @@
+use std::cell::RefCell;
 use std::collections::HashMap;
 use crate::ast::prelude::{ClassDefinition, ErrorData, Span, Visibility};
 use crate::interpreter::prelude::{BuiltinFn, RuntimeError, SharedInterner, Value};
 use std::rc::Rc;
 use std::sync::Arc;
 use crate::ast::program::MethodType;
+use crate::traits::prelude::CoreOperations;
 
 pub fn setup_list_class(interner: &SharedInterner) -> Rc<ClassDefinition> {
     let mut methods = HashMap::new();
     let name = interner.write().expect("interner lock poisoned").get_or_intern("Список");
+
+    let list_constructor = MethodType::Native(BuiltinFn(Arc::new(|_interp, args, _span| {
+        // args[0] - это временный ClassInstance (this)
+        // args[1..] - это элементы: новый Список(1, 2, 3)
+        if let Some(Value::Object(instance)) = args.get(0) {
+            let items = args[1..].to_vec();
+            let internal_list = Value::List(Rc::new(RefCell::new(items)));
+
+            let data_sym = _interp.intern_string("__data");
+            instance.borrow_mut().field_values.insert(data_sym, internal_list);
+        }
+        Ok(Value::Empty)
+    })));
 
     // append(value) - Добавить в конец
     methods.insert(interner.write().expect("interner lock poisoned").get_or_intern("добавить"), (Visibility::Public, MethodType::Native(BuiltinFn(Arc::new(|_interp, args, span| {
@@ -105,7 +120,7 @@ pub fn setup_list_class(interner: &SharedInterner) -> Rc<ClassDefinition> {
         name,
         fields: HashMap::new(),
         methods,
-        constructor: None,
+        constructor: Some(list_constructor),
         span: Span::default(),
     })
 }
