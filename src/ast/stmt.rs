@@ -1,5 +1,5 @@
-use string_interner::{DefaultSymbol as Symbol};
-use crate::ast::prelude::{ClassDefinition, ExprId, FunctionDefinition, Import, Span, TypeId};
+use crate::ast::prelude::{ClassDefinition, ExprId, FunctionDefinition, Span, TypeId};
+use string_interner::DefaultSymbol as Symbol;
 
 pub type StmtId = u32;
 
@@ -38,7 +38,6 @@ pub enum StatementKind {
         update: ExprId,
         body: StmtId,
     },
-    Import(Import),
     Block(Vec<StmtId>),
     Return(Option<ExprId>),
     FunctionDefinition(FunctionDefinition),
@@ -48,4 +47,5 @@ pub enum StatementKind {
         property: Symbol,
         value: ExprId,
     },
+    Empty
 }

@@ -5,6 +5,7 @@ use crate::interpreter::prelude::{Module, SharedInterner};
 pub struct Parser {
     pub(crate) module: Module,
     pub(crate) interner: SharedInterner,
+    pub(crate) nesting_level: usize,
 }
 
 #[derive(Debug)]

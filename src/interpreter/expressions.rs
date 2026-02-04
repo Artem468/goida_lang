@@ -42,6 +42,7 @@ impl ExpressionEvaluator for Interpreter {
                 if let Some(val) = self.environment.get(&symbol) {
                     return Ok(val);
                 }
+                println!("DEBUG: Ищу идентификатор с ID: {:?}", symbol);
 
                 let current_module = self.modules.get(&current_module_id).ok_or_else(|| {
                     RuntimeError::InvalidOperation(ErrorData::new(

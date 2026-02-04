@@ -53,6 +53,13 @@ impl InterpreterFunctions for Interpreter {
         current_module_id: Symbol,
         span: Span,
     ) -> Result<Value, RuntimeError> {
+        if let Some(val) = self.environment.get(&name) {
+            if let Value::Function(func) = val {
+                let func_clone = (*func).clone();
+                return self.call_function(func_clone, arguments, current_module_id, span);
+            }
+        }
+
         let name_str = self.resolve_symbol(name).unwrap();
 
         if let Some(dot_index) = name_str.find('.') {
