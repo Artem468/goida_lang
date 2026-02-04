@@ -203,13 +203,49 @@ impl ExpressionEvaluator for Interpreter {
                 }
             }
 
-            ExpressionKind::Index {
-                object: _,
-                index: _,
-            } => Err(RuntimeError::InvalidOperation(ErrorData::new(
-                expr_kind.span,
-                "Индексный доступ отключён".to_string(),
-            ))),
+            ExpressionKind::Index { object, index } => {
+                let obj_val = self.evaluate_expression(object, current_module_id)?;
+                let idx_val = self.evaluate_expression(index, current_module_id)?;
+
+                match obj_val {
+                    Value::List(list) => list.read(|vec| {
+                        let idx = idx_val.resolve_index(vec.len(), expr_kind.span)?;
+
+                        vec.get(idx).cloned().ok_or_else(|| {
+                            RuntimeError::InvalidOperation(ErrorData::new(
+                                expr_kind.span,
+                                format!("Индекс {} вне границ списка (длина {})", idx, vec.len()),
+                            ))
+                        })
+                    }),
+
+                    Value::Array(arr) => {
+                        let idx = idx_val.resolve_index(arr.len(), expr_kind.span)?;
+
+                        arr.get(idx).cloned().ok_or_else(|| {
+                            RuntimeError::InvalidOperation(ErrorData::new(
+                                expr_kind.span,
+                                format!("Индекс {} вне границ списка (длина {})", idx, arr.len()),
+                            ))
+                        })
+                    },
+
+                    Value::Dict(dict) => dict.read(|d| {
+                        let key = idx_val.to_string();
+                        d.get(&key).cloned().ok_or_else(|| {
+                            RuntimeError::InvalidOperation(ErrorData::new(
+                                expr_kind.span,
+                                format!("Ключ '{}' не найден в словаре", key),
+                            ))
+                        })
+                    }),
+
+                    _ => Err(RuntimeError::TypeError(ErrorData::new(
+                        expr_kind.span,
+                        "Операция [] доступна только для итерируемых коллекций".into(),
+                    ))),
+                }
+            },
 
             ExpressionKind::PropertyAccess { object, property } => {
                 let obj_expr = {
@@ -282,7 +318,10 @@ impl ExpressionEvaluator for Interpreter {
                             let data = if let Some(val) = instance.field_values.get(&property) {
                                 Some(Ok(val.clone()))
                             } else {
-                                instance.get_field(&property).cloned().map(|opt_expr| Err(opt_expr))
+                                instance
+                                    .get_field(&property)
+                                    .cloned()
+                                    .map(|opt_expr| Err(opt_expr))
                             };
 
                             (data, accessible)
@@ -604,9 +643,8 @@ impl ExpressionEvaluator for Interpreter {
                 }
 
                 let data_key = self.interner.write(|i| i.get_or_intern("__data"));
-                let internal_value = instance_ref.write(|instance| {
-                    instance.field_values.remove(&data_key)
-                });
+                let internal_value =
+                    instance_ref.write(|instance| instance.field_values.remove(&data_key));
 
                 match internal_value {
                     Some(val) => Ok(val),

@@ -47,20 +47,13 @@ pub fn setup_list_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassDe
         Visibility::Public,
         false,
         BuiltinFn(Arc::new(|_interp, args, span| {
-            if let (Some(Value::List(list)), Some(Value::Number(idx)), Some(new_val)) =
+            if let (Some(Value::List(list)), Some(raw_idx), Some(new_val)) =
                 (args.get(0), args.get(1), args.get(2))
             {
                 list.write(|vec| {
-                    let i = *idx as usize;
-                    if i < vec.len() {
-                        vec[i] = new_val.clone();
-                        Ok(Value::Empty)
-                    } else {
-                        Err(RuntimeError::InvalidOperation(ErrorData::new(
-                            span,
-                            "Индекс вне границ списка".into(),
-                        )))
-                    }
+                    let idx = raw_idx.resolve_index(vec.len(), span)?;
+                    vec[idx] = new_val.clone();
+                    Ok(Value::Empty)
                 })
             } else {
                 Err(RuntimeError::TypeError(ErrorData::new(
@@ -104,14 +97,9 @@ pub fn setup_list_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassDe
                         )));
                     }
 
-                    let val = if let Some(Value::Number(idx)) = args.get(1) {
-                        if *idx < 0 || *idx >= vec.len() as i64 {
-                            return Err(RuntimeError::InvalidOperation(ErrorData::new(
-                                span,
-                                "Индекс вне границ".into(),
-                            )));
-                        }
-                        vec.remove(*idx as usize)
+                    let val = if let Some(raw_idx) = args.get(1) {
+                        let idx = raw_idx.resolve_index(vec.len(), span)?;
+                        vec.remove(idx)
                     } else {
                         vec.pop().unwrap()
                     };
@@ -173,17 +161,12 @@ pub fn setup_list_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassDe
         Visibility::Public,
         false,
         BuiltinFn(Arc::new(|_interp, args, span| {
-            if let (Some(Value::List(list)), Some(Value::Number(idx))) = (args.get(0), args.get(1))
+            if let (Some(Value::List(list)), Some(idx)) = (args.get(0), args.get(1))
             {
-                let vec = list.read(|i| {
-                    i.get(*idx as usize).cloned().ok_or_else(|| {
-                        RuntimeError::InvalidOperation(ErrorData::new(
-                            span,
-                            "Индекс вне границ".into(),
-                        ))
-                    })
-                });
-                vec
+                list.read(|vec| {
+                    let i = idx.resolve_index(vec.len(), span)?;
+                    Ok(vec[i].clone())
+                })
             } else {
                 Err(RuntimeError::TypeError(ErrorData::new(
                     span,

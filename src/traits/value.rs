@@ -1,4 +1,4 @@
-use crate::ast::prelude::Span;
+use crate::ast::prelude::{ErrorData, Span};
 use crate::ast::program::FieldData;
 use crate::interpreter::prelude::RuntimeError;
 use crate::interpreter::structs::Value;
@@ -91,6 +91,44 @@ impl Value {
             Value::NativeResource(_) => true,
             Value::Empty => false,
         }
+    }
+    pub fn as_index(&self) -> Result<i64, String> {
+        match self {
+            Value::Number(n) => Ok(*n),
+            _ => Err(format!("Ожидалось число (индекс), но получено {:?}", self)),
+        }
+    }
+
+    pub fn resolve_index(&self, len: usize, span: Span) -> Result<usize, RuntimeError> {
+        let raw_idx = match self {
+            Value::Number(n) => *n,
+            _ => return Err(RuntimeError::TypeError(ErrorData::new(
+                span,
+                format!("Индекс должен быть числом, получено {:?}", self)
+            ))),
+        };
+
+        let final_idx = if raw_idx < 0 {
+            let abs_idx = raw_idx.unsigned_abs() as usize;
+            if abs_idx > len {
+                return Err(RuntimeError::InvalidOperation(ErrorData::new(
+                    span,
+                    format!("Отрицательный индекс {} слишком велик (длина {})", raw_idx, len)
+                )));
+            }
+            len - abs_idx
+        } else {
+            raw_idx as usize
+        };
+
+        if final_idx >= len {
+            return Err(RuntimeError::InvalidOperation(ErrorData::new(
+                span,
+                format!("Индекс {} вне границ (длина {})", raw_idx, len)
+            )));
+        }
+
+        Ok(final_idx)
     }
 }
 

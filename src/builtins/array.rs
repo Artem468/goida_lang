@@ -68,21 +68,14 @@ pub fn setup_array_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassD
         Visibility::Public,
         false,
         BuiltinFn(Arc::new(|_interp, args, span| {
-            if let (Some(Value::List(list)), Some(Value::Number(idx))) = (args.get(0), args.get(1))
+            if let (Some(Value::Array(arr)), Some(idx)) = (args.get(0), args.get(1))
             {
-                let vec = list.read(|i| {
-                    i.get(*idx as usize).cloned().ok_or_else(|| {
-                        RuntimeError::InvalidOperation(ErrorData::new(
-                            span,
-                            "Индекс вне границ".into(),
-                        ))
-                    })
-                });
-                vec
+                let i = idx.resolve_index(arr.len(), span)?;
+                Ok(arr[i].clone())
             } else {
                 Err(RuntimeError::TypeError(ErrorData::new(
                     span,
-                    "Использование: list.get(number)".into(),
+                    "Использование: array.get(number)".into(),
                 )))
             }
         })),
