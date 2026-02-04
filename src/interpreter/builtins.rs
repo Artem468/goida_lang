@@ -1,11 +1,12 @@
-use crate::ast::prelude::{ErrorData, Span};
+use crate::ast::prelude::ErrorData;
 use crate::interpreter::prelude::{BuiltinFn, Interpreter, RuntimeError, Value};
+use crate::shared::SharedMut;
 use crate::traits::prelude::CoreOperations;
 use crate::{define_builtin, setup_builtins};
 use std::collections::HashMap;
 use std::io;
 use std::io::Write;
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 
 setup_builtins!(interpreter, {
     "печать" (arguments, span) {
@@ -131,12 +132,7 @@ setup_builtins!(interpreter, {
                      format!(
                          "объект \"{}\"",
                          interpreter
-                         .resolve_symbol(obj.read().map_err(|_| {
-                        RuntimeError::Panic(ErrorData::new(
-                            Span::default(),
-                            "Сбой блокировки в реализации функции 'тип'".into(),
-                    ))
-                })?.class_name)
+                         .resolve_symbol(obj.read(|i| i.class_name))
                          .ok_or_else(|| RuntimeError::InvalidOperation(ErrorData::new(
                             span,
                             "Тип не найден".into())))?.to_string()
@@ -148,12 +144,7 @@ setup_builtins!(interpreter, {
                     format!(
                         "класс \"{}\"",
                         interpreter
-                            .resolve_symbol(cls.read().map_err(|_| {
-                        RuntimeError::Panic(ErrorData::new(
-                            Span::default(),
-                            "Сбой блокировки в реализации функции 'тип'".into(),
-                    ))
-                })?.name)
+                            .resolve_symbol(cls.read(|i| i.name))
                             .ok_or_else(|| RuntimeError::InvalidOperation(ErrorData::new(
                                 span,
                                 "Тип не найден".into())))?.to_string()
@@ -206,7 +197,7 @@ setup_builtins!(interpreter, {
     }
 
     "список" (arguments, span) -> Result<Value, RuntimeError> {
-        Ok(Value::List(Arc::new(RwLock::new(arguments))))
+        Ok(Value::List(SharedMut::new(arguments)))
     }
 
     "массив" (arguments, span) -> Result<Value, RuntimeError> {
@@ -231,6 +222,6 @@ setup_builtins!(interpreter, {
             dict.insert(key, value);
         }
 
-        Ok(Value::Dict(Arc::new(RwLock::new(dict))))
+        Ok(Value::Dict(SharedMut::new(dict)))
     }
 });

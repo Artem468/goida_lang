@@ -1,13 +1,11 @@
 use crate::ast::prelude::{ClassDefinition, ErrorData, Span, Visibility};
 use crate::interpreter::prelude::{BuiltinFn, RuntimeError, SharedInterner, Value};
-use std::sync::{Arc, RwLock};
+use crate::shared::SharedMut;
+use std::sync::Arc;
 use string_interner::DefaultSymbol as Symbol;
 
-pub fn setup_array_class(interner: &SharedInterner) -> (Symbol, Arc<RwLock<ClassDefinition>>) {
-    let name = interner
-        .write()
-        .expect("interner lock poisoned")
-        .get_or_intern("Массив");
+pub fn setup_array_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassDefinition>) {
+    let name = interner.write(|i| i.get_or_intern("Массив"));
 
     let mut class_def = ClassDefinition::new(name, Span::default());
 
@@ -16,40 +14,20 @@ pub fn setup_array_class(interner: &SharedInterner) -> (Symbol, Arc<RwLock<Class
             let items = args[1..].to_vec();
             let internal_array = Value::Array(Arc::new(items));
 
-            let data_sym = _interp.interner.write().unwrap().get_or_intern("__data");
-            instance
-                .write()
-                .map_err(|_| {
-                    RuntimeError::Panic(ErrorData::new(
-                        Span::default(),
-                        "Сбой блокировки в реализации массива".into(),
-                    ))
-                })?
-                .field_values
-                .insert(data_sym, internal_array);
+            let data_sym = _interp.interner.write(|i| i.get_or_intern("__data"));
+            instance.write(|i| i.field_values.insert(data_sym, internal_array));
         }
         Ok(Value::Empty)
     })));
 
     // len() - Получить длину
     class_def.add_method(
-        interner
-            .write()
-            .expect("interner lock poisoned")
-            .get_or_intern("длина"),
+        interner.write(|i| i.get_or_intern("длина")),
         Visibility::Public,
         false,
         BuiltinFn(Arc::new(|_interp, args, span| {
             if let Some(Value::List(list)) = args.get(0) {
-                let length = list
-                    .read()
-                    .map_err(|_| {
-                        RuntimeError::Panic(ErrorData::new(
-                            Span::default(),
-                            "Сбой блокировки в реализации массива".into(),
-                        ))
-                    })?
-                    .len();
+                let length = list.read(|i| i.len());
                 Ok(Value::Number(length as i64))
             } else {
                 Err(RuntimeError::TypeError(ErrorData::new(
@@ -62,25 +40,18 @@ pub fn setup_array_class(interner: &SharedInterner) -> (Symbol, Arc<RwLock<Class
 
     // join(separator) - Склеить в строку
     class_def.add_method(
-        interner
-            .write()
-            .expect("interner lock poisoned")
-            .get_or_intern("объединить"),
+        interner.write(|i| i.get_or_intern("объединить")),
         Visibility::Public,
         false,
         BuiltinFn(Arc::new(|_interp, args, span| {
             if let (Some(Value::List(list)), Some(Value::Text(sep))) = (args.get(0), args.get(1)) {
-                let vec = list.read().map_err(|_| {
-                    RuntimeError::Panic(ErrorData::new(
-                        Span::default(),
-                        "Сбой блокировки в реализации массива".into(),
-                    ))
-                })?;
-                let res = vec
-                    .iter()
-                    .map(|v| v.to_string())
-                    .collect::<Vec<_>>()
-                    .join(sep);
+                let res = list.read(|vec| {
+                    vec.iter()
+                        .map(|v| v.to_string())
+                        .collect::<Vec<_>>()
+                        .join(sep)
+                });
+
                 Ok(Value::Text(res))
             } else {
                 Err(RuntimeError::TypeError(ErrorData::new(
@@ -93,24 +64,21 @@ pub fn setup_array_class(interner: &SharedInterner) -> (Symbol, Arc<RwLock<Class
 
     // get(index) - Безопасное получение (аналог list[i])
     class_def.add_method(
-        interner
-            .write()
-            .expect("interner lock poisoned")
-            .get_or_intern("получить"),
+        interner.write(|i| i.get_or_intern("получить")),
         Visibility::Public,
         false,
         BuiltinFn(Arc::new(|_interp, args, span| {
             if let (Some(Value::List(list)), Some(Value::Number(idx))) = (args.get(0), args.get(1))
             {
-                let vec = list.read().map_err(|_| {
-                    RuntimeError::Panic(ErrorData::new(
-                        Span::default(),
-                        "Сбой блокировки в реализации массива".into(),
-                    ))
-                })?;
-                vec.get(*idx as usize).cloned().ok_or_else(|| {
-                    RuntimeError::InvalidOperation(ErrorData::new(span, "Индекс вне границ".into()))
-                })
+                let vec = list.read(|i| {
+                    i.get(*idx as usize).cloned().ok_or_else(|| {
+                        RuntimeError::InvalidOperation(ErrorData::new(
+                            span,
+                            "Индекс вне границ".into(),
+                        ))
+                    })
+                });
+                vec
             } else {
                 Err(RuntimeError::TypeError(ErrorData::new(
                     span,
@@ -120,5 +88,5 @@ pub fn setup_array_class(interner: &SharedInterner) -> (Symbol, Arc<RwLock<Class
         })),
     );
 
-    (name, Arc::new(RwLock::new(class_def)))
+    (name, SharedMut::new(class_def))
 }

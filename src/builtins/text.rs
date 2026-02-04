@@ -1,13 +1,11 @@
 use crate::ast::prelude::{ClassDefinition, ErrorData, Span, Visibility};
 use crate::interpreter::prelude::{BuiltinFn, RuntimeError, SharedInterner, Value};
-use std::sync::{Arc, RwLock};
+use crate::shared::SharedMut;
+use std::sync::Arc;
 use string_interner::DefaultSymbol as Symbol;
 
-pub fn setup_text_class(interner: &SharedInterner) -> (Symbol, Arc<RwLock<ClassDefinition>>){
-    let name = interner
-        .write()
-        .expect("interner lock poisoned")
-        .get_or_intern("Строка");
+pub fn setup_text_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassDefinition>) {
+    let name = interner.write(|i| i.get_or_intern("Строка"));
 
     let mut class_def = ClassDefinition::new(name, Span::default());
 
@@ -21,27 +19,15 @@ pub fn setup_text_class(interner: &SharedInterner) -> (Symbol, Arc<RwLock<ClassD
                 _ => String::new(),
             };
 
-            let data_sym = _interp.interner.write().unwrap().get_or_intern("__data");
-            instance
-                .write()
-                .map_err(|_| {
-                    RuntimeError::Panic(ErrorData::new(
-                        Span::default(),
-                        "Сбой блокировки в реализации строк".into(),
-                    ))
-                })?
-                .field_values
-                .insert(data_sym, Value::Text(content));
+            let data_sym = _interp.interner.write(|i| i.get_or_intern("__data"));
+            instance.write(|i| i.field_values.insert(data_sym, Value::Text(content)));
         }
         Ok(Value::Empty)
     })));
 
     // len() -> Number
     class_def.add_method(
-        interner
-            .write()
-            .expect("interner lock poisoned")
-            .get_or_intern("длина"),
+        interner.write(|i| i.get_or_intern("длина")),
         Visibility::Public,
         false,
         BuiltinFn(Arc::new(|_interp, args, span| {
@@ -58,10 +44,7 @@ pub fn setup_text_class(interner: &SharedInterner) -> (Symbol, Arc<RwLock<ClassD
 
     // split(separator: Text) -> List
     class_def.add_method(
-        interner
-            .write()
-            .expect("interner lock poisoned")
-            .get_or_intern("разделить"),
+        interner.write(|i| i.get_or_intern("разделить")),
         Visibility::Public,
         false,
         BuiltinFn(Arc::new(|_interp, args, span| {
@@ -70,7 +53,7 @@ pub fn setup_text_class(interner: &SharedInterner) -> (Symbol, Arc<RwLock<ClassD
                     .split(sep)
                     .map(|part| Value::Text(part.to_string()))
                     .collect();
-                Ok(Value::List(Arc::new(RwLock::new(parts))))
+                Ok(Value::List(SharedMut::new(parts)))
             } else {
                 Err(RuntimeError::TypeError(ErrorData::new(
                     span,
@@ -82,10 +65,7 @@ pub fn setup_text_class(interner: &SharedInterner) -> (Symbol, Arc<RwLock<ClassD
 
     // upper() -> Text
     class_def.add_method(
-        interner
-            .write()
-            .expect("interner lock poisoned")
-            .get_or_intern("верхний"),
+        interner.write(|i| i.get_or_intern("верхний")),
         Visibility::Public,
         false,
         BuiltinFn(Arc::new(|_interp, args, span| {
@@ -102,10 +82,7 @@ pub fn setup_text_class(interner: &SharedInterner) -> (Symbol, Arc<RwLock<ClassD
 
     // lower() -> Text
     class_def.add_method(
-        interner
-            .write()
-            .expect("interner lock poisoned")
-            .get_or_intern("нижний"),
+        interner.write(|i| i.get_or_intern("нижний")),
         Visibility::Public,
         false,
         BuiltinFn(Arc::new(|_interp, args, span| {
@@ -122,10 +99,7 @@ pub fn setup_text_class(interner: &SharedInterner) -> (Symbol, Arc<RwLock<ClassD
 
     // contains(substring: Text) -> Boolean
     class_def.add_method(
-        interner
-            .write()
-            .expect("interner lock poisoned")
-            .get_or_intern("содержит"),
+        interner.write(|i| i.get_or_intern("содержит")),
         Visibility::Public,
         false,
         BuiltinFn(Arc::new(|_interp, args, span| {
@@ -142,10 +116,7 @@ pub fn setup_text_class(interner: &SharedInterner) -> (Symbol, Arc<RwLock<ClassD
 
     // replace(old: Text, new: Text) -> Text
     class_def.add_method(
-        interner
-            .write()
-            .expect("interner lock poisoned")
-            .get_or_intern("заменить"),
+        interner.write(|i| i.get_or_intern("заменить")),
         Visibility::Public,
         false,
         BuiltinFn(Arc::new(|_interp, args, span| {
@@ -162,5 +133,5 @@ pub fn setup_text_class(interner: &SharedInterner) -> (Symbol, Arc<RwLock<ClassD
         })),
     );
 
-    (name, Arc::new(RwLock::new(class_def)))
+    (name, SharedMut::new(class_def))
 }

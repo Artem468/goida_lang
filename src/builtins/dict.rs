@@ -1,32 +1,21 @@
 use crate::ast::prelude::{ClassDefinition, ErrorData, Span, Visibility};
 use crate::interpreter::prelude::{BuiltinFn, RuntimeError, SharedInterner, Value};
+use crate::shared::SharedMut;
 use std::collections::HashMap;
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 use string_interner::DefaultSymbol as Symbol;
 
-pub fn setup_dict_class(interner: &SharedInterner) -> (Symbol, Arc<RwLock<ClassDefinition>>) {
-    let name = interner
-        .write()
-        .expect("interner lock poisoned")
-        .get_or_intern("Словарь");
+pub fn setup_dict_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassDefinition>) {
+    let name = interner.write(|i| i.get_or_intern("Словарь"));
 
     let mut class_def = ClassDefinition::new(name, Span::default());
 
     class_def.set_constructor(BuiltinFn(Arc::new(|_interp, args, span| {
         if let Some(Value::Object(instance)) = args.get(0) {
-            let internal_dict = Value::Dict(Arc::new(RwLock::new(HashMap::new())));
+            let internal_dict = Value::Dict(SharedMut::new(HashMap::new()));
 
-            let data_sym = _interp.interner.write().unwrap().get_or_intern("__data");
-            instance
-                .write()
-                .map_err(|_| {
-                    RuntimeError::Panic(ErrorData::new(
-                        Span::default(),
-                        "Сбой блокировки в реализации словаря".into(),
-                    ))
-                })?
-                .field_values
-                .insert(data_sym, internal_dict);
+            let data_sym = _interp.interner.write(|i| i.get_or_intern("__data"));
+            instance.write(|i| i.field_values.insert(data_sym, internal_dict));
             Ok(Value::Empty)
         } else {
             Err(RuntimeError::TypeError(ErrorData::new(
@@ -38,24 +27,14 @@ pub fn setup_dict_class(interner: &SharedInterner) -> (Symbol, Arc<RwLock<ClassD
 
     // 1. set(key: Text, value: Any) -> Empty
     class_def.add_method(
-        interner
-            .write()
-            .expect("interner lock poisoned")
-            .get_or_intern("задать"),
+        interner.write(|i| i.get_or_intern("задать")),
         Visibility::Public,
         false,
         BuiltinFn(Arc::new(|_interp, args, span| {
             if let (Some(Value::Dict(dict)), Some(Value::Text(key)), Some(val)) =
                 (args.get(0), args.get(1), args.get(2))
             {
-                dict.write()
-                    .map_err(|_| {
-                        RuntimeError::Panic(ErrorData::new(
-                            Span::default(),
-                            "Сбой блокировки в реализации словаря".into(),
-                        ))
-                    })?
-                    .insert(key.clone(), val.clone());
+                dict.write(|i| i.insert(key.clone(), val.clone()));
                 Ok(Value::Empty)
             } else {
                 Err(RuntimeError::TypeError(ErrorData::new(
@@ -68,25 +47,18 @@ pub fn setup_dict_class(interner: &SharedInterner) -> (Symbol, Arc<RwLock<ClassD
 
     // 2. get(key: Text, default?: Any) -> Any
     class_def.add_method(
-        interner
-            .write()
-            .expect("interner lock poisoned")
-            .get_or_intern("получить"),
+        interner.write(|i| i.get_or_intern("получить")),
         Visibility::Public,
         false,
         BuiltinFn(Arc::new(|_interp, args, span| {
             if let (Some(Value::Dict(dict)), Some(Value::Text(key))) = (args.get(0), args.get(1)) {
-                let dict = dict.read().map_err(|_| {
-                    RuntimeError::Panic(ErrorData::new(
-                        Span::default(),
-                        "Сбой блокировки в реализации словаря".into(),
-                    ))
-                })?;
-                if let Some(val) = dict.get(key) {
-                    Ok(val.clone())
-                } else {
-                    Ok(args.get(2).cloned().unwrap_or(Value::Empty))
-                }
+                let result = dict.read(|d| {
+                    d.get(key)
+                        .cloned() // Клонируем значение из словаря
+                        .unwrap_or_else(|| args.get(2).cloned().unwrap_or(Value::Empty))
+                });
+
+                Ok(result)
             } else {
                 Err(RuntimeError::TypeError(ErrorData::new(
                     span,
@@ -98,24 +70,12 @@ pub fn setup_dict_class(interner: &SharedInterner) -> (Symbol, Arc<RwLock<ClassD
 
     // 3. has(key: Text) -> Boolean
     class_def.add_method(
-        interner
-            .write()
-            .expect("interner lock poisoned")
-            .get_or_intern("имеет"),
+        interner.write(|i| i.get_or_intern("имеет")),
         Visibility::Public,
         false,
         BuiltinFn(Arc::new(|_interp, args, span| {
             if let (Some(Value::Dict(dict)), Some(Value::Text(key))) = (args.get(0), args.get(1)) {
-                Ok(Value::Boolean(
-                    dict.read()
-                        .map_err(|_| {
-                            RuntimeError::Panic(ErrorData::new(
-                                Span::default(),
-                                "Сбой блокировки в реализации словаря".into(),
-                            ))
-                        })?
-                        .contains_key(key),
-                ))
+                Ok(Value::Boolean(dict.read(|i| i.contains_key(key))))
             } else {
                 Err(RuntimeError::TypeError(ErrorData::new(
                     span,
@@ -127,26 +87,14 @@ pub fn setup_dict_class(interner: &SharedInterner) -> (Symbol, Arc<RwLock<ClassD
 
     // 4. keys() -> List<Text>
     class_def.add_method(
-        interner
-            .write()
-            .expect("interner lock poisoned")
-            .get_or_intern("ключи"),
+        interner.write(|i| i.get_or_intern("ключи")),
         Visibility::Public,
         false,
         BuiltinFn(Arc::new(|_interp, args, span| {
             if let Some(Value::Dict(dict)) = args.get(0) {
-                let keys: Vec<Value> = dict
-                    .read()
-                    .map_err(|_| {
-                        RuntimeError::Panic(ErrorData::new(
-                            Span::default(),
-                            "Сбой блокировки в реализации словаря".into(),
-                        ))
-                    })?
-                    .keys()
-                    .map(|k| Value::Text(k.clone()))
-                    .collect();
-                Ok(Value::List(Arc::new(RwLock::new(keys))))
+                let keys: Vec<Value> =
+                    dict.read(|i| i.keys().map(|k| Value::Text(k.clone())).collect());
+                Ok(Value::List(SharedMut::new(keys)))
             } else {
                 Err(RuntimeError::TypeError(ErrorData::new(
                     span,
@@ -158,26 +106,13 @@ pub fn setup_dict_class(interner: &SharedInterner) -> (Symbol, Arc<RwLock<ClassD
 
     // values() -> List<Any>
     class_def.add_method(
-        interner
-            .write()
-            .expect("interner lock poisoned")
-            .get_or_intern("значения"),
+        interner.write(|i| i.get_or_intern("значения")),
         Visibility::Public,
         false,
         BuiltinFn(Arc::new(|_interp, args, span| {
             if let Some(Value::Dict(dict)) = args.get(0) {
-                let values: Vec<Value> = dict
-                    .read()
-                    .map_err(|_| {
-                        RuntimeError::Panic(ErrorData::new(
-                            Span::default(),
-                            "Сбой блокировки в реализации словаря".into(),
-                        ))
-                    })?
-                    .values()
-                    .cloned()
-                    .collect();
-                Ok(Value::List(Arc::new(RwLock::new(values))))
+                let values: Vec<Value> = dict.read(|i| i.values().cloned().collect());
+                Ok(Value::List(SharedMut::new(values)))
             } else {
                 Err(RuntimeError::TypeError(ErrorData::new(
                     span,
@@ -189,24 +124,12 @@ pub fn setup_dict_class(interner: &SharedInterner) -> (Symbol, Arc<RwLock<ClassD
 
     // 5. remove(key: Text) -> Any
     class_def.add_method(
-        interner
-            .write()
-            .expect("interner lock poisoned")
-            .get_or_intern("удалить"),
+        interner.write(|i| i.get_or_intern("удалить")),
         Visibility::Public,
         false,
         BuiltinFn(Arc::new(|_interp, args, span| {
             if let (Some(Value::Dict(dict)), Some(Value::Text(key))) = (args.get(0), args.get(1)) {
-                Ok(dict
-                    .write()
-                    .map_err(|_| {
-                        RuntimeError::Panic(ErrorData::new(
-                            Span::default(),
-                            "Сбой блокировки в реализации словаря".into(),
-                        ))
-                    })?
-                    .remove(key)
-                    .unwrap_or(Value::Empty))
+                Ok(dict.write(|i| i.remove(key)).unwrap_or(Value::Empty))
             } else {
                 Err(RuntimeError::TypeError(ErrorData::new(
                     span,
@@ -218,24 +141,12 @@ pub fn setup_dict_class(interner: &SharedInterner) -> (Symbol, Arc<RwLock<ClassD
 
     // 6. len() -> Number
     class_def.add_method(
-        interner
-            .write()
-            .expect("interner lock poisoned")
-            .get_or_intern("длина"),
+        interner.write(|i| i.get_or_intern("длина")),
         Visibility::Public,
         false,
         BuiltinFn(Arc::new(|_interp, args, span| {
             if let Some(Value::Dict(dict)) = args.get(0) {
-                Ok(Value::Number(
-                    dict.read()
-                        .map_err(|_| {
-                            RuntimeError::Panic(ErrorData::new(
-                                Span::default(),
-                                "Сбой блокировки в реализации словаря".into(),
-                            ))
-                        })?
-                        .len() as i64,
-                ))
+                Ok(Value::Number(dict.read(|i| i.len() as i64)))
             } else {
                 Err(RuntimeError::TypeError(ErrorData::new(
                     span,
@@ -245,5 +156,5 @@ pub fn setup_dict_class(interner: &SharedInterner) -> (Symbol, Arc<RwLock<ClassD
         })),
     );
 
-    (name, Arc::new(RwLock::new(class_def)))
+    (name, SharedMut::new(class_def))
 }

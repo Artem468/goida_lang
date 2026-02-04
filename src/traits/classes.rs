@@ -1,7 +1,7 @@
 use crate::ast::prelude::{ClassDefinition, Span};
 use crate::ast::program::MethodType;
 use crate::interpreter::prelude::{ClassInstance, RuntimeError, Value};
-use std::sync::{Arc, RwLock};
+use crate::shared::SharedMut;
 use string_interner::DefaultSymbol as Symbol;
 
 pub trait InterpreterClasses {
@@ -16,9 +16,9 @@ pub trait InterpreterClasses {
 
     fn set_class_module(
         &self,
-        class_def: Arc<RwLock<ClassDefinition>>,
+        class_def: SharedMut<ClassDefinition>,
         module: Symbol,
-    ) -> Arc<RwLock<ClassDefinition>>;
+    ) -> SharedMut<ClassDefinition>;
 }
 
 impl MethodType {

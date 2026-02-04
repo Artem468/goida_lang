@@ -2,8 +2,9 @@ use crate::ast::prelude::Span;
 use crate::ast::program::FieldData;
 use crate::interpreter::prelude::RuntimeError;
 use crate::interpreter::structs::Value;
+use crate::shared::SharedMut;
 use std::fmt;
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 
 pub trait ValueOperations {
     fn add_values(&self, left: Value, right: Value, span: Span) -> Result<Value, RuntimeError>;
@@ -49,22 +50,24 @@ impl Value {
             Value::Builtin(func) => format!("<Встроенная функция {:p}>", func),
             Value::Module(_) => "<Модуль>".to_string(),
             Value::List(list) => {
-                let items = list.read().unwrap();
-                let strings: Vec<String> = items.iter().map(|v| v.to_string()).collect();
-                format!("[{}]", strings.join(", "))
+                list.read(|items| {
+                    let strings: Vec<String> = items.iter().map(|v| v.to_string()).collect();
+                    format!("[{}]", strings.join(", "))
+                })
             }
             Value::Array(array) => {
                 let strings: Vec<String> = array.iter().map(|v| v.to_string()).collect();
                 format!("[{}]", strings.join(", "))
             }
             Value::Dict(dict) => {
-                let items = dict.read().unwrap();
-                let mut pairs: Vec<String> = items
-                    .iter()
-                    .map(|(k, v)| format!("\"{}\": {}", k, v.to_string()))
-                    .collect();
-                pairs.sort();
-                format!("{{{}}}", pairs.join(", "))
+                dict.read(|items| {
+                    let mut pairs: Vec<String> = items
+                        .iter()
+                        .map(|(k, v)| format!("\"{}\": {}", k, v.to_string()))
+                        .collect();
+                    pairs.sort();
+                    format!("{{{}}}", pairs.join(", "))
+                })
             }
             Value::NativeResource(resource) => format!("<Ресурс {:p}>", resource),
             Value::Empty => "пустота".to_string(),
@@ -82,9 +85,9 @@ impl Value {
             Value::Function(_) => true,
             Value::Builtin(_) => true,
             Value::Module(_) => true,
-            Value::List(list) => !list.read().unwrap().is_empty(),
+            Value::List(list) => !list.read(|l| l.is_empty()),
             Value::Array(array) => !array.is_empty(),
-            Value::Dict(dict) => !dict.read().unwrap().is_empty(),
+            Value::Dict(dict) => !dict.read(|d| d.is_empty()),
             Value::NativeResource(_) => true,
             Value::Empty => false,
         }
@@ -147,9 +150,9 @@ impl TryFrom<Value> for bool {
             Value::Number(n) => Ok(n != 0),
             Value::Float(f) => Ok(f != 0.0 && !f.is_nan()),
             Value::Text(s) => Ok(!s.is_empty()),
-            Value::List(list) => Ok(!list.read().unwrap().is_empty()),
+            Value::List(list) => Ok(!list.read(|l| l.is_empty())),
             Value::Array(array) => Ok(!array.is_empty()),
-            Value::Dict(dict) => Ok(!dict.read().unwrap().is_empty()),
+            Value::Dict(dict) => Ok(!dict.read(|d| d.is_empty())),
             Value::Object(_)
             | Value::Class(_)
             | Value::Function(_)
@@ -167,20 +170,20 @@ impl PartialEq for Value {
             (Value::Float(a), Value::Float(b)) => a == b,
             (Value::Text(a), Value::Text(b)) => a == b,
             (Value::Boolean(a), Value::Boolean(b)) => a == b,
-            (Value::Object(a), Value::Object(b)) => Arc::ptr_eq(a, b),
+            (Value::Object(a), Value::Object(b)) => a.ptr_eq(b),
             (Value::Function(a), Value::Function(b)) => Arc::ptr_eq(a, b),
             (Value::Module(a), Value::Module(b)) => a == b,
-            (Value::List(a), Value::List(b)) => Arc::ptr_eq(a, b),
+            (Value::List(a), Value::List(b)) => a.ptr_eq(b),
             (Value::Array(a), Value::Array(b)) => Arc::ptr_eq(a, b),
-            (Value::Dict(a), Value::Dict(b)) => Arc::ptr_eq(a, b),
+            (Value::Dict(a), Value::Dict(b)) => a.ptr_eq(b),
             (Value::Empty, Value::Empty) => true,
             _ => false,
         }
     }
 }
 
-impl From<Arc<RwLock<Value>>> for FieldData {
-    fn from(lock: Arc<RwLock<Value>>) -> Self {
+impl From<SharedMut<Value>> for FieldData {
+    fn from(lock: SharedMut<Value>) -> Self {
         FieldData::Value(lock)
     }
 }

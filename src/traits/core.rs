@@ -1,6 +1,6 @@
 use crate::ast::prelude::ClassDefinition;
 use crate::interpreter::prelude::{Module, RuntimeError, SharedInterner, Value};
-use std::sync::{Arc, RwLock};
+use crate::shared::SharedMut;
 use string_interner::DefaultSymbol as Symbol;
 
 pub trait CoreOperations {
@@ -10,5 +10,5 @@ pub trait CoreOperations {
     fn intern_string(&self, s: &str) -> Symbol;
     fn load_imports(&mut self, module: &Module) -> Result<(), RuntimeError>;
     fn collect_imported_globals(&self, module: &Module) -> Result<Vec<(Symbol, Value)>, RuntimeError>;
-    fn get_class_for_value(&self, value: &Value) -> Option<Arc<RwLock<ClassDefinition>>>;
+    fn get_class_for_value(&self, value: &Value) -> Option<SharedMut<ClassDefinition>>;
 }

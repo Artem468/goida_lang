@@ -1,11 +1,11 @@
 use crate::ast::prelude::*;
 use crate::interpreter::prelude::{Module, SharedInterner};
 use crate::parser::prelude::{ParseError, Parser as ParserTrait};
+use crate::shared::SharedMut;
 use pest::error::ErrorVariant;
 use pest::Parser;
 use pest_derive::Parser;
 use std::path::PathBuf;
-use std::sync::{Arc, RwLock};
 
 #[derive(Parser)]
 #[grammar = "grammar.pest"]
@@ -216,7 +216,7 @@ impl ParserTrait {
 
         self.module
             .classes
-            .insert(symbol_name, Arc::from(RwLock::new(class_def.clone())));
+            .insert(symbol_name, SharedMut::new(class_def.clone()));
         let stmt_id = self
             .module
             .arena

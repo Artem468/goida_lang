@@ -59,8 +59,8 @@ impl InterpreterFunctions for Interpreter {
             let mod_part = &name_str[..dot_index];
             let func_part = &name_str[dot_index + 1..];
 
-            let mod_sym = self.interner.write().unwrap().get_or_intern(mod_part);
-            let func_sym = self.interner.write().unwrap().get_or_intern(func_part);
+            let mod_sym = self.interner.write(|i| i.get_or_intern(mod_part));
+            let func_sym = self.interner.write(|i| i.get_or_intern(func_part));
 
             if let Some(target_module) = self.modules.get(&mod_sym) {
                 if let Some(function) = target_module.functions.get(&func_sym) {

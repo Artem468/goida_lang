@@ -1,8 +1,9 @@
 use crate::ast::class::Visibility;
 use crate::ast::prelude::{ExprId, Span, StmtId, TypeId};
 use crate::interpreter::prelude::{BuiltinFn, Value};
+use crate::shared::SharedMut;
 use std::collections::HashMap;
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 use string_interner::DefaultSymbol as Symbol;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -46,7 +47,7 @@ pub struct ClassDefinition {
 #[derive(Clone, Debug)]
 pub enum FieldData {
     Expression(Option<ExprId>),
-    Value(Arc<RwLock<Value>>),
+    Value(SharedMut<Value>),
 }
 
 #[derive(Clone, Debug)]
@@ -54,7 +55,7 @@ pub struct ClassInstance {
     pub class_name: Symbol,
     pub fields: HashMap<Symbol, Option<ExprId>>,
     pub field_values: HashMap<Symbol, Value>,
-    pub class_ref: Arc<RwLock<ClassDefinition>>,
+    pub class_ref: SharedMut<ClassDefinition>,
 }
 
 #[derive(Debug, Clone)]

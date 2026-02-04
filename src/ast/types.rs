@@ -55,41 +55,8 @@ pub enum BinaryOperator {
     Ge,
     And,
     Or,
-    Assign,
 }
 
-impl BinaryOperator {
-    pub fn precedence(self) -> u8 {
-        match self {
-            Self::Or => 2,
-            Self::And => 3,
-            Self::Eq | Self::Ne => 4,
-            Self::Lt | Self::Le | Self::Gt | Self::Ge => 5,
-            Self::Add | Self::Sub => 6,
-            Self::Mul | Self::Div | Self::Mod => 7,
-            Self::Assign => 1,
-        }
-    }
-
-    pub fn is_left_associative(self) -> bool {
-        matches!(
-            self,
-            Self::Add
-                | Self::Sub
-                | Self::Mul
-                | Self::Div
-                | Self::Mod
-                | Self::Eq
-                | Self::Ne
-                | Self::Lt
-                | Self::Le
-                | Self::Gt
-                | Self::Ge
-                | Self::And
-                | Self::Or
-        )
-    }
-}
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum UnaryOperator {
