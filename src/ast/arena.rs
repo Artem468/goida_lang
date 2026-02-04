@@ -67,25 +67,17 @@ impl AstArena {
     }
 
     pub fn find_type_by_name(&self, interner: &SharedInterner, name: &str) -> Option<TypeId> {
-        let lock = interner.read().expect("interner lock poisoned");
-        let symbol = lock.get(name)?;
+        let symbol = interner.read(|i| i.get(name))?;
 
         self.type_cache.get(&symbol).copied()
     }
 
     pub fn intern_string(&self, interner: &SharedInterner, s: &str) -> Symbol {
-        interner
-            .write()
-            .expect("interner lock poisoned")
-            .get_or_intern(s)
+        interner.write(|i| i.get_or_intern(s))
     }
 
     pub fn resolve_symbol(&self, interner: &SharedInterner, symbol: Symbol) -> Option<String> {
-        interner
-            .read()
-            .expect("interner lock poisoned")
-            .resolve(symbol)
-            .map(|s| s.to_string())
+        interner.read(|i| i.resolve(symbol).map(|s| s.to_string()))
     }
 
     pub fn optimize_all(&mut self, interner: &SharedInterner) {

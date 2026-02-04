@@ -1,10 +1,13 @@
-use crate::ast::prelude::{BinaryOperator, ClassDefinition, ErrorData, ExprId, ExpressionKind, LiteralValue, Span, UnaryOperator, Visibility};
+use crate::ast::prelude::{
+    BinaryOperator, ClassDefinition, ErrorData, ExprId, ExpressionKind, LiteralValue, Span,
+    UnaryOperator, Visibility,
+};
 use crate::ast::program::FieldData;
 use crate::interpreter::structs::{Interpreter, RuntimeError, Value};
+use crate::shared::SharedMut;
 use crate::traits::prelude::{
     CoreOperations, ExpressionEvaluator, InterpreterClasses, InterpreterFunctions, ValueOperations,
 };
-use std::sync::{Arc, RwLock};
 use string_interner::DefaultSymbol as Symbol;
 
 impl ExpressionEvaluator for Interpreter {
@@ -39,6 +42,7 @@ impl ExpressionEvaluator for Interpreter {
                 if let Some(val) = self.environment.get(&symbol) {
                     return Ok(val);
                 }
+                println!("DEBUG: Ищу идентификатор с ID: {:?}", symbol);
 
                 let current_module = self.modules.get(&current_module_id).ok_or_else(|| {
                     RuntimeError::InvalidOperation(ErrorData::new(
@@ -60,8 +64,8 @@ impl ExpressionEvaluator for Interpreter {
                     let mod_name = &name_str[..dot_pos];
                     let var_name = &name_str[dot_pos + 1..];
 
-                    let mod_sym = self.interner.write().unwrap().get_or_intern(mod_name);
-                    let var_sym = self.interner.write().unwrap().get_or_intern(var_name);
+                    let mod_sym = self.interner.write(|i| i.get_or_intern(mod_name));
+                    let var_sym = self.interner.write(|i| i.get_or_intern(var_name));
 
                     return if let Some(target_module) = self.modules.get(&mod_sym) {
                         target_module.globals.get(&var_sym).cloned().ok_or_else(|| {
@@ -138,10 +142,6 @@ impl ExpressionEvaluator for Interpreter {
                     BinaryOperator::Or => Ok(Value::Boolean(
                         left_val.is_truthy() || right_val.is_truthy(),
                     )),
-                    BinaryOperator::Assign => Err(RuntimeError::InvalidOperation(ErrorData::new(
-                        expr_kind.span,
-                        "Оператор присваивания не поддерживается в выражениях".to_string(),
-                    ))),
                 }
             }
 
@@ -204,13 +204,49 @@ impl ExpressionEvaluator for Interpreter {
                 }
             }
 
-            ExpressionKind::Index {
-                object: _,
-                index: _,
-            } => Err(RuntimeError::InvalidOperation(ErrorData::new(
-                expr_kind.span,
-                "Индексный доступ отключён".to_string(),
-            ))),
+            ExpressionKind::Index { object, index } => {
+                let obj_val = self.evaluate_expression(object, current_module_id)?;
+                let idx_val = self.evaluate_expression(index, current_module_id)?;
+
+                match obj_val {
+                    Value::List(list) => list.read(|vec| {
+                        let idx = idx_val.resolve_index(vec.len(), expr_kind.span)?;
+
+                        vec.get(idx).cloned().ok_or_else(|| {
+                            RuntimeError::InvalidOperation(ErrorData::new(
+                                expr_kind.span,
+                                format!("Индекс {} вне границ списка (длина {})", idx, vec.len()),
+                            ))
+                        })
+                    }),
+
+                    Value::Array(arr) => {
+                        let idx = idx_val.resolve_index(arr.len(), expr_kind.span)?;
+
+                        arr.get(idx).cloned().ok_or_else(|| {
+                            RuntimeError::InvalidOperation(ErrorData::new(
+                                expr_kind.span,
+                                format!("Индекс {} вне границ списка (длина {})", idx, arr.len()),
+                            ))
+                        })
+                    },
+
+                    Value::Dict(dict) => dict.read(|d| {
+                        let key = idx_val.to_string();
+                        d.get(&key).cloned().ok_or_else(|| {
+                            RuntimeError::InvalidOperation(ErrorData::new(
+                                expr_kind.span,
+                                format!("Ключ '{}' не найден в словаре", key),
+                            ))
+                        })
+                    }),
+
+                    _ => Err(RuntimeError::TypeError(ErrorData::new(
+                        expr_kind.span,
+                        "Операция [] доступна только для итерируемых коллекций".into(),
+                    ))),
+                }
+            },
 
             ExpressionKind::PropertyAccess { object, property } => {
                 let obj_expr = {
@@ -271,20 +307,28 @@ impl ExpressionEvaluator for Interpreter {
                         }
                     }
                     Ok(Value::Object(instance_ref)) => {
-                        let instance = instance_ref.read().map_err(|_| {
-                            RuntimeError::Panic(ErrorData::new(
-                                obj_expr.span,
-                                "Сбой блокировки инстанса класса".into(),
-                            ))
-                        })?;
+                        let (field_data, is_accessible) = instance_ref.read(|instance| {
+                            let is_external = !matches!(obj_expr.kind, ExpressionKind::This);
+                            let this_sym = self.intern_string("this");
+                            let is_inside_method = self.environment.get(&this_sym).is_some();
+                            let final_is_external = is_external && !is_inside_method;
 
-                        let is_external = !matches!(obj_expr.kind, ExpressionKind::This);
+                            let accessible =
+                                instance.is_field_accessible(&property, final_is_external);
 
-                        let this_sym = self.intern_string("this");
-                        let is_inside_method = self.environment.get(&this_sym).is_some();
-                        let is_external = is_external && !is_inside_method;
+                            let data = if let Some(val) = instance.field_values.get(&property) {
+                                Some(Ok(val.clone()))
+                            } else {
+                                instance
+                                    .get_field(&property)
+                                    .cloned()
+                                    .map(|opt_expr| Err(opt_expr))
+                            };
 
-                        if !instance.is_field_accessible(&property, is_external) {
+                            (data, accessible)
+                        });
+
+                        if !is_accessible {
                             return Err(RuntimeError::InvalidOperation(ErrorData::new(
                                 expr_kind.span,
                                 format!(
@@ -293,104 +337,89 @@ impl ExpressionEvaluator for Interpreter {
                                 ),
                             )));
                         }
-
-                        if let Some(opt_expr) = instance.get_field(&property) {
-                            if let Some(computed_value) = instance.field_values.get(&property) {
-                                Ok(computed_value.clone())
-                            } else {
-                                match opt_expr {
-                                    Some(expr) => {
-                                        Ok(self.evaluate_expression(*expr, current_module_id)?)
-                                    }
-                                    None => Ok(Value::Empty),
-                                }
+                        match field_data {
+                            Some(Ok(value)) => Ok(value),
+                            Some(Err(Some(expr))) => {
+                                Ok(self.evaluate_expression(expr, current_module_id)?)
                             }
-                        } else {
-                            Ok(Value::Empty)
+                            _ => Ok(Value::Empty),
                         }
                     }
                     Ok(Value::Class(class_def)) => {
-                        if let Some((visibility, is_static, field_data)) = class_def
-                            .read()
-                            .map_err(|_| {
-                                RuntimeError::Panic(ErrorData::new(
-                                    obj_expr.span,
-                                    "Сбой блокировки определения класса".into(),
-                                ))
-                            })?
-                            .fields
-                            .get(&property)
-                        {
-                            if !*is_static {
-                                let p_name = self.resolve_symbol(property).unwrap();
-                                let c_name = self
-                                    .resolve_symbol(
-                                        class_def
-                                            .read()
-                                            .map_err(|_| {
-                                                RuntimeError::Panic(ErrorData::new(
-                                                    obj_expr.span,
-                                                    "Сбой блокировки определения класса".into(),
-                                                ))
-                                            })?
-                                            .name,
-                                    )
-                                    .unwrap();
-                                return Err(RuntimeError::InvalidOperation(ErrorData::new(
-                                    expr_kind.span,
-                                    format!(
-                                        "Поле '{}' класса '{}' не является статичным",
-                                        p_name, c_name
-                                    ),
-                                )));
-                            }
+                        let field_info = class_def.read(|c| {
+                            c.fields
+                                .get(&property)
+                                .map(|(vis, is_static, data)| {
+                                    (vis.clone(), *is_static, data.clone(), c.name)
+                                })
+                                .or_else(|| {
+                                    Some((
+                                        Visibility::Public,
+                                        false,
+                                        FieldData::Expression(None),
+                                        c.name,
+                                    ))
+                                })
+                        });
 
-                            let is_external = !matches!(obj_expr.kind, ExpressionKind::This);
-                            if is_external && matches!(visibility, Visibility::Private) {
-                                let p_name = self.resolve_symbol(property).unwrap();
-                                return Err(RuntimeError::InvalidOperation(ErrorData::new(
-                                    obj_expr.span,
-                                    format!("Поле '{}' является приватным", p_name),
-                                )));
-                            }
-
-                            match field_data {
-                                FieldData::Value(val_lock) => Ok(val_lock.read().unwrap().clone()),
-                                FieldData::Expression(_) => {
-                                    let p_name = self.resolve_symbol(property).unwrap();
-                                    Err(RuntimeError::InvalidOperation(ErrorData::new(
+                        match field_info {
+                            Some((visibility, is_static, data, class_name_sym)) => {
+                                if !class_def.read(|c| c.fields.contains_key(&property)) {
+                                    let p_name = self.resolve_symbol(property).unwrap_or_default();
+                                    let c_name =
+                                        self.resolve_symbol(class_name_sym).unwrap_or_default();
+                                    return Err(RuntimeError::UndefinedVariable(ErrorData::new(
                                         expr_kind.span,
                                         format!(
-                                            "Статическое поле '{}' еще не инициализировано",
-                                            p_name
+                                            "Статическое поле '{}' не найдено в классе '{}'",
+                                            p_name, c_name
                                         ),
-                                    )))
+                                    )));
+                                }
+
+                                if !is_static {
+                                    let p_name = self.resolve_symbol(property).unwrap_or_default();
+                                    let c_name =
+                                        self.resolve_symbol(class_name_sym).unwrap_or_default();
+                                    return Err(RuntimeError::InvalidOperation(ErrorData::new(
+                                        expr_kind.span,
+                                        format!(
+                                            "Поле '{}' класса '{}' не является статичным",
+                                            p_name, c_name
+                                        ),
+                                    )));
+                                }
+
+                                let is_external = !matches!(obj_expr.kind, ExpressionKind::This);
+                                if is_external && matches!(visibility, Visibility::Private) {
+                                    let p_name = self.resolve_symbol(property).unwrap_or_default();
+                                    return Err(RuntimeError::InvalidOperation(ErrorData::new(
+                                        obj_expr.span,
+                                        format!("Поле '{}' является приватным", p_name),
+                                    )));
+                                }
+
+                                match data {
+                                    FieldData::Value(val_shared) => {
+                                        Ok(val_shared.read(|v| v.clone()))
+                                    }
+                                    FieldData::Expression(_) => {
+                                        let p_name =
+                                            self.resolve_symbol(property).unwrap_or_default();
+                                        Err(RuntimeError::InvalidOperation(ErrorData::new(
+                                            expr_kind.span,
+                                            format!(
+                                                "Статическое поле '{}' еще не инициализировано",
+                                                p_name
+                                            ),
+                                        )))
+                                    }
                                 }
                             }
-                        } else {
-                            let c_name = self
-                                .resolve_symbol(
-                                    class_def
-                                        .read()
-                                        .map_err(|_| {
-                                            RuntimeError::Panic(ErrorData::new(
-                                                obj_expr.span,
-                                                "Сбой блокировки определения класса".into(),
-                                            ))
-                                        })?
-                                        .name,
-                                )
-                                .unwrap();
-                            let p_name = self.resolve_symbol(property).unwrap();
-                            Err(RuntimeError::UndefinedVariable(ErrorData::new(
-                                expr_kind.span,
-                                format!(
-                                    "Статическое поле '{}' не найдено в классе '{}'",
-                                    p_name, c_name
-                                ),
-                            )))
+                            None => unreachable!(),
                         }
                     }
+
                     _ => {
                         if let ExpressionKind::Identifier(symbol) = obj_expr.kind {
                             Err(RuntimeError::InvalidOperation(ErrorData::new(
@@ -433,40 +462,37 @@ impl ExpressionEvaluator for Interpreter {
                 let target_value = self.evaluate_expression(object, current_module_id)?;
 
                 if let Some(class_def) = self.get_class_for_value(&target_value) {
-                    if let Some((visibility, is_static, method_type)) =
-                        class_def.read().map_err(|_| {
-                            RuntimeError::Panic(ErrorData::new(
-                                Span::default(),
-                                "Сбой блокировки при выполнение выражения".into(),
-                            ))
-                        })?.methods.get(&method)
-                    {
+                    let method_info = class_def.read(|c| {
+                        c.methods.get(&method).map(|(vis, is_static, m_type)| {
+                            (vis.clone(), *is_static, m_type.clone())
+                        })
+                    });
+
+                    if let Some((visibility, is_static, method_type)) = method_info {
                         let is_calling_on_class = matches!(target_value, Value::Class(_));
 
-                        if is_calling_on_class && !*is_static {
+                        if is_calling_on_class && !is_static {
                             return Err(RuntimeError::InvalidOperation(ErrorData::new(
                                 expr_kind.span,
                                 "Нельзя вызвать обычный метод у класса. Создайте экземпляр через 'новый'".into()
                             )));
                         }
 
-                        let this_val = if *is_static {
+                        let this_val = if is_static {
                             Value::Empty
                         } else {
                             target_value
                         };
-
                         let is_external = !matches!(obj_expr.kind, ExpressionKind::This);
 
                         if is_external && matches!(visibility, Visibility::Private) {
-                            let m_name = self.resolve_symbol(method).unwrap();
+                            let m_name = self.resolve_symbol(method).unwrap_or_default();
                             return Err(RuntimeError::InvalidOperation(ErrorData::new(
                                 obj_expr.span,
                                 format!("Метод '{}' является приватным", m_name),
                             )));
                         }
 
-                        let method_type = method_type.clone();
                         let method_module = method_type.get_module().unwrap_or(current_module_id);
 
                         return self.call_method(
@@ -602,16 +628,12 @@ impl ExpressionEvaluator for Interpreter {
                     };
 
                 let instance = ClassDefinition::create_instance(class_rc.clone());
-                let instance_ref = Arc::new(RwLock::new(instance));
+                let instance_ref = SharedMut::new(instance);
 
-                if let Some(constructor) = class_rc.read().map_err(|_| {
-                    RuntimeError::Panic(ErrorData::new(
-                        expr_kind.span,
-                        "Сбой блокировки в создание объекта класса".into(),
-                    ))
-                })?.constructor.clone() {
+                let constructor_opt = class_rc.read(|c| c.constructor.clone());
+
+                if let Some(constructor) = constructor_opt {
                     let constructor_module = constructor.get_module().unwrap_or(definition_module);
-
                     self.call_method(
                         constructor,
                         arguments,
@@ -621,24 +643,18 @@ impl ExpressionEvaluator for Interpreter {
                     )?;
                 }
 
-                let data_key = self.interner.write().unwrap().get_or_intern("__data");
-                let mut instance_borrow = instance_ref.write().map_err(|_| {
-                    RuntimeError::Panic(ErrorData::new(
-                        expr_kind.span,
-                        "Сбой блокировки в создание объекта класса".into(),
-                    ))
-                })?;
+                let data_key = self.interner.write(|i| i.get_or_intern("__data"));
+                let internal_value =
+                    instance_ref.write(|instance| instance.field_values.remove(&data_key));
 
-                if let Some(internal_value) = instance_borrow.field_values.remove(&data_key) {
-                    Ok(internal_value)
-                } else {
-                    drop(instance_borrow);
-                    Ok(Value::Object(instance_ref))
+                match internal_value {
+                    Some(val) => Ok(val),
+                    None => Ok(Value::Object(instance_ref)),
                 }
             }
 
             ExpressionKind::This => {
-                let this_sym = self.interner.write().unwrap().get_or_intern("this");
+                let this_sym = self.interner.write(|i| i.get_or_intern("this"));
 
                 self.environment.get(&this_sym).ok_or_else(|| {
                     RuntimeError::InvalidOperation(ErrorData::new(

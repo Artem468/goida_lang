@@ -5,7 +5,7 @@ use std::path::PathBuf;
 
 impl Module {
     pub fn new(interner: &SharedInterner, name: &str, path: PathBuf) -> Self {
-        let symbol = interner.write().expect("Can't lock interner").get_or_intern(name);
+        let symbol = interner.write(|i| i.get_or_intern(name));
 
         Self {
             name: symbol,

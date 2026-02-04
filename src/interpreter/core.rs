@@ -4,10 +4,13 @@ use crate::builtins::prelude::*;
 use crate::interpreter::prelude::{Environment, SharedInterner};
 use crate::interpreter::structs::{Interpreter, Module, RuntimeError, Value};
 use crate::parser::prelude::Parser;
-use crate::traits::prelude::{CoreOperations, ExpressionEvaluator, InterpreterClasses, StatementExecutor};
+use crate::shared::SharedMut;
+use crate::traits::prelude::{
+    CoreOperations, ExpressionEvaluator, InterpreterClasses, StatementExecutor,
+};
 use std::collections::HashMap;
 use std::path::Path;
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 use string_interner::DefaultSymbol as Symbol;
 
 impl CoreOperations for Interpreter {
@@ -48,19 +51,20 @@ impl CoreOperations for Interpreter {
                 mod_entry.globals.insert(*class_name, class_value);
             }
 
-            let fields = class_def.read().unwrap().fields.clone();
+            let fields = class_def.read(|i| i.fields.clone());
             for (name, (_, is_static, data)) in fields {
                 if is_static {
                     if let FieldData::Expression(Some(expr_id)) = data {
                         let val = self.evaluate_expression(expr_id, module.name)?;
 
-                        if let Some((_, _, target_data)) = class_def.write().unwrap().fields.get_mut(&name) {
-                            *target_data = FieldData::Value(Arc::new(RwLock::new(val)));
-                        }
+                        class_def.write(|c| {
+                            if let Some((_, _, target_data)) = c.fields.get_mut(&name) {
+                                *target_data = FieldData::Value(SharedMut::new(val));
+                            }
+                        });
                     }
                 }
             }
-
         }
 
         for (function_name, function_fn) in &module.functions {
@@ -101,17 +105,11 @@ impl CoreOperations for Interpreter {
 
     fn resolve_symbol(&self, symbol: Symbol) -> Option<String> {
         self.interner
-            .read()
-            .expect("interner lock poisoned")
-            .resolve(symbol)
-            .map(|s| s.to_string())
+            .read(|i| i.resolve(symbol).map(|s| s.to_string()))
     }
 
     fn intern_string(&self, s: &str) -> Symbol {
-        self.interner
-            .write()
-            .expect("interner lock poisoned")
-            .get_or_intern(s)
+        self.interner.write(|i| i.get_or_intern(s))
     }
 
     fn load_imports(&mut self, module: &Module) -> Result<(), RuntimeError> {
@@ -144,10 +142,10 @@ impl CoreOperations for Interpreter {
                     ))
                 })?;
 
-                let parser = Parser::new(Arc::clone(&self.interner), file_stem, full_path.clone());
+                let parser = Parser::new(self.interner.clone(), file_stem, full_path.clone());
                 match parser.parse(code.as_str()) {
                     Ok(new_module) => {
-                        let module_symbol = self.interner.write().unwrap().get_or_intern(file_stem);
+                        let module_symbol = self.interner.write(|i| i.get_or_intern(file_stem));
 
                         if self.modules.contains_key(&module_symbol) {
                             continue;
@@ -165,9 +163,10 @@ impl CoreOperations for Interpreter {
                             let class_def_with_module =
                                 self.set_class_module(class_def.clone(), module_symbol);
                             if let Some(module) = self.modules.get_mut(&module_symbol) {
-                                module
-                                    .classes
-                                    .insert(class_def_with_module.read().unwrap().name, class_def.clone());
+                                module.classes.insert(
+                                    class_def_with_module.read(|i| i.name),
+                                    class_def.clone(),
+                                );
                             }
                         }
 
@@ -213,7 +212,7 @@ impl CoreOperations for Interpreter {
         Ok(result)
     }
 
-    fn get_class_for_value(&self, value: &Value) -> Option<Arc<RwLock<ClassDefinition>>> {
+    fn get_class_for_value(&self, value: &Value) -> Option<SharedMut<ClassDefinition>> {
         let class_name = match value {
             Value::Text(_) => "Строка",
             Value::List(_) => "Список",
@@ -222,12 +221,12 @@ impl CoreOperations for Interpreter {
             Value::Float(_) => "Дробь",
             Value::Number(_) => "Число",
             Value::Boolean(_) => "Логический",
-            Value::Object(inst) => return Some(inst.read().unwrap().class_ref.clone()),
+            Value::Object(inst) => return Some(inst.read(|i| i.class_ref.clone())),
             Value::Class(class_def) => return Some(class_def.clone()),
             _ => return None,
         };
 
-        let symbol = self.interner.read().unwrap().get(class_name)?;
+        let symbol = self.interner.read(|i| i.get(class_name))?;
         self.std_classes.get(&symbol).cloned()
     }
 }

@@ -4,8 +4,10 @@ use std::collections::HashMap;
 use crate::ast::prelude::{AstArena, ClassDefinition, ErrorData, FunctionDefinition, Import, Span, StmtId};
 pub(crate) use crate::ast::program::ClassInstance;
 use crate::parser::structs::ParseError;
+use crate::shared::SharedMut;
 use std::fmt::Debug;
-use std::sync::{Arc, RwLock};
+use std::path::PathBuf;
+use std::sync::Arc;
 use string_interner::backend::StringBackend;
 use string_interner::{DefaultSymbol as Symbol, StringInterner};
 
@@ -15,15 +17,15 @@ pub enum Value {
     Float(f64),
     Text(String),
     Boolean(bool),
-    Object(Arc<RwLock<ClassInstance>>),
-    Class(Arc<RwLock<ClassDefinition>>),
+    Object(SharedMut<ClassInstance>),
+    Class(SharedMut<ClassDefinition>),
     Function(Arc<FunctionDefinition>),
     Builtin(BuiltinFn),
     Module(Symbol),
-    List(Arc<RwLock<Vec<Value>>>),
+    List(SharedMut<Vec<Value>>),
     Array(Arc<Vec<Value>>),
-    Dict(Arc<RwLock<HashMap<String, Value>>>),
-    NativeResource(Arc<RwLock<Box<dyn Any + Send + Sync>>>),
+    Dict(SharedMut<HashMap<String, Value>>),
+    NativeResource(SharedMut<Box<dyn Any + Send + Sync>>),
     Empty,
 }
 
@@ -53,11 +55,11 @@ pub struct Environment {
     pub(crate) parent: Option<Box<Environment>>,
 }
 
-pub type SharedInterner = Arc<RwLock<StringInterner<StringBackend>>>;
+pub type SharedInterner = SharedMut<StringInterner<StringBackend>>;
 
 #[derive(Debug)]
 pub struct Interpreter {
-    pub(crate) std_classes: HashMap<Symbol, Arc<RwLock<ClassDefinition>>>,
+    pub(crate) std_classes: HashMap<Symbol, SharedMut<ClassDefinition>>,
     pub(crate) builtins: HashMap<Symbol, BuiltinFn>,
     pub(crate) modules: HashMap<Symbol, Module>,
     pub(crate) interner: SharedInterner,
@@ -67,11 +69,11 @@ pub struct Interpreter {
 #[derive(Clone, Debug)]
 pub struct Module {
     pub name: Symbol,
-    pub path: std::path::PathBuf,
+    pub path: PathBuf,
     pub arena: AstArena,
 
     pub functions: HashMap<Symbol, FunctionDefinition>,
-    pub classes: HashMap<Symbol, Arc<RwLock<ClassDefinition>>>,
+    pub classes: HashMap<Symbol, SharedMut<ClassDefinition>>,
 
     pub body: Vec<StmtId>,
     pub imports: Vec<Import>,

@@ -1,11 +1,11 @@
 use crate::ast::prelude::*;
 use crate::interpreter::prelude::{Module, SharedInterner};
 use crate::parser::prelude::{ParseError, Parser as ParserTrait};
+use crate::shared::SharedMut;
 use pest::error::ErrorVariant;
 use pest::Parser;
 use pest_derive::Parser;
 use std::path::PathBuf;
-use std::sync::{Arc, RwLock};
 
 #[derive(Parser)]
 #[grammar = "grammar.pest"]
@@ -16,6 +16,7 @@ impl ParserTrait {
         Self {
             module: Module::new(&interner, name, path),
             interner,
+            nesting_level: 0
         }
     }
 
@@ -89,13 +90,14 @@ impl ParserTrait {
     fn parse_function(&mut self, pair: pest::iterators::Pair<Rule>) -> Result<StmtId, ParseError> {
         let func_span: Span = pair.as_span().into();
         let mut inner = pair.into_inner();
-        let name = inner
-            .next()
-            .ok_or_else(|| {
-                ParseError::InvalidSyntax(ErrorData::new(func_span, "Ожидалось имя функции".into()))
-            })?
-            .as_str()
-            .to_string();
+
+        let name_token = inner.next().ok_or_else(|| {
+            ParseError::InvalidSyntax(ErrorData::new(func_span, "Ожидалось имя функции".into()))
+        })?;
+        let name = name_token.as_str();
+        let symbol_name = self.module.arena.intern_string(&self.interner, name);
+
+        self.nesting_level += 1;
 
         let mut params = Vec::new();
         let mut return_type = None;
@@ -125,11 +127,13 @@ impl ParserTrait {
                 }
                 Rule::block => {
                     let body = self.parse_block(token)?;
-                    let body_id = self
-                        .module
-                        .arena
-                        .add_statement(StatementKind::Block(body), token_span);
-                    let symbol_name = self.module.arena.intern_string(&self.interner, &name);
+                    self.nesting_level -= 1;
+
+                    let body_id = self.module.arena.add_statement(
+                        StatementKind::Block(body),
+                        token_span
+                    );
+
                     let func_def = FunctionDefinition {
                         name: symbol_name,
                         params,
@@ -138,17 +142,21 @@ impl ParserTrait {
                         span: func_span,
                         module: None,
                     };
-
-                    self.module.functions.insert(symbol_name, func_def.clone());
-                    let stmt_id = self
-                        .module
-                        .arena
-                        .add_statement(StatementKind::FunctionDefinition(func_def), func_span);
-                    return Ok(stmt_id);
+                    if self.nesting_level == 0 {
+                        self.module.functions.insert(symbol_name, func_def);
+                        return Ok(self.module.arena.add_statement(StatementKind::Empty, func_span));
+                    } else {
+                        let stmt_id = self.module.arena.add_statement(
+                            StatementKind::FunctionDefinition(func_def),
+                            func_span
+                        );
+                        return Ok(stmt_id);
+                    }
                 }
                 _ => {}
             }
         }
+        self.nesting_level -= 1;
         Err(ParseError::InvalidSyntax(ErrorData::new(
             func_span,
             "Ожидалась функция".into(),
@@ -182,16 +190,14 @@ impl ParserTrait {
                 Rule::constructor => {
                     let mut method = self.parse_constructor(token)?;
                     method.is_constructor = true;
-                    class_def.set_constructor(
-                        FunctionDefinition {
-                            name: method.name,
-                            params: method.params.clone(),
-                            return_type: method.return_type,
-                            body: method.body,
-                            span: method.span,
-                            module: None,
-                        },
-                    );
+                    class_def.set_constructor(FunctionDefinition {
+                        name: method.name,
+                        params: method.params.clone(),
+                        return_type: method.return_type,
+                        body: method.body,
+                        span: method.span,
+                        module: None,
+                    });
                 }
 
                 Rule::class_method => {
@@ -207,7 +213,7 @@ impl ParserTrait {
                             body: method.body,
                             span: method.span,
                             module: None,
-                        }
+                        },
                     );
                 }
                 _ => {}
@@ -216,7 +222,7 @@ impl ParserTrait {
 
         self.module
             .classes
-            .insert(symbol_name, Arc::from(RwLock::new(class_def.clone())));
+            .insert(symbol_name, SharedMut::new(class_def.clone()));
         let stmt_id = self
             .module
             .arena
@@ -496,6 +502,14 @@ impl ParserTrait {
 
         for inner in pair.into_inner() {
             match inner.as_rule() {
+                Rule::function => {
+                    let stmt_id = self.parse_function(inner)?;
+                    statements.push(stmt_id);
+                }
+                Rule::class => {
+                    let stmt_id = self.parse_class(inner)?;
+                    statements.push(stmt_id);
+                }
                 Rule::assignment => {
                     let stmt_id = self.parse_assignment(inner)?;
                     statements.push(stmt_id);
@@ -604,35 +618,44 @@ impl ParserTrait {
         let postfix_pair = inner.next().ok_or_else(|| {
             ParseError::InvalidSyntax(ErrorData::new(property_span, "Ожидалось выражение".into()))
         })?;
+
         let postfix_expr = self.parse_postfix(postfix_pair)?;
 
-        if let ExpressionKind::PropertyAccess { object, property } =
-            &self.module.arena.expressions[postfix_expr as usize].kind
-        {
-            let object = *object;
-            let property = *property;
+        let value_expr = self.parse_expression(inner.next().ok_or_else(|| {
+            ParseError::InvalidSyntax(ErrorData::new(property_span, "Ожидалось выражение".into()))
+        })?)?;
 
-            let value_expr = self.parse_expression(inner.next().ok_or_else(|| {
-                ParseError::InvalidSyntax(ErrorData::new(
+        let expr_k = self
+            .module
+            .arena
+            .get_expression(postfix_expr)
+            .ok_or_else(|| ParseError::UnexpectedToken(ErrorData::new(property_span, "Не найдена нода для выражения".into())))?;
+
+        match expr_k.kind {
+            ExpressionKind::PropertyAccess { object, property } => {
+                Ok(self.module.arena.add_statement(
+                    StatementKind::PropertyAssign {
+                        object,
+                        property,
+                        value: value_expr,
+                    },
                     property_span,
-                    "Ожидалось выражение".into(),
                 ))
-            })?)?;
+            }
 
-            let stmt_id = self.module.arena.add_statement(
-                StatementKind::PropertyAssign {
+            ExpressionKind::Index { object, index } => Ok(self.module.arena.add_statement(
+                StatementKind::IndexAssign {
                     object,
-                    property,
+                    index,
                     value: value_expr,
                 },
                 property_span,
-            );
-            Ok(stmt_id)
-        } else {
-            Err(ParseError::InvalidSyntax(ErrorData::new(
+            )),
+
+            _ => Err(ParseError::InvalidSyntax(ErrorData::new(
                 property_span,
-                "Ожидалось присвоение свойства".into(),
-            )))
+                "Левая часть присваивания должна быть полем объекта или индексом списка".into(),
+            ))),
         }
     }
 
@@ -909,7 +932,7 @@ impl ParserTrait {
                 let stmt_id = self
                     .module
                     .arena
-                    .add_statement(StatementKind::Import(import_data), import_span);
+                    .add_statement(StatementKind::Empty, import_span);
 
                 return Ok(stmt_id);
             }

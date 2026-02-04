@@ -4,15 +4,16 @@ mod macros;
 mod parser;
 mod traits;
 mod builtins;
+mod shared;
 
 use crate::ast::prelude::{ErrorData, Span};
 use crate::parser::prelude::{ParseError, Parser as ProgramParser};
+use crate::shared::SharedMut;
 use ariadne::{Color, Label, Report, ReportKind, Source};
 use clap::{Parser, Subcommand};
 use interpreter::prelude::{Interpreter, RuntimeError};
 use std::io::{self, Write};
 use std::path::PathBuf;
-use std::sync::{Arc, RwLock};
 use std::{env, fs};
 use string_interner::StringInterner;
 use traits::prelude::CoreOperations;
@@ -137,12 +138,12 @@ fn execute_code_with_interpreter(
     filename: &str,
     path_buf: PathBuf,
 ) -> Result<(), (String, ErrorData)> {
-    let interner = Arc::new(RwLock::new(StringInterner::new()));
+    let interner = SharedMut::new(StringInterner::new());
 
-    let parser = ProgramParser::new(Arc::clone(&interner), filename, path_buf);
+    let parser = ProgramParser::new(interner.clone(), filename, path_buf);
     match parser.parse(code) {
         Ok(program) => {
-            let mut interpreter = Interpreter::new(program.clone(), Arc::clone(&interner));
+            let mut interpreter = Interpreter::new(program.clone(), interner);
             interpreter.define_builtins();
             interpreter.interpret(program).map_err(|e| match e {
                 RuntimeError::UndefinedVariable(err) => {

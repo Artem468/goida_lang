@@ -1,9 +1,10 @@
 use crate::ast::prelude::{ClassDefinition, ErrorData, ExprId, Span, Visibility};
 use crate::ast::program::{FieldData, MethodType};
 use crate::interpreter::prelude::{ClassInstance, Environment, Interpreter, RuntimeError, Value};
+use crate::shared::SharedMut;
 use crate::traits::prelude::{CoreOperations, InterpreterClasses, StatementExecutor};
 use std::collections::HashMap;
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 use string_interner::DefaultSymbol as Symbol;
 
 impl InterpreterClasses for Interpreter {
@@ -65,72 +66,75 @@ impl InterpreterClasses for Interpreter {
 
     fn set_class_module(
         &self,
-        class_def: Arc<RwLock<ClassDefinition>>,
+        class_def: SharedMut<ClassDefinition>,
         module: Symbol,
-    ) -> Arc<RwLock<ClassDefinition>> {
+    ) -> SharedMut<ClassDefinition> {
         let mut methods = HashMap::new();
-        for (method_name, (visibility, is_static, method_type)) in
-            &class_def.read().unwrap().methods
-        {
-            let updated_method = match method_type {
-                MethodType::User(func_def) => {
-                    let mut updated_func = func_def.clone();
-                    Arc::make_mut(&mut updated_func).module = Some(module);
-                    MethodType::User(updated_func)
-                }
-                MethodType::Native(builtin) => MethodType::Native(builtin.clone()),
-            };
-            methods.insert(
-                *method_name,
-                (visibility.clone(), *is_static, updated_method),
-            );
-        }
+        class_def.read(|i| {
+            for (method_name, (visibility, is_static, method_type)) in &i.methods {
+                let updated_method = match method_type {
+                    MethodType::User(func_def) => {
+                        let mut updated_func = func_def.clone();
+                        Arc::make_mut(&mut updated_func).module = Some(module.clone());
+                        MethodType::User(updated_func)
+                    }
+                    MethodType::Native(builtin) => MethodType::Native(builtin.clone()),
+                };
 
-        Arc::new(RwLock::new(ClassDefinition {
-            name: class_def.read().unwrap().name,
-            fields: class_def.read().unwrap().fields.clone(),
-            methods,
-            constructor: class_def
-                .read()
-                .unwrap()
-                .constructor
-                .as_ref()
-                .map(|constructor| {
-                    let updated_constructor = match constructor {
+                methods.insert(
+                    *method_name,
+                    (visibility.clone(), *is_static, updated_method),
+                );
+            }
+        });
+
+        let new_class_def = class_def.read(|c| {
+            ClassDefinition {
+                name: c.name.clone(),
+                fields: c.fields.clone(),
+                methods,
+                constructor: c.constructor.as_ref().map(|constructor| {
+                    match constructor {
                         MethodType::User(func_def) => {
                             let mut updated_func = func_def.clone();
-                            Arc::make_mut(&mut updated_func).module = Some(module);
+                            Arc::make_mut(&mut updated_func).module = Some(module.clone());
                             MethodType::User(updated_func)
                         }
                         MethodType::Native(builtin) => MethodType::Native(builtin.clone()),
-                    };
-                    updated_constructor
+                    }
                 }),
-            span: class_def.read().unwrap().span,
-        }))
+                span: c.span,
+            }
+        });
+
+        // Оборачиваем результат в SharedMut
+        SharedMut::new(new_class_def)
     }
 }
 
 impl ClassInstance {
     /// Создать новый экземпляр класса
-    pub fn new(class_name: Symbol, class_ref: Arc<RwLock<ClassDefinition>>) -> Self {
+    pub fn new(class_name: Symbol, class_ref: SharedMut<ClassDefinition>) -> Self {
         let mut fields = HashMap::new();
         let mut field_values = HashMap::new();
 
-        for (name, (_, is_static, data)) in &class_ref.read().unwrap().fields {
-            if *is_static {
-                continue;
-            }
+        class_ref.read(|class_def| {
+            for (name, (_, is_static, data)) in &class_def.fields {
+                if *is_static {
+                    continue;
+                }
 
-            match data {
-                FieldData::Expression(opt_expr) => {
-                    fields.insert(*name, *opt_expr);
-                }
-                FieldData::Value(val_lock) => {
-                    field_values.insert(*name, val_lock.read().unwrap().clone());
+                match data {
+                    FieldData::Expression(opt_expr) => {
+                        fields.insert(*name, *opt_expr);
+                    }
+                    FieldData::Value(val_lock) => {
+                        let value = val_lock.read(|v| v.clone());
+                        field_values.insert(*name, value);
+                    }
                 }
             }
-        }
+        });
 
         Self {
             class_name,
@@ -157,29 +161,30 @@ impl ClassInstance {
 
     /// Проверить доступность поля (приватный или публичный доступ)
     pub fn is_field_accessible(&self, field_name: &Symbol, is_external_access: bool) -> bool {
-        if let Some((visibility, _, _)) = self.class_ref.read().unwrap().fields.get(field_name) {
-            match visibility {
-                Visibility::Public => true,
-                Visibility::Private => !is_external_access,
+        self.class_ref.read(|class| {
+            if let Some((visibility, _, _)) = class.fields.get(field_name) {
+                match visibility {
+                    Visibility::Public => true,
+                    Visibility::Private => !is_external_access,
+                }
+            } else {
+                false
             }
-        } else {
-            false
-        }
+        })
     }
 
     /// Получить метод по имени
     pub fn get_method(&self, method_name: &Symbol) -> Option<MethodType> {
-        self.class_ref
-            .read()
-            .unwrap()
-            .methods
-            .get(method_name)
-            .map(|(_, _, func)| func.clone())
+        self.class_ref.read(|class| {
+            class.methods
+                .get(method_name)
+                .map(|(_, _, func)| func.clone())
+        })
     }
 
     /// Получить конструктор класса
     pub fn get_constructor(&self) -> Option<MethodType> {
-        self.class_ref.read().unwrap().constructor.clone()
+        self.class_ref.read(|class| class.constructor.clone())
     }
 }
 
@@ -225,8 +230,8 @@ impl ClassDefinition {
     }
 
     /// Создать экземпляр класса
-    pub fn create_instance(this: Arc<RwLock<Self>>) -> ClassInstance {
-        let name = this.read().unwrap().name;
+    pub fn create_instance(this: SharedMut<Self>) -> ClassInstance {
+        let name = this.read(|i| i.name);
         ClassInstance::new(name, this)
     }
 }

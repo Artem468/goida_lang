@@ -1,7 +1,8 @@
 use crate::ast::prelude::{ErrorData, Span};
 use crate::interpreter::structs::{Interpreter, RuntimeError, Value};
+use crate::shared::SharedMut;
 use crate::traits::prelude::ValueOperations;
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 
 impl ValueOperations for Interpreter {
     fn add_values(&self, left: Value, right: Value, span: Span) -> Result<Value, RuntimeError> {
@@ -14,23 +15,28 @@ impl ValueOperations for Interpreter {
             (any, Value::Text(b)) => Ok(Value::Text(format!("{}{}", any.to_string(), b))),
 
             (Value::List(a), Value::List(b)) => {
-                let a_guard = a.read().map_err(|_| RuntimeError::Panic(ErrorData::new(span, "Сбой блокировки списка".into())))?;
-                let b_guard = b.read().map_err(|_| RuntimeError::Panic(ErrorData::new(span, "Сбой блокировки списка".into())))?;
-
-                let mut new_vec = a_guard.clone();
-                new_vec.extend_from_slice(&b_guard);
-                Ok(Value::List(Arc::new(RwLock::new(new_vec))))
+                let new_vec = a.read(|vec_a| {
+                    b.read(|vec_b| {
+                        let mut combined = vec_a.clone();
+                        combined.extend_from_slice(vec_b);
+                        combined
+                    })
+                });
+                Ok(Value::List(SharedMut::new(new_vec)))
             }
 
             (Value::Dict(a), Value::Dict(b)) => {
-                let a_guard = a.read().map_err(|_| RuntimeError::Panic(ErrorData::new(span, "Сбой блокировки словаря".into())))?;
-                let b_guard = b.read().map_err(|_| RuntimeError::Panic(ErrorData::new(span, "Сбой блокировки словаря".into())))?;
+                let new_dict = a.read(|dict_a| {
+                    b.read(|dict_b| {
+                        let mut combined = dict_a.clone();
+                        for (k, v) in dict_b {
+                            combined.insert(k.clone(), v.clone());
+                        }
+                        combined
+                    })
+                });
 
-                let mut new_dict = a_guard.clone();
-                for (k, v) in b_guard.iter() {
-                    new_dict.insert(k.clone(), v.clone());
-                }
-                Ok(Value::Dict(Arc::new(RwLock::new(new_dict))))
+                Ok(Value::Dict(SharedMut::new(new_dict)))
             }
 
             (Value::Array(a), Value::Array(b)) => {

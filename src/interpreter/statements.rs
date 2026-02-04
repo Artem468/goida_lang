@@ -1,7 +1,9 @@
+use std::sync::Arc;
 use crate::ast::prelude::{ErrorData, ExpressionKind, Span, StatementKind, StmtId};
 use crate::interpreter::prelude::{Environment, Interpreter, RuntimeError, Value};
 use crate::traits::prelude::{CoreOperations, ExpressionEvaluator, StatementExecutor};
 use string_interner::DefaultSymbol;
+use crate::shared::SharedMut;
 
 impl StatementExecutor for Interpreter {
     fn execute_statement(
@@ -142,20 +144,17 @@ impl StatementExecutor for Interpreter {
                 let value_result = self.evaluate_expression(value, current_module_id)?;
 
                 if let Value::Object(instance_ref) = obj_value {
-                    let mut instance = instance_ref.write().map_err(|_| {
-                        RuntimeError::Panic(ErrorData::new(
-                            Span::default(),
-                            "Сбой блокировки при выполнение инструкций".into(),
-                        ))
-                    })?;
-                    if !(*instance).is_field_accessible(&property, is_external) {
-                        return Err(RuntimeError::InvalidOperation(ErrorData::new(
-                            obj_expr.span,
-                            format!("Поле '{}' недоступно", property_name),
-                        )));
-                    }
-                    instance.set_field_value(property, value_result);
-                    Ok(())
+                    instance_ref.write(|instance| {
+                        if !instance.is_field_accessible(&property, is_external) {
+                            return Err(RuntimeError::InvalidOperation(ErrorData::new(
+                                obj_expr.span,
+                                format!("Поле '{}' недоступно", property_name),
+                            )));
+                        }
+
+                        instance.set_field_value(property, value_result);
+                        Ok(())
+                    })
                 } else {
                     Err(RuntimeError::TypeMismatch(ErrorData::new(
                         obj_expr.span,
@@ -164,7 +163,50 @@ impl StatementExecutor for Interpreter {
                 }
             }
 
-            StatementKind::ClassDefinition(_) | StatementKind::FunctionDefinition(_) => Ok(()),
+            StatementKind::IndexAssign {
+                object,
+                index,
+                value,
+            } => {
+                let target_obj = self.evaluate_expression(object, current_module_id)?;
+
+                let idx_val = self.evaluate_expression(index, current_module_id)?;
+                let val_to_set = self.evaluate_expression(value, current_module_id)?;
+
+                match target_obj {
+                    Value::List(list) => {
+                        list.write(|vec| {
+                            let i = idx_val.resolve_index(vec.len(), stmt_kind.span)?;
+                            vec[i] = val_to_set;
+                            Ok(())
+                        })
+                    }
+                    Value::Dict(dict) => dict.write(|d| {
+                        d.insert(idx_val.to_string(), val_to_set);
+                        Ok(())
+                    }),
+                    _ => {
+                        Err(RuntimeError::TypeError(ErrorData::new(
+                            stmt_kind.span,
+                            "Нельзя присвоить по индексу для этого типа".into(),
+                        )))
+                    }
+                }
+            }
+
+            StatementKind::FunctionDefinition(def) => {
+                let name = def.name;
+                let value = Value::Function(Arc::from(def.clone()));
+                self.environment.define(name, value);
+                Ok(())
+            }
+
+            StatementKind::ClassDefinition(cls) => {
+                let def = SharedMut::new(cls.clone());
+                let value = Value::Class(def.clone());
+                self.environment.define(cls.name, value);
+                Ok(())
+            }
             _ => Ok(()),
         }
     }

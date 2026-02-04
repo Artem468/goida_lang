@@ -53,14 +53,21 @@ impl InterpreterFunctions for Interpreter {
         current_module_id: Symbol,
         span: Span,
     ) -> Result<Value, RuntimeError> {
+        if let Some(val) = self.environment.get(&name) {
+            if let Value::Function(func) = val {
+                let func_clone = (*func).clone();
+                return self.call_function(func_clone, arguments, current_module_id, span);
+            }
+        }
+
         let name_str = self.resolve_symbol(name).unwrap();
 
         if let Some(dot_index) = name_str.find('.') {
             let mod_part = &name_str[..dot_index];
             let func_part = &name_str[dot_index + 1..];
 
-            let mod_sym = self.interner.write().unwrap().get_or_intern(mod_part);
-            let func_sym = self.interner.write().unwrap().get_or_intern(func_part);
+            let mod_sym = self.interner.write(|i| i.get_or_intern(mod_part));
+            let func_sym = self.interner.write(|i| i.get_or_intern(func_part));
 
             if let Some(target_module) = self.modules.get(&mod_sym) {
                 if let Some(function) = target_module.functions.get(&func_sym) {
