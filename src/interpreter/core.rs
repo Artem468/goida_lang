@@ -36,7 +36,7 @@ impl CoreOperations for Interpreter {
             builtins: HashMap::new(),
             modules,
             interner,
-            environment: Environment::new(),
+            environment: SharedMut::new(Environment::new()),
         }
     }
 
@@ -46,7 +46,7 @@ impl CoreOperations for Interpreter {
         for (class_name, class_def) in &module.classes {
             let class_value = Value::Class(class_def.clone());
             self.environment
-                .define(class_name.clone(), class_value.clone());
+                .write(|env| env.define(class_name.clone(), class_value.clone()));
             if let Some(mod_entry) = self.modules.get_mut(&module.name) {
                 mod_entry.globals.insert(*class_name, class_value);
             }
@@ -70,7 +70,7 @@ impl CoreOperations for Interpreter {
         for (function_name, function_fn) in &module.functions {
             let func_value = Value::Function(Arc::new(function_fn.clone()));
             self.environment
-                .define(function_name.clone(), func_value.clone());
+                .write(|env| env.define(function_name.clone(), func_value.clone()));
             if let Some(mod_entry) = self.modules.get_mut(&module.name) {
                 mod_entry.globals.insert(*function_name, func_value);
             }
@@ -78,12 +78,12 @@ impl CoreOperations for Interpreter {
 
         for (builtin_name, builtin_fn) in &self.builtins.clone() {
             self.environment
-                .define(builtin_name.clone(), Value::Builtin(builtin_fn.clone()));
+                .write(|env| env.define(builtin_name.clone(), Value::Builtin(builtin_fn.clone())));
         }
 
         for (name_symbol, class_def) in &self.std_classes.clone() {
             self.environment
-                .define(*name_symbol, Value::Class(class_def.clone()));
+                .write(|env| env.define(*name_symbol, Value::Class(class_def.clone())));
 
             if let Some(mod_entry) = self.modules.get_mut(&module.name) {
                 mod_entry
@@ -155,9 +155,14 @@ impl CoreOperations for Interpreter {
 
                         self.load_imports(&new_module)?;
 
+                        let previous_env = self.environment.clone();
+                        self.environment = SharedMut::new(Environment::new());
+
                         for &stmt_id in &new_module.body {
                             self.execute_statement(stmt_id, module_symbol)?;
                         }
+
+                        self.environment = previous_env;
 
                         for (_class_name, class_def) in &new_module.classes {
                             let class_def_with_module =
@@ -173,7 +178,7 @@ impl CoreOperations for Interpreter {
                         for (function_name, function_fn) in &new_module.functions {
                             let func_value = Value::Function(Arc::new(function_fn.clone()));
                             self.environment
-                                .define(function_name.clone(), func_value.clone());
+                                .write(|env| env.define(function_name.clone(), func_value.clone()));
                             if let Some(module) = self.modules.get_mut(&module_symbol) {
                                 module.globals.insert(*function_name, func_value);
                             }

@@ -1,5 +1,6 @@
 use crate::ast::prelude::{ErrorData, Span};
 use crate::interpreter::prelude::{Environment, RuntimeError, Value};
+use crate::shared::SharedMut;
 use std::collections::HashMap;
 use string_interner::DefaultSymbol as Symbol;
 
@@ -11,10 +12,10 @@ impl Environment {
         }
     }
 
-    pub(crate) fn with_parent(parent: Environment) -> Self {
+    pub(crate) fn with_parent(parent: SharedMut<Environment>) -> Self {
         Environment {
             variables: HashMap::new(),
-            parent: Some(Box::new(parent)),
+            parent: Some(parent),
         }
     }
 
@@ -24,12 +25,14 @@ impl Environment {
 
     pub(crate) fn get(&self, name: &Symbol) -> Option<Value> {
         if let Some(value) = self.variables.get(name) {
-            Some(value.clone())
-        } else if let Some(parent) = &self.parent {
-            parent.get(name)
-        } else {
-            None
+            return Some(value.clone());
         }
+
+        if let Some(parent_shared) = &self.parent {
+            return parent_shared.read(|parent| parent.get(name));
+        }
+
+        None
     }
 
     pub(crate) fn set(
@@ -40,14 +43,16 @@ impl Environment {
     ) -> Result<(), RuntimeError> {
         if self.variables.contains_key(&name) {
             self.variables.insert(name, value);
-            Ok(())
-        } else if let Some(parent) = &mut self.parent {
-            parent.set(name, value, span)
-        } else {
-            Err(RuntimeError::UndefinedVariable(ErrorData::new(
-                span,
-                "Переменная не найдена".into(),
-            )))
+            return Ok(());
         }
+
+        if let Some(parent_shared) = &self.parent {
+            return parent_shared.write(|parent| parent.set(name, value, span));
+        }
+
+        Err(RuntimeError::UndefinedVariable(ErrorData::new(
+            span,
+            "Переменная не найдена".into(),
+        )))
     }
 }

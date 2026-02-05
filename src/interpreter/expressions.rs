@@ -25,8 +25,7 @@ impl ExpressionEvaluator for Interpreter {
             })?;
             module.arena.get_expression(expr_id).unwrap().clone()
         };
-
-        match expr_kind.kind {
+        let result = match expr_kind.kind {
             ExpressionKind::Literal(literal) => match literal {
                 LiteralValue::Number(n) => Ok(Value::Number(n)),
                 LiteralValue::Float(f) => Ok(Value::Float(f)),
@@ -39,7 +38,7 @@ impl ExpressionEvaluator for Interpreter {
             },
 
             ExpressionKind::Identifier(symbol) => {
-                if let Some(val) = self.environment.get(&symbol) {
+                if let Some(val) = self.environment.read(|env| env.get(&symbol)) {
                     return Ok(val);
                 }
 
@@ -277,7 +276,6 @@ impl ExpressionEvaluator for Interpreter {
                 }
 
                 let obj_result = self.evaluate_expression(object, current_module_id);
-
                 match obj_result {
                     Ok(Value::Module(module_symbol)) => {
                         if let Some(module_env) = self.modules.get(&module_symbol) {
@@ -309,7 +307,7 @@ impl ExpressionEvaluator for Interpreter {
                         let (field_data, is_accessible) = instance_ref.read(|instance| {
                             let is_external = !matches!(obj_expr.kind, ExpressionKind::This);
                             let this_sym = self.intern_string("this");
-                            let is_inside_method = self.environment.get(&this_sym).is_some();
+                            let is_inside_method = self.environment.read(|env| env.get(&this_sym).is_some());
                             let final_is_external = is_external && !is_inside_method;
 
                             let accessible =
@@ -443,92 +441,68 @@ impl ExpressionEvaluator for Interpreter {
                 method,
                 args,
             } => {
-                let obj_expr = {
-                    let module = self.modules.get(&current_module_id).ok_or_else(|| {
-                        RuntimeError::InvalidOperation(ErrorData::new(
-                            expr_kind.span,
-                            "Модуль не найден".into(),
-                        ))
-                    })?;
-                    module.arena.get_expression(object).unwrap().clone()
-                };
+                let previous_env_at_start = self.environment.clone();
 
-                let mut arguments = Vec::new();
-                for arg_id in args {
-                    arguments.push(self.evaluate_expression(arg_id, current_module_id)?);
-                }
-
-                let target_value = self.evaluate_expression(object, current_module_id)?;
-
-                if let Some(class_def) = self.get_class_for_value(&target_value) {
-                    let method_info = class_def.read(|c| {
-                        c.methods.get(&method).map(|(vis, is_static, m_type)| {
-                            (vis.clone(), *is_static, m_type.clone())
-                        })
-                    });
-
-                    if let Some((visibility, is_static, method_type)) = method_info {
-                        let is_calling_on_class = matches!(target_value, Value::Class(_));
-
-                        if is_calling_on_class && !is_static {
-                            return Err(RuntimeError::InvalidOperation(ErrorData::new(
+                let result = (|| -> Result<Value, RuntimeError> {
+                    let obj_expr = {
+                        let module = self.modules.get(&current_module_id).ok_or_else(|| {
+                            RuntimeError::InvalidOperation(ErrorData::new(
                                 expr_kind.span,
-                                "Нельзя вызвать обычный метод у класса. Создайте экземпляр через 'новый'".into()
-                            )));
-                        }
+                                "Модуль не найден".into(),
+                            ))
+                        })?;
+                        module.arena.get_expression(object).unwrap().clone()
+                    };
 
-                        let this_val = if is_static {
-                            Value::Empty
-                        } else {
-                            target_value
-                        };
-                        let is_external = !matches!(obj_expr.kind, ExpressionKind::This);
-
-                        if is_external && matches!(visibility, Visibility::Private) {
-                            let m_name = self.resolve_symbol(method).unwrap_or_default();
-                            return Err(RuntimeError::InvalidOperation(ErrorData::new(
-                                obj_expr.span,
-                                format!("Метод '{}' является приватным", m_name),
-                            )));
-                        }
-
-                        let method_module = method_type.get_module().unwrap_or(current_module_id);
-
-                        return self.call_method(
-                            method_type,
-                            arguments,
-                            this_val,
-                            method_module,
-                            obj_expr.span,
-                        );
+                    let mut arguments = Vec::new();
+                    for arg_id in args {
+                        arguments.push(self.evaluate_expression(arg_id, current_module_id)?);
                     }
-                }
 
-                match target_value {
-                    Value::Module(mod_symbol) => {
-                        if let Some(target_module) = self.modules.get(&mod_symbol) {
-                            if let Some(function) = target_module.functions.get(&method) {
-                                return self.call_function(
-                                    function.clone(),
-                                    arguments,
-                                    mod_symbol,
-                                    obj_expr.span,
-                                );
-                            } else {
-                                let m_name = self.resolve_symbol(method).unwrap();
-                                let mod_name = self.resolve_symbol(mod_symbol).unwrap();
-                                return Err(RuntimeError::UndefinedFunction(ErrorData::new(
+                    let target_value = self.evaluate_expression(object, current_module_id)?;
+
+                    if let Some(class_def) = self.get_class_for_value(&target_value) {
+                        let method_info = class_def.read(|c| {
+                            c.methods.get(&method).map(|(vis, is_static, m_type)| {
+                                (vis.clone(), *is_static, m_type.clone())
+                            })
+                        });
+
+                        if let Some((visibility, is_static, method_type)) = method_info {
+                            let is_calling_on_class = matches!(target_value, Value::Class(_));
+
+                            if is_calling_on_class && !is_static {
+                                return Err(RuntimeError::InvalidOperation(ErrorData::new(
                                     expr_kind.span,
-                                    format!(
-                                        "Функция '{}' не найдена в модуле '{}'",
-                                        m_name, mod_name
-                                    ),
+                                    "Нельзя вызвать обычный метод у класса. Создайте экземпляр через 'новый'".into()
                                 )));
                             }
+
+                            let this_val = if is_static { Value::Empty } else { target_value };
+                            let is_external = !matches!(obj_expr.kind, ExpressionKind::This);
+
+                            if is_external && matches!(visibility, Visibility::Private) {
+                                let m_name = self.resolve_symbol(method).unwrap_or_default();
+                                return Err(RuntimeError::InvalidOperation(ErrorData::new(
+                                    obj_expr.span,
+                                    format!("Метод '{}' является приватным", m_name),
+                                )));
+                            }
+
+                            let method_module = method_type.get_module().unwrap_or(current_module_id);
+
+                            return self.call_method(
+                                method_type,
+                                arguments,
+                                this_val,
+                                method_module,
+                                obj_expr.span,
+                            );
                         }
                     }
-                    _ => {
-                        if let ExpressionKind::Identifier(mod_symbol) = obj_expr.kind {
+
+                    match target_value {
+                        Value::Module(mod_symbol) => {
                             if let Some(target_module) = self.modules.get(&mod_symbol) {
                                 if let Some(function) = target_module.functions.get(&method) {
                                     return self.call_function(
@@ -537,21 +511,43 @@ impl ExpressionEvaluator for Interpreter {
                                         mod_symbol,
                                         obj_expr.span,
                                     );
+                                } else {
+                                    let m_name = self.resolve_symbol(method).unwrap();
+                                    let mod_name = self.resolve_symbol(mod_symbol).unwrap();
+                                    return Err(RuntimeError::UndefinedFunction(ErrorData::new(
+                                        expr_kind.span,
+                                        format!("Функция '{}' не найдена в модуле '{}'", m_name, mod_name),
+                                    )));
+                                }
+                            }
+                        }
+                        _ => {
+                            if let ExpressionKind::Identifier(mod_symbol) = obj_expr.kind {
+                                if let Some(target_module) = self.modules.get(&mod_symbol) {
+                                    if let Some(function) = target_module.functions.get(&method) {
+                                        return self.call_function(
+                                            function.clone(),
+                                            arguments,
+                                            mod_symbol,
+                                            obj_expr.span,
+                                        );
+                                    }
                                 }
                             }
                         }
                     }
-                }
 
-                let m_name = self.resolve_symbol(method).unwrap();
-                Err(RuntimeError::UndefinedMethod(ErrorData::new(
-                    expr_kind.span,
-                    format!(
-                        "Не удалось вызвать '{}': цель не является объектом или модулем",
-                        m_name
-                    ),
-                )))
+                    let m_name = self.resolve_symbol(method).unwrap();
+                    Err(RuntimeError::UndefinedMethod(ErrorData::new(
+                        expr_kind.span,
+                        format!("Не удалось вызвать '{}': цель не является объектом или модулем", m_name),
+                    )))
+                })();
+                self.environment = previous_env_at_start;
+
+                result
             }
+
 
             ExpressionKind::ObjectCreation { class_name, args } => {
                 let mut arguments = Vec::new();
@@ -559,7 +555,7 @@ impl ExpressionEvaluator for Interpreter {
                     arguments.push(self.evaluate_expression(arg_id, current_module_id)?);
                 }
                 let (class_rc, definition_module) =
-                    if let Some(Value::Class(cls)) = self.environment.get(&class_name) {
+                    if let Some(Value::Class(cls)) = self.environment.read(|env| env.get(&class_name)) {
                         (cls.clone(), current_module_id)
                     } else {
                         let name_str = self.resolve_symbol(class_name).unwrap();
@@ -655,14 +651,15 @@ impl ExpressionEvaluator for Interpreter {
             ExpressionKind::This => {
                 let this_sym = self.interner.write(|i| i.get_or_intern("this"));
 
-                self.environment.get(&this_sym).ok_or_else(|| {
+                self.environment.read(|env| env.get(&this_sym)).ok_or_else(|| {
                     RuntimeError::InvalidOperation(ErrorData::new(
                         expr_kind.span.into(),
                         "'это' можно использовать только внутри методов класса".to_string(),
                     ))
                 })
             }
-        }
+        };
+        result
     }
 
     fn find_in_module_imports(

@@ -28,11 +28,16 @@ impl StatementExecutor for Interpreter {
             }
 
             StatementKind::Assign { name, value, .. } => {
+                let target_env = self.environment.clone();
                 let val = self.evaluate_expression(value, current_module_id)?;
 
-                if let Err(_) = self.environment.set(name, val.clone(), stmt_kind.span) {
-                    self.environment.define(name, val);
-                }
+                self.environment = target_env;
+                self.environment.write(|env| {
+                    if env.set(name, val.clone(), stmt_kind.span).is_err() {
+                        env.define(name, val);
+                    }
+                });
+
                 Ok(())
             }
 
@@ -68,43 +73,52 @@ impl StatementExecutor for Interpreter {
                 update,
                 body,
             } => {
-                let parent_env = self.environment.clone();
-                self.environment = Environment::with_parent(parent_env);
+                let previous_env = self.environment.clone();
+
+                let mut local_env_inner = Environment::new();
+                local_env_inner.parent = Some(previous_env.clone());
 
                 let init_val = self.evaluate_expression(init, current_module_id)?;
-                self.environment.define(variable.clone(), init_val);
+                local_env_inner.define(variable.clone(), init_val);
 
-                loop {
-                    if !self
-                        .evaluate_expression(condition, current_module_id)?
-                        .is_truthy()
-                    {
-                        break;
+                self.environment = SharedMut::new(local_env_inner);
+
+                let result = (|| -> Result<(), RuntimeError> {
+                    loop {
+                        let cond_val = self.evaluate_expression(condition, current_module_id)?;
+                        if !cond_val.is_truthy() {
+                            break;
+                        }
+                        self.execute_statement(body, current_module_id)?;
+
+                        let update_val = self.evaluate_expression(update, current_module_id)?;
+                        self.environment.write(|env| env.define(variable.clone(), update_val));
                     }
-                    self.execute_statement(body, current_module_id)?;
+                    Ok(())
+                })();
+                self.environment = previous_env;
 
-                    let update_val = self.evaluate_expression(update, current_module_id)?;
-                    self.environment.define(variable.clone(), update_val);
-                }
-
-                if let Some(parent) = self.environment.parent.take() {
-                    self.environment = *parent;
-                }
-                Ok(())
+                result
             }
 
             StatementKind::Block(statements) => {
-                let parent_env = self.environment.clone();
-                self.environment = Environment::with_parent(parent_env);
+                let previous_env = self.environment.clone();
 
-                for s_id in statements {
-                    self.execute_statement(s_id, current_module_id)?;
-                }
+                let mut local_env_inner = Environment::new();
+                local_env_inner.parent = Some(previous_env.clone());
 
-                if let Some(parent) = self.environment.parent.take() {
-                    self.environment = *parent;
-                }
-                Ok(())
+                self.environment = SharedMut::new(local_env_inner);
+
+                let result = (|| {
+                    for s_id in statements {
+                        self.execute_statement(s_id, current_module_id)?;
+                    }
+                    Ok(())
+                })();
+
+                self.environment = previous_env;
+
+                result
             }
 
             StatementKind::Return(expr) => {
@@ -137,7 +151,7 @@ impl StatementExecutor for Interpreter {
                 let is_external = !matches!(obj_expr.kind, ExpressionKind::This);
 
                 let this_sym = self.intern_string("this");
-                let is_inside_method = self.environment.get(&this_sym).is_some();
+                let is_inside_method = self.environment.read(|env| env.get(&this_sym).is_some());
                 let is_external = is_external && !is_inside_method;
 
                 let obj_value = self.evaluate_expression(object, current_module_id)?;
@@ -197,14 +211,14 @@ impl StatementExecutor for Interpreter {
             StatementKind::FunctionDefinition(def) => {
                 let name = def.name;
                 let value = Value::Function(Arc::from(def.clone()));
-                self.environment.define(name, value);
+                self.environment.write(|env| env.define(name, value));
                 Ok(())
             }
 
             StatementKind::ClassDefinition(cls) => {
                 let def = SharedMut::new(cls.clone());
                 let value = Value::Class(def.clone());
-                self.environment.define(cls.name, value);
+                self.environment.write(|env| env.define(cls.name, value));
                 Ok(())
             }
             _ => Ok(()),

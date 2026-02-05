@@ -21,7 +21,7 @@ impl InterpreterClasses for Interpreter {
             MethodType::User(func) => {
                 let method_module = func.module.unwrap_or(current_module_id);
 
-                let previous_env = std::mem::replace(&mut self.environment, Environment::new());
+                let previous_env = self.environment.clone();
                 let mut local_env = Environment::with_parent(previous_env.clone());
 
                 let this_sym = self.intern_string("this");
@@ -43,7 +43,7 @@ impl InterpreterClasses for Interpreter {
                     local_env.define(param.name, arg_value.clone());
                 }
 
-                self.environment = local_env;
+                self.environment = SharedMut::new(local_env);
 
                 let mut result = Ok(Value::Empty);
                 match self.execute_statement(func.body, method_module) {
