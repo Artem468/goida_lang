@@ -156,7 +156,7 @@ impl CoreOperations for Interpreter {
                             if let Some(module) = self.modules.get_mut(&module_symbol) {
                                 module.classes.insert(
                                     class_def_with_module.read(|i| i.name),
-                                    class_def.clone(),
+                                    class_def_with_module,
                                 );
                             }
                         }
