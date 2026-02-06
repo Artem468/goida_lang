@@ -1258,7 +1258,6 @@ impl ParserTrait {
                     if let Some(arg_list) = method_inner.next() {
                         if arg_list.as_rule() == Rule::arg_list {
                             for arg_pair in arg_list.into_inner() {
-                                println!("DEBUG PARSER: Adding ARG: '{}' to method call", arg_pair.as_str());
                                 let arg_expr = self.parse_expression(arg_pair)?;
                                 args.push(arg_expr);
                             }
