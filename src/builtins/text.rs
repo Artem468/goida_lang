@@ -1,5 +1,5 @@
 use crate::ast::prelude::{ClassDefinition, ErrorData, Span, Visibility};
-use crate::interpreter::prelude::{BuiltinFn, RuntimeError, SharedInterner, Value};
+use crate::interpreter::prelude::{BuiltinFn, Interpreter, RuntimeError, SharedInterner, Value};
 use crate::shared::SharedMut;
 use std::sync::Arc;
 use string_interner::DefaultSymbol as Symbol;
@@ -134,4 +134,24 @@ pub fn setup_text_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassDe
     );
 
     (name, SharedMut::new(class_def))
+}
+
+
+pub fn setup_text_func(interpreter: &mut Interpreter, interner: &SharedInterner) {
+    interpreter.builtins.insert(
+        interner.write(|i| i.get_or_intern("строка")),
+        BuiltinFn(Arc::new(move |_interpreter, arguments, span| {
+            if arguments.len() != 1 {
+                return Err(RuntimeError::InvalidOperation(ErrorData::new(
+                    span,
+                    format!(
+                        "Функция 'строка' ожидает 1 аргумент, получено {}",
+                        arguments.len()
+                    ),
+                )));
+            }
+            let n: String = arguments[0].clone().try_into()?;
+            Ok(Value::Text(n))
+        })),
+    );
 }

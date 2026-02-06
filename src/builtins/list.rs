@@ -1,5 +1,5 @@
 use crate::ast::prelude::{ClassDefinition, ErrorData, Span, Visibility};
-use crate::interpreter::prelude::{BuiltinFn, RuntimeError, SharedInterner, Value};
+use crate::interpreter::prelude::{BuiltinFn, Interpreter, RuntimeError, SharedInterner, Value};
 use crate::shared::SharedMut;
 use crate::traits::prelude::CoreOperations;
 use std::sync::Arc;
@@ -177,4 +177,13 @@ pub fn setup_list_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassDe
     );
 
     (name, SharedMut::new(class_def))
+}
+
+pub fn setup_list_func(interpreter: &mut Interpreter, interner: &SharedInterner) {
+    interpreter.builtins.insert(
+        interner.write(|i| i.get_or_intern("список")),
+        BuiltinFn(Arc::new(move |_interpreter, arguments, _span| {
+            Ok(Value::List(SharedMut::new(arguments)))
+        })),
+    );
 }

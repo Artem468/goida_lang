@@ -1,6 +1,5 @@
 use crate::ast::prelude::{ClassDefinition, ErrorData};
 use crate::ast::program::FieldData;
-use crate::builtins::prelude::*;
 use crate::interpreter::prelude::{Environment, SharedInterner};
 use crate::interpreter::structs::{Interpreter, Module, RuntimeError, Value};
 use crate::parser::prelude::Parser;
@@ -18,21 +17,8 @@ impl CoreOperations for Interpreter {
         let mut modules = HashMap::new();
         modules.insert(main_module.name, main_module);
 
-        let mut std_classes = HashMap::new();
-
-        let (string_name, string_class) = setup_text_class(&interner);
-        let (list_name, list_class) = setup_list_class(&interner);
-        let (array_name, array_class) = setup_array_class(&interner);
-        let (dict_name, dict_class) = setup_dict_class(&interner);
-        let (file_name, file_class) = setup_file_class(&interner);
-        std_classes.insert(string_name, string_class);
-        std_classes.insert(list_name, list_class);
-        std_classes.insert(array_name, array_class);
-        std_classes.insert(dict_name, dict_class);
-        std_classes.insert(file_name, file_class);
-
         Interpreter {
-            std_classes,
+            std_classes: HashMap::new(),
             builtins: HashMap::new(),
             modules,
             interner,

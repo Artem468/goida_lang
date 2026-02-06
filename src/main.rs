@@ -1,6 +1,5 @@
 mod ast;
 mod interpreter;
-mod macros;
 mod parser;
 mod traits;
 mod builtins;

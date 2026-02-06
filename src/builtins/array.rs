@@ -1,5 +1,5 @@
 use crate::ast::prelude::{ClassDefinition, ErrorData, Span, Visibility};
-use crate::interpreter::prelude::{BuiltinFn, RuntimeError, SharedInterner, Value};
+use crate::interpreter::prelude::{BuiltinFn, Interpreter, RuntimeError, SharedInterner, Value};
 use crate::shared::SharedMut;
 use std::sync::Arc;
 use string_interner::DefaultSymbol as Symbol;
@@ -82,4 +82,14 @@ pub fn setup_array_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassD
     );
 
     (name, SharedMut::new(class_def))
+}
+
+
+pub fn setup_array_func(interpreter: &mut Interpreter, interner: &SharedInterner) {
+    interpreter.builtins.insert(
+        interner.write(|i| i.get_or_intern("массив")),
+        BuiltinFn(Arc::new(move |_interpreter, arguments, _span| {
+            Ok(Value::Array(Arc::new(arguments)))
+        })),
+    );
 }
