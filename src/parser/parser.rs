@@ -16,7 +16,7 @@ impl ParserTrait {
         Self {
             module: Module::new(&interner, name, path),
             interner,
-            nesting_level: 0
+            nesting_level: 0,
         }
     }
 
@@ -129,10 +129,10 @@ impl ParserTrait {
                     let body = self.parse_block(token)?;
                     self.nesting_level -= 1;
 
-                    let body_id = self.module.arena.add_statement(
-                        StatementKind::Block(body),
-                        token_span
-                    );
+                    let body_id = self
+                        .module
+                        .arena
+                        .add_statement(StatementKind::Block(body), token_span);
 
                     let func_def = FunctionDefinition {
                         name: symbol_name,
@@ -144,12 +144,15 @@ impl ParserTrait {
                     };
                     if self.nesting_level == 0 {
                         self.module.functions.insert(symbol_name, func_def);
-                        return Ok(self.module.arena.add_statement(StatementKind::Empty, func_span));
+                        return Ok(self
+                            .module
+                            .arena
+                            .add_statement(StatementKind::Empty, func_span));
                     } else {
-                        let stmt_id = self.module.arena.add_statement(
-                            StatementKind::FunctionDefinition(func_def),
-                            func_span
-                        );
+                        let stmt_id = self
+                            .module
+                            .arena
+                            .add_statement(StatementKind::FunctionDefinition(func_def), func_span);
                         return Ok(stmt_id);
                     }
                 }
@@ -629,7 +632,12 @@ impl ParserTrait {
             .module
             .arena
             .get_expression(postfix_expr)
-            .ok_or_else(|| ParseError::UnexpectedToken(ErrorData::new(property_span, "Не найдена нода для выражения".into())))?;
+            .ok_or_else(|| {
+                ParseError::UnexpectedToken(ErrorData::new(
+                    property_span,
+                    "Не найдена нода для выражения".into(),
+                ))
+            })?;
 
         match expr_k.kind {
             ExpressionKind::PropertyAccess { object, property } => {
@@ -1215,9 +1223,8 @@ impl ParserTrait {
                     for arg_pair in token.into_inner() {
                         if arg_pair.as_rule() == Rule::arg_list {
                             for arg in arg_pair.into_inner() {
-                                if let Ok(arg_expr) = self.parse_expression(arg) {
-                                    args.push(arg_expr);
-                                }
+                                let arg_expr = self.parse_expression(arg)?;
+                                args.push(arg_expr);
                             }
                         }
                     }
@@ -1251,9 +1258,8 @@ impl ParserTrait {
                     if let Some(arg_list) = method_inner.next() {
                         if arg_list.as_rule() == Rule::arg_list {
                             for arg_pair in arg_list.into_inner() {
-                                if let Ok(arg_expr) = self.parse_expression(arg_pair) {
-                                    args.push(arg_expr);
-                                }
+                                let arg_expr = self.parse_expression(arg_pair)?;
+                                args.push(arg_expr);
                             }
                         }
                     }
@@ -1357,9 +1363,8 @@ impl ParserTrait {
                 if let Some(arg_list) = inner.next() {
                     if arg_list.as_rule() == Rule::arg_list {
                         for arg_pair in arg_list.into_inner() {
-                            if let Ok(arg_expr) = self.parse_expression(arg_pair) {
-                                args.push(arg_expr);
-                            }
+                            let arg_expr = self.parse_expression(arg_pair)?;
+                            args.push(arg_expr);
                         }
                     }
                 }

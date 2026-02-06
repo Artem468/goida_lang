@@ -2,6 +2,7 @@ use crate::ast::prelude::{ErrorData, FunctionDefinition, Span};
 use crate::interpreter::structs::{Environment, Interpreter, RuntimeError, Value};
 use crate::traits::prelude::{CoreOperations, InterpreterFunctions, StatementExecutor};
 use string_interner::DefaultSymbol as Symbol;
+use crate::shared::SharedMut;
 
 impl InterpreterFunctions for Interpreter {
     fn call_function(
@@ -14,7 +15,6 @@ impl InterpreterFunctions for Interpreter {
         let arena = &self.modules.get(&current_module_id).unwrap().arena;
 
         let parent_env = self.environment.clone();
-        self.environment = Environment::with_parent(parent_env.clone());
 
         if arguments.len() != function.params.len() {
             return Err(RuntimeError::InvalidOperation(ErrorData::new(
@@ -28,22 +28,23 @@ impl InterpreterFunctions for Interpreter {
             )));
         }
 
+        let mut local_env = Environment::with_parent(parent_env.clone());
+
         for (param, arg_value) in function.params.iter().zip(arguments.iter()) {
-            self.environment.define(param.name, arg_value.clone());
+            local_env.define(param.name, arg_value.clone());
         }
 
-        let mut result = Value::Empty;
-        match self.execute_statement(function.body, current_module_id) {
-            Ok(()) => {}
-            Err(RuntimeError::Return(_, val)) => result = val,
-            Err(e) => {
-                self.environment = parent_env;
-                return Err(e);
-            }
-        }
+        self.environment = SharedMut::new(local_env);
+
+        let execution_result = self.execute_statement(function.body, current_module_id);
 
         self.environment = parent_env;
-        Ok(result)
+
+        match execution_result {
+            Ok(()) => Ok(Value::Empty),
+            Err(RuntimeError::Return(_, val)) => Ok(val),
+            Err(e) => Err(e),
+        }
     }
 
     fn call_function_by_name(
@@ -53,7 +54,7 @@ impl InterpreterFunctions for Interpreter {
         current_module_id: Symbol,
         span: Span,
     ) -> Result<Value, RuntimeError> {
-        if let Some(val) = self.environment.get(&name) {
+        if let Some(val) = self.environment.read(|env| env.get(&name)) {
             if let Value::Function(func) = val {
                 let func_clone = (*func).clone();
                 return self.call_function(func_clone, arguments, current_module_id, span);

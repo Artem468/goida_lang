@@ -1,6 +1,5 @@
 use crate::ast::prelude::{ClassDefinition, ErrorData};
 use crate::ast::program::FieldData;
-use crate::builtins::prelude::*;
 use crate::interpreter::prelude::{Environment, SharedInterner};
 use crate::interpreter::structs::{Interpreter, Module, RuntimeError, Value};
 use crate::parser::prelude::Parser;
@@ -18,25 +17,12 @@ impl CoreOperations for Interpreter {
         let mut modules = HashMap::new();
         modules.insert(main_module.name, main_module);
 
-        let mut std_classes = HashMap::new();
-
-        let (string_name, string_class) = setup_text_class(&interner);
-        let (list_name, list_class) = setup_list_class(&interner);
-        let (array_name, array_class) = setup_array_class(&interner);
-        let (dict_name, dict_class) = setup_dict_class(&interner);
-        let (file_name, file_class) = setup_file_class(&interner);
-        std_classes.insert(string_name, string_class);
-        std_classes.insert(list_name, list_class);
-        std_classes.insert(array_name, array_class);
-        std_classes.insert(dict_name, dict_class);
-        std_classes.insert(file_name, file_class);
-
         Interpreter {
-            std_classes,
+            std_classes: HashMap::new(),
             builtins: HashMap::new(),
             modules,
             interner,
-            environment: Environment::new(),
+            environment: SharedMut::new(Environment::new()),
         }
     }
 
@@ -46,7 +32,7 @@ impl CoreOperations for Interpreter {
         for (class_name, class_def) in &module.classes {
             let class_value = Value::Class(class_def.clone());
             self.environment
-                .define(class_name.clone(), class_value.clone());
+                .write(|env| env.define(class_name.clone(), class_value.clone()));
             if let Some(mod_entry) = self.modules.get_mut(&module.name) {
                 mod_entry.globals.insert(*class_name, class_value);
             }
@@ -70,7 +56,7 @@ impl CoreOperations for Interpreter {
         for (function_name, function_fn) in &module.functions {
             let func_value = Value::Function(Arc::new(function_fn.clone()));
             self.environment
-                .define(function_name.clone(), func_value.clone());
+                .write(|env| env.define(function_name.clone(), func_value.clone()));
             if let Some(mod_entry) = self.modules.get_mut(&module.name) {
                 mod_entry.globals.insert(*function_name, func_value);
             }
@@ -78,12 +64,12 @@ impl CoreOperations for Interpreter {
 
         for (builtin_name, builtin_fn) in &self.builtins.clone() {
             self.environment
-                .define(builtin_name.clone(), Value::Builtin(builtin_fn.clone()));
+                .write(|env| env.define(builtin_name.clone(), Value::Builtin(builtin_fn.clone())));
         }
 
         for (name_symbol, class_def) in &self.std_classes.clone() {
             self.environment
-                .define(*name_symbol, Value::Class(class_def.clone()));
+                .write(|env| env.define(*name_symbol, Value::Class(class_def.clone())));
 
             if let Some(mod_entry) = self.modules.get_mut(&module.name) {
                 mod_entry
@@ -155,9 +141,14 @@ impl CoreOperations for Interpreter {
 
                         self.load_imports(&new_module)?;
 
+                        let previous_env = self.environment.clone();
+                        self.environment = SharedMut::new(Environment::new());
+
                         for &stmt_id in &new_module.body {
                             self.execute_statement(stmt_id, module_symbol)?;
                         }
+
+                        self.environment = previous_env;
 
                         for (_class_name, class_def) in &new_module.classes {
                             let class_def_with_module =
@@ -165,7 +156,7 @@ impl CoreOperations for Interpreter {
                             if let Some(module) = self.modules.get_mut(&module_symbol) {
                                 module.classes.insert(
                                     class_def_with_module.read(|i| i.name),
-                                    class_def.clone(),
+                                    class_def_with_module,
                                 );
                             }
                         }
@@ -173,7 +164,7 @@ impl CoreOperations for Interpreter {
                         for (function_name, function_fn) in &new_module.functions {
                             let func_value = Value::Function(Arc::new(function_fn.clone()));
                             self.environment
-                                .define(function_name.clone(), func_value.clone());
+                                .write(|env| env.define(function_name.clone(), func_value.clone()));
                             if let Some(module) = self.modules.get_mut(&module_symbol) {
                                 module.globals.insert(*function_name, func_value);
                             }

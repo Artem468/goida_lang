@@ -1,5 +1,5 @@
 use crate::ast::prelude::{ClassDefinition, ErrorData, Span, Visibility};
-use crate::interpreter::prelude::{BuiltinFn, RuntimeError, SharedInterner, Value};
+use crate::interpreter::prelude::{BuiltinFn, Interpreter, RuntimeError, SharedInterner, Value};
 use crate::shared::SharedMut;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -157,4 +157,30 @@ pub fn setup_dict_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassDe
     );
 
     (name, SharedMut::new(class_def))
+}
+
+pub fn setup_dict_func(interpreter: &mut Interpreter, interner: &SharedInterner) {
+    interpreter.builtins.insert(
+        interner.write(|i| i.get_or_intern("словарь")),
+        BuiltinFn(Arc::new(move |_interpreter, arguments, span| {
+            if arguments.len() % 2 != 0 {
+                return Err(RuntimeError::InvalidOperation(ErrorData::new(
+                    span,
+                    "Функция 'словарь' ожидает четное количество аргументов (пары ключ-значение)".to_string()
+                )));
+            }
+
+            let mut dict = HashMap::new();
+            for i in (0..arguments.len()).step_by(2) {
+                let key = match &arguments[i] {
+                    Value::Text(s) => s.clone(),
+                    v => v.to_string(),
+                };
+                let value = arguments[i + 1].clone();
+                dict.insert(key, value);
+            }
+
+            Ok(Value::Dict(SharedMut::new(dict)))
+        })),
+    );
 }

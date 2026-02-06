@@ -49,10 +49,10 @@ pub enum RuntimeError {
     Panic(ErrorData),
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct Environment {
     pub(crate) variables: HashMap<Symbol, Value>,
-    pub(crate) parent: Option<Box<Environment>>,
+    pub(crate) parent: Option<SharedMut<Environment>>,
 }
 
 pub type SharedInterner = SharedMut<StringInterner<StringBackend>>;
@@ -63,7 +63,7 @@ pub struct Interpreter {
     pub(crate) builtins: HashMap<Symbol, BuiltinFn>,
     pub(crate) modules: HashMap<Symbol, Module>,
     pub(crate) interner: SharedInterner,
-    pub(crate) environment: Environment,
+    pub(crate) environment: SharedMut<Environment>,
 }
 
 #[derive(Clone, Debug)]
