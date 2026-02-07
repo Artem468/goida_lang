@@ -1,21 +1,25 @@
 mod ast;
+mod builtins;
 mod interpreter;
 mod parser;
-mod traits;
-mod builtins;
 mod shared;
+mod traits;
 
-use crate::ast::prelude::{ErrorData, Span};
-use crate::parser::prelude::{ParseError, Parser as ProgramParser};
-use crate::shared::SharedMut;
-use ariadne::{Color, Label, Report, ReportKind, Source};
+use ariadne::{Color, Label, Report, ReportKind};
+use ast::prelude::{ErrorData, Span};
 use clap::{Parser, Subcommand};
 use interpreter::prelude::{Interpreter, RuntimeError};
+use lazy_static::lazy_static;
+use parser::prelude::{ParseError, Parser as ProgramParser};
 use std::io::{self, Write};
 use std::path::PathBuf;
+use std::sync::RwLock;
 use std::{env, fs};
-use string_interner::StringInterner;
 use traits::prelude::CoreOperations;
+
+lazy_static! {
+    static ref INTERPRETER: RwLock<Interpreter> = RwLock::new(Interpreter::new());
+}
 
 #[derive(Parser)]
 #[command(name = "goida")]
@@ -73,15 +77,26 @@ fn run_file(filename: &str) -> Result<(), (String, ErrorData)> {
         Ok(_) => Ok(()),
         Err((msg, error)) => {
             let _res = Err((msg.clone(), error.clone()));
-            Report::build(ReportKind::Error, error.location.as_ariadne(filename, content.as_str()))
+            let file_name = INTERPRETER
+                .read()
+                .unwrap()
+                .get_file_path(&error.location.file_id);
+
+            let file_code = INTERPRETER
+                .read()
+                .unwrap()
+                .source_manager
+                .get_file_content(file_name.as_str());
+            let ariadne_span = error.location.as_ariadne(file_code.as_str());
+            Report::build(ReportKind::Error, (&file_name, ariadne_span.clone()))
                 .with_message(msg)
                 .with_label(
-                    Label::new(error.location.as_ariadne(filename, content.as_str()))
+                    Label::new((&file_name, ariadne_span))
                         .with_message(error.message)
                         .with_color(Color::Red),
                 )
                 .finish()
-                .print((filename, Source::from(content)))
+                .print(&INTERPRETER.read().unwrap().source_manager)
                 .expect("Can't build report message");
             _res
         }
@@ -137,51 +152,60 @@ fn execute_code_with_interpreter(
     filename: &str,
     path_buf: PathBuf,
 ) -> Result<(), (String, ErrorData)> {
-    let interner = SharedMut::new(StringInterner::new());
+    let parser = ProgramParser::new(
+        INTERPRETER.read().unwrap().interner.clone(),
+        filename,
+        path_buf,
+    );
+    // Пустой модуль для вывода данных о нем на случай ошибки
+    let _module = parser.module.clone();
 
-    let parser = ProgramParser::new(interner.clone(), filename, path_buf);
     match parser.parse(code) {
         Ok(program) => {
-            let mut interpreter = Interpreter::new(program.clone(), interner);
-            interpreter.define_builtins();
-            interpreter.interpret(program).map_err(|e| match e {
-                RuntimeError::UndefinedVariable(err) => {
-                    (format!("Неопределенная переменная: {}", err.message), err)
-                }
-                RuntimeError::UndefinedFunction(err) => {
-                    (format!("Неопределенная функция: {}", err.message), err)
-                }
-                RuntimeError::UndefinedMethod(err) => {
-                    (format!("Неопределенный метод: {}", err.message), err)
-                }
-                RuntimeError::TypeMismatch(err) => {
-                    (format!("Несоответствие типов: {}", err.message), err)
-                }
-                RuntimeError::Panic(err) => {
-                    (format!("Паника: {}", err.message), err)
-                }
-                RuntimeError::DivisionByZero(err) => ("Деление на ноль".to_string(), err),
-                RuntimeError::InvalidOperation(err) => {
-                    (format!("Недопустимая операция: {}", err.message), err)
-                }
-                RuntimeError::IOError(err) => {
-                    (format!("Ошибка чтения файла: {}", err.message), err)
-                }
-                RuntimeError::TypeError(err) => {
-                    (format!("Недопустимый тип данных: {}", err.message), err)
-                }
-                RuntimeError::Return(err, ..) => ("Неожиданный return".to_string(), err),
-                RuntimeError::ImportError(err) => {
-                    let (msg, error) = match err {
-                        ParseError::UnexpectedToken(e) => ("Неожиданный токен", e),
-                        ParseError::TypeError(e) => ("Ошибка типов", e),
-                        ParseError::InvalidSyntax(e) => ("Ошибка синтаксиса".into(), e),
-                    };
-                    (msg.to_string(), error)
-                }
-            })?;
+            let _name = program.name;
+            INTERPRETER.write().unwrap().load_start_module(program);
+            INTERPRETER.write().unwrap().define_builtins();
+            INTERPRETER
+                .write()
+                .unwrap()
+                .interpret(_name)
+                .map_err(|e| match e {
+                    RuntimeError::UndefinedVariable(err) => {
+                        (format!("Неопределенная переменная: {}", err.message), err)
+                    }
+                    RuntimeError::UndefinedFunction(err) => {
+                        (format!("Неопределенная функция: {}", err.message), err)
+                    }
+                    RuntimeError::UndefinedMethod(err) => {
+                        (format!("Неопределенный метод: {}", err.message), err)
+                    }
+                    RuntimeError::TypeMismatch(err) => {
+                        (format!("Несоответствие типов: {}", err.message), err)
+                    }
+                    RuntimeError::Panic(err) => (format!("Паника: {}", err.message), err),
+                    RuntimeError::DivisionByZero(err) => ("Деление на ноль".to_string(), err),
+                    RuntimeError::InvalidOperation(err) => {
+                        (format!("Недопустимая операция: {}", err.message), err)
+                    }
+                    RuntimeError::IOError(err) => {
+                        (format!("Ошибка чтения файла: {}", err.message), err)
+                    }
+                    RuntimeError::TypeError(err) => {
+                        (format!("Недопустимый тип данных: {}", err.message), err)
+                    }
+                    RuntimeError::Return(err, ..) => ("Неожиданный return".to_string(), err),
+                    RuntimeError::ImportError(err) => {
+                        let (msg, error) = match err {
+                            ParseError::UnexpectedToken(e) => ("Неожиданный токен", e),
+                            ParseError::TypeError(e) => ("Ошибка типов", e),
+                            ParseError::InvalidSyntax(e) => ("Ошибка синтаксиса".into(), e),
+                        };
+                        (msg.to_string(), error)
+                    }
+                })?;
         }
         Err(err) => {
+            INTERPRETER.write().unwrap().modules.insert(_module.name, _module);
             return match err {
                 ParseError::UnexpectedToken(e) => Err(("Неожиданный токен".into(), e)),
                 ParseError::TypeError(e) => Err(("Ошибка типов".into(), e)),

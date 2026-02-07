@@ -133,7 +133,7 @@ impl AstArena {
         }
     }
 
-    pub fn init_builtins(&mut self, interner: &SharedInterner) {
+    pub fn init_builtin_types(&mut self, interner: &SharedInterner) {
         let builtins = [
             ("число", DataType::Primitive(PrimitiveType::Number)),
             ("строка", DataType::Primitive(PrimitiveType::Text)),

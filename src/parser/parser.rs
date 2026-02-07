@@ -31,9 +31,9 @@ impl ParserTrait {
                 pest::error::InputLocation::Pos(pos) => (pos, pos),
                 pest::error::InputLocation::Span((start, end)) => (start, end),
             };
-            ParseError::UnexpectedToken(ErrorData::new(Span::new(start, end), message))
+            ParseError::UnexpectedToken(ErrorData::new(Span::new(start, end, self.module.name), message))
         })?;
-        self.module.arena.init_builtins(&self.interner);
+        self.module.arena.init_builtin_types(&self.interner);
         for pair in pairs {
             if pair.as_rule() == Rule::program {
                 for inner in pair.into_inner() {
@@ -88,7 +88,7 @@ impl ParserTrait {
     }
 
     fn parse_function(&mut self, pair: pest::iterators::Pair<Rule>) -> Result<StmtId, ParseError> {
-        let func_span: Span = pair.as_span().into();
+        let func_span: Span = (pair.as_span(), self.module.name).into();
         let mut inner = pair.into_inner();
 
         let name_token = inner.next().ok_or_else(|| {
@@ -103,14 +103,14 @@ impl ParserTrait {
         let mut return_type = None;
 
         while let Some(token) = inner.next() {
-            let token_span: Span = token.as_span().into();
+            let token_span: Span = (token.as_span(), self.module.name).into();
             match token.as_rule() {
                 Rule::param_list => {
                     params = self.parse_param_list(token)?;
                 }
                 Rule::return_type => {
                     if let Some(type_token) = token.into_inner().next() {
-                        let type_span: Span = type_token.as_span().into();
+                        let type_span: Span = (type_token.as_span(), self.module.name).into();
                         let type_str = type_token.as_str();
                         return_type = Some(
                             self.module
@@ -167,7 +167,7 @@ impl ParserTrait {
     }
 
     fn parse_class(&mut self, pair: pest::iterators::Pair<Rule>) -> Result<StmtId, ParseError> {
-        let class_span: Span = pair.as_span().into();
+        let class_span: Span = (pair.as_span(), self.module.name).into();
         let mut inner = pair.into_inner();
         let name = inner
             .next()
@@ -237,7 +237,7 @@ impl ParserTrait {
         &mut self,
         pair: pest::iterators::Pair<Rule>,
     ) -> Result<ClassField, ParseError> {
-        let field_span: Span = pair.as_span().into();
+        let field_span: Span = (pair.as_span(), self.module.name).into();
         let mut inner = pair.into_inner();
         let mut visibility = Visibility::Private;
         let mut is_static = false;
@@ -261,7 +261,7 @@ impl ParserTrait {
                     field_name = token.as_str().to_string();
                 }
                 Rule::type_name => {
-                    let type_span = token.as_span().into();
+                    let type_span = (token.as_span(), self.module.name).into();
                     let type_str = token.as_str();
                     field_type = Some(
                         self.module
@@ -296,7 +296,7 @@ impl ParserTrait {
         &mut self,
         pair: pest::iterators::Pair<Rule>,
     ) -> Result<ClassMethod, ParseError> {
-        let constructor_span: Span = pair.as_span().into();
+        let constructor_span: Span = (pair.as_span(), self.module.name).into();
         let mut inner = pair.into_inner();
         let mut visibility = Visibility::Private;
         let mut is_static = false;
@@ -306,7 +306,7 @@ impl ParserTrait {
         let mut body = None;
 
         while let Some(token) = inner.next() {
-            let token_span: Span = token.as_span().into();
+            let token_span: Span = (token.as_span(), self.module.name).into();
             match token.as_rule() {
                 Rule::visibility => {
                     visibility = if token.as_str() == "публичный" {
@@ -326,7 +326,7 @@ impl ParserTrait {
                 }
                 Rule::return_type => {
                     if let Some(type_token) = token.into_inner().next() {
-                        let type_span = type_token.as_span().into();
+                        let type_span = (type_token.as_span(), self.module.name).into();
                         let type_str = type_token.as_str();
                         return_type = Some(
                             self.module
@@ -377,7 +377,7 @@ impl ParserTrait {
         &mut self,
         pair: pest::iterators::Pair<Rule>,
     ) -> Result<ClassMethod, ParseError> {
-        let method_span: Span = pair.as_span().into();
+        let method_span: Span = (pair.as_span(), self.module.name).into();
         let mut inner = pair.into_inner();
         let mut visibility = Visibility::Private;
         let mut is_static = false;
@@ -387,7 +387,7 @@ impl ParserTrait {
         let mut body = None;
 
         while let Some(token) = inner.next() {
-            let token_span: Span = token.as_span().into();
+            let token_span: Span =(token.as_span(), self.module.name).into();
             match token.as_rule() {
                 Rule::visibility => {
                     visibility = if token.as_str() == "публичный" {
@@ -407,7 +407,7 @@ impl ParserTrait {
                 }
                 Rule::return_type => {
                     if let Some(type_token) = token.into_inner().next() {
-                        let type_span = type_token.as_span().into();
+                        let type_span = (type_token.as_span(), self.module.name).into();
                         let type_str = type_token.as_str();
                         return_type = Some(
                             self.module
@@ -462,14 +462,14 @@ impl ParserTrait {
 
         for param_pair in pair.into_inner() {
             if param_pair.as_rule() == Rule::param {
-                let token_span: Span = param_pair.as_span().into();
+                let token_span: Span = (param_pair.as_span(), self.module.name).into();
                 let mut param_inner = param_pair.into_inner();
                 let name = param_inner
                     .next()
                     .map(|p| p.as_str().to_string())
                     .unwrap_or_default();
                 let param_type = if let Some(type_pair) = param_inner.next() {
-                    let type_span = type_pair.as_span().into();
+                    let type_span = (type_pair.as_span(), self.module.name).into();
                     let type_str = type_pair.as_str();
                     self.module
                         .arena
@@ -552,7 +552,7 @@ impl ParserTrait {
         &mut self,
         pair: pest::iterators::Pair<Rule>,
     ) -> Result<StmtId, ParseError> {
-        let assignment_span: Span = pair.as_span().into();
+        let assignment_span: Span = (pair.as_span(), self.module.name).into();
         let mut inner = pair.into_inner();
         let name_str = inner
             .next()
@@ -573,7 +573,7 @@ impl ParserTrait {
             match token.as_rule() {
                 Rule::type_hint => {
                     if let Some(type_token) = token.into_inner().next() {
-                        let type_span = type_token.as_span().into();
+                        let type_span = (type_token.as_span(), self.module.name).into();
                         let type_str = type_token.as_str();
                         type_hint = Some(
                             self.module
@@ -615,7 +615,7 @@ impl ParserTrait {
         &mut self,
         pair: pest::iterators::Pair<Rule>,
     ) -> Result<StmtId, ParseError> {
-        let property_span: Span = pair.as_span().into();
+        let property_span: Span = (pair.as_span(), self.module.name).into();
         let mut inner = pair.into_inner();
 
         let postfix_pair = inner.next().ok_or_else(|| {
@@ -668,7 +668,7 @@ impl ParserTrait {
     }
 
     fn parse_if_stmt(&mut self, pair: pest::iterators::Pair<Rule>) -> Result<StmtId, ParseError> {
-        let if_stmt_span: Span = pair.as_span().into();
+        let if_stmt_span: Span = (pair.as_span(), self.module.name).into();
         let mut inner = pair.into_inner();
 
         let condition = self.parse_expression(inner.next().ok_or_else(|| {
@@ -690,7 +690,7 @@ impl ParserTrait {
                 let mut clause_inner = else_clause.into_inner();
 
                 if let Some(else_content) = clause_inner.next() {
-                    let else_span = else_content.as_span().into();
+                    let else_span = (else_content.as_span(), self.module.name).into();
                     match else_content.as_rule() {
                         Rule::else_if_clause => {
                             if let Some(if_stmt) = else_content.into_inner().next() {
@@ -726,7 +726,7 @@ impl ParserTrait {
         &mut self,
         pair: pest::iterators::Pair<Rule>,
     ) -> Result<StmtId, ParseError> {
-        let while_stmt_span: Span = pair.as_span().into();
+        let while_stmt_span: Span = (pair.as_span(), self.module.name).into();
         let mut inner = pair.into_inner();
 
         let condition = self.parse_expression(inner.next().ok_or_else(|| {
@@ -755,7 +755,7 @@ impl ParserTrait {
     }
 
     fn parse_for_stmt(&mut self, pair: pest::iterators::Pair<Rule>) -> Result<StmtId, ParseError> {
-        let for_span = pair.as_span().into();
+        let for_span = (pair.as_span(), self.module.name).into();
         let mut inner = pair.into_inner();
 
         let for_init = inner.next().ok_or_else(|| {
@@ -790,12 +790,12 @@ impl ParserTrait {
             ParseError::InvalidSyntax(ErrorData::new(for_span, "Ожидалось выражение".into()))
         })?;
 
-        let upd_span = for_upd_token.as_span().into();
+        let upd_span = (for_upd_token.as_span(), self.module.name).into();
         let mut upd_inner = for_upd_token.into_inner();
         let first_upd_token = upd_inner.next().ok_or_else(|| {
             ParseError::InvalidSyntax(ErrorData::new(upd_span, "Ожидалось выражение".into()))
         })?;
-        let ca_span = first_upd_token.as_span().into();
+        let ca_span = (first_upd_token.as_span(), self.module.name).into();
         let update_expr = match first_upd_token.as_rule() {
             Rule::compound_assign => {
                 let mut ca_inner = first_upd_token.into_inner();
@@ -847,7 +847,7 @@ impl ParserTrait {
                 )
             }
             Rule::assignment_expr => {
-                let ae_span = first_upd_token.as_span().into();
+                let ae_span = (first_upd_token.as_span(), self.module.name).into();
                 let mut ae_inner = first_upd_token.into_inner();
                 let _var_str = ae_inner
                     .next()
@@ -892,7 +892,7 @@ impl ParserTrait {
         &mut self,
         pair: pest::iterators::Pair<Rule>,
     ) -> Result<StmtId, ParseError> {
-        let return_span = pair.as_span().into();
+        let return_span = (pair.as_span(), self.module.name).into();
         let inner = pair.into_inner();
 
         let mut expr = None;
@@ -914,7 +914,7 @@ impl ParserTrait {
         &mut self,
         pair: pest::iterators::Pair<Rule>,
     ) -> Result<StmtId, ParseError> {
-        let import_span: Span = pair.as_span().into();
+        let import_span: Span = (pair.as_span(), self.module.name).into();
         let inner = pair.into_inner();
 
         for token in inner {
@@ -952,7 +952,7 @@ impl ParserTrait {
     }
 
     fn parse_expr_stmt(&mut self, pair: pest::iterators::Pair<Rule>) -> Result<StmtId, ParseError> {
-        let expr_span = pair.as_span().into();
+        let expr_span = (pair.as_span(), self.module.name).into();
         let inner = pair.into_inner();
 
         for token in inner {
@@ -976,7 +976,7 @@ impl ParserTrait {
         &mut self,
         pair: pest::iterators::Pair<Rule>,
     ) -> Result<ExprId, ParseError> {
-        let expr_span = pair.as_span().into();
+        let expr_span = (pair.as_span(), self.module.name).into();
         let mut inner = pair.into_inner();
 
         if let Some(first_token) = inner.next() {
@@ -992,7 +992,7 @@ impl ParserTrait {
         &mut self,
         pair: pest::iterators::Pair<Rule>,
     ) -> Result<ExprId, ParseError> {
-        let or_span = pair.as_span().into();
+        let or_span = (pair.as_span(), self.module.name).into();
         let mut inner = pair.into_inner();
         let mut left = self.parse_logical_and(inner.next().ok_or_else(|| {
             ParseError::InvalidSyntax(ErrorData::new(or_span, "Ожидалось выражение".into()))
@@ -1021,7 +1021,7 @@ impl ParserTrait {
         &mut self,
         pair: pest::iterators::Pair<Rule>,
     ) -> Result<ExprId, ParseError> {
-        let and_span = pair.as_span().into();
+        let and_span = (pair.as_span(), self.module.name).into();
         let mut inner = pair.into_inner();
         let mut left = self.parse_comparison(inner.next().ok_or_else(|| {
             ParseError::InvalidSyntax(ErrorData::new(and_span, "Ожидалось выражение".into()))
@@ -1053,7 +1053,7 @@ impl ParserTrait {
         &mut self,
         pair: pest::iterators::Pair<Rule>,
     ) -> Result<ExprId, ParseError> {
-        let cmp_span = pair.as_span().into();
+        let cmp_span = (pair.as_span(), self.module.name).into();
         let mut inner = pair.into_inner();
         let mut left = self.parse_addition(inner.next().ok_or_else(|| {
             ParseError::InvalidSyntax(ErrorData::new(cmp_span, "Ожидалось выражение".into()))
@@ -1095,7 +1095,7 @@ impl ParserTrait {
     }
 
     fn parse_addition(&mut self, pair: pest::iterators::Pair<Rule>) -> Result<ExprId, ParseError> {
-        let add_span = pair.as_span().into();
+        let add_span = (pair.as_span(), self.module.name).into();
         let mut inner = pair.into_inner();
         let mut left = self.parse_multiplication(inner.next().ok_or_else(|| {
             ParseError::InvalidSyntax(ErrorData::new(add_span, "Ожидалось выражение".into()))
@@ -1136,7 +1136,7 @@ impl ParserTrait {
         &mut self,
         pair: pest::iterators::Pair<Rule>,
     ) -> Result<ExprId, ParseError> {
-        let mul_span = pair.as_span().into();
+        let mul_span = (pair.as_span(), self.module.name).into();
         let mut inner = pair.into_inner();
         let mut left = self.parse_unary(inner.next().ok_or_else(|| {
             ParseError::InvalidSyntax(ErrorData::new(mul_span, "Ожидалось выражение".into()))
@@ -1175,7 +1175,7 @@ impl ParserTrait {
     }
 
     fn parse_unary(&mut self, pair: pest::iterators::Pair<Rule>) -> Result<ExprId, ParseError> {
-        let unary_span = pair.as_span().into();
+        let unary_span = (pair.as_span(), self.module.name).into();
         let mut inner = pair.into_inner();
 
         let mut unary_op = None;
@@ -1209,14 +1209,14 @@ impl ParserTrait {
     }
 
     fn parse_postfix(&mut self, pair: pest::iterators::Pair<Rule>) -> Result<ExprId, ParseError> {
-        let expr_span = pair.as_span().into();
+        let expr_span = (pair.as_span(), self.module.name).into();
         let mut inner = pair.into_inner();
         let mut expr = self.parse_primary(inner.next().ok_or_else(|| {
             ParseError::InvalidSyntax(ErrorData::new(expr_span, "Ожидалось выражение".into()))
         })?)?;
 
         while let Some(token) = inner.next() {
-            let postfix_span = token.as_span().into();
+            let postfix_span = (token.as_span(), self.module.name).into();
             match token.as_rule() {
                 Rule::function_call => {
                     let mut args = Vec::new();
@@ -1321,7 +1321,7 @@ impl ParserTrait {
     }
 
     fn parse_primary(&mut self, pair: pest::iterators::Pair<Rule>) -> Result<ExprId, ParseError> {
-        let primary_span = pair.as_span().into();
+        let primary_span = (pair.as_span(), self.module.name).into();
         match pair.as_rule() {
             Rule::paren_expr => {
                 let mut inner = pair.into_inner();

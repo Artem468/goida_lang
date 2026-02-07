@@ -6,3 +6,4 @@ pub mod program;
 pub mod span;
 pub mod prelude;
 pub mod class;
+pub mod source;
