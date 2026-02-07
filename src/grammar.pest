@@ -15,7 +15,7 @@ import_stmt = {
 }
 
 import_list = {
-    string_literal ~ ("," ~ string_literal)*
+    (NEWLINE | COMMENT)* ~ string_literal ~ ((NEWLINE | COMMENT)* ~ "," ~ (NEWLINE | COMMENT)* ~ string_literal)* ~ (NEWLINE | COMMENT)*
 }
 
 // === Functions ===
@@ -218,7 +218,7 @@ block = {
 }
 
 param_list = {
-    param ~ ("," ~ param)*
+    (NEWLINE | COMMENT)* ~ param ~ ((NEWLINE | COMMENT)* ~ "," ~ (NEWLINE | COMMENT)* ~ param)* ~ (NEWLINE | COMMENT)*
 }
 
 param = {
@@ -226,7 +226,7 @@ param = {
 }
 
 arg_list = {
-    expression ~ ("," ~ expression)*
+    (NEWLINE | COMMENT)* ~ expression ~ ((NEWLINE | COMMENT)* ~ "," ~ (NEWLINE | COMMENT)* ~ expression)* ~ (NEWLINE | COMMENT)*
 }
 
 type_hint = {
