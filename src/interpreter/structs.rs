@@ -10,6 +10,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use string_interner::backend::StringBackend;
 use string_interner::{DefaultSymbol as Symbol, StringInterner};
+use crate::ast::source::SourceManager;
 
 #[derive(Clone, Debug)]
 pub enum Value {
@@ -64,6 +65,7 @@ pub struct Interpreter {
     pub(crate) modules: HashMap<Symbol, Module>,
     pub(crate) interner: SharedInterner,
     pub(crate) environment: SharedMut<Environment>,
+    pub(crate) source_manager: SourceManager,
 }
 
 #[derive(Clone, Debug)]

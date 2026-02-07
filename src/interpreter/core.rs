@@ -10,23 +10,28 @@ use crate::traits::prelude::{
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
-use string_interner::DefaultSymbol as Symbol;
+use string_interner::{DefaultSymbol as Symbol, StringInterner};
+use crate::ast::source::SourceManager;
 
 impl CoreOperations for Interpreter {
-    fn new(main_module: Module, interner: SharedInterner) -> Self {
-        let mut modules = HashMap::new();
-        modules.insert(main_module.name, main_module);
-
+    fn new() -> Self {
         Interpreter {
             std_classes: HashMap::new(),
             builtins: HashMap::new(),
-            modules,
-            interner,
+            modules: HashMap::new(),
+            interner: SharedInterner::new(StringInterner::new()),
             environment: SharedMut::new(Environment::new()),
+            source_manager: SourceManager::new(),
         }
     }
 
-    fn interpret(&mut self, module: Module) -> Result<(), RuntimeError> {
+    fn load_start_module(&mut self, main_module: Module) -> &mut Self {
+        self.modules.insert(main_module.name, main_module);
+        self
+    }
+
+    fn interpret(&mut self, module_id: Symbol) -> Result<(), RuntimeError> {
+        let module = self.modules.get_mut(&module_id).unwrap().clone();
         self.load_imports(&module)?;
 
         for (class_name, class_def) in &module.classes {
@@ -129,6 +134,10 @@ impl CoreOperations for Interpreter {
                 })?;
 
                 let parser = Parser::new(self.interner.clone(), file_stem, full_path.clone());
+                
+                // Пустой модуль для вывода данных о нем на случай ошибки
+                let _module = parser.module.clone();
+                
                 match parser.parse(code.as_str()) {
                     Ok(new_module) => {
                         let module_symbol = self.interner.write(|i| i.get_or_intern(file_stem));
@@ -178,6 +187,7 @@ impl CoreOperations for Interpreter {
                         }
                     }
                     Err(err) => {
+                        self.modules.insert(_module.name, _module);
                         return Err(RuntimeError::ImportError(err));
                     }
                 }
@@ -219,5 +229,18 @@ impl CoreOperations for Interpreter {
 
         let symbol = self.interner.read(|i| i.get(class_name))?;
         self.std_classes.get(&symbol).cloned()
+    }
+
+    fn get_file_path(&self, module_id: &Symbol) -> String {
+        let _name = self
+            .modules
+            .get(module_id)
+            .unwrap()
+            .path
+            .canonicalize()
+            .unwrap()
+            .to_string_lossy()
+            .to_string();
+        _name.strip_prefix(r"\\?\").unwrap_or(&_name).to_string()
     }
 }

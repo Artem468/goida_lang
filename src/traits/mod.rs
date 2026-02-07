@@ -6,4 +6,4 @@ pub mod core;
 pub mod functions;
 pub mod classes;
 pub mod builtins;
-mod module;
+pub mod module;
