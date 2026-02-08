@@ -24,6 +24,7 @@ impl Interpreter {
         bool::setup_bool_func(self, &interner);
         io::setup_io_func(self, &interner);
         common::setup_type_func(self, &interner);
+        common::setup_is_instance_func(self, &interner);
 
         let (string_name, string_class) = text::setup_text_class(&interner);
         self.std_classes.insert(string_name, string_class);

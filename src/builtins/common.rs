@@ -1,7 +1,7 @@
-use std::sync::Arc;
 use crate::ast::prelude::ErrorData;
 use crate::interpreter::prelude::{BuiltinFn, Interpreter, RuntimeError, SharedInterner, Value};
 use crate::traits::core::CoreOperations;
+use std::sync::Arc;
 
 pub fn setup_type_func(interpreter: &mut Interpreter, interner: &SharedInterner) {
     interpreter.builtins.insert(
@@ -16,9 +16,7 @@ pub fn setup_type_func(interpreter: &mut Interpreter, interner: &SharedInterner)
                     ),
                 )));
             }
-            let val = arguments.get(0).ok_or_else(|| {
-                RuntimeError::InvalidOperation(ErrorData::new(span, "Не передан объект".into()))
-            })?;
+            let val = &arguments[0];
             match val {
                 Value::Number(_) => Ok(Value::Text("число".to_string())),
                 Value::Float(_) => Ok(Value::Text("дробь".to_string())),
@@ -69,6 +67,42 @@ pub fn setup_type_func(interpreter: &mut Interpreter, interner: &SharedInterner)
                 Value::Dict(_) => Ok(Value::Text("словарь".to_string())),
                 Value::NativeResource(_) => Ok(Value::Text("ресурс".to_string())),
                 Value::Empty => Ok(Value::Text("пустота".to_string())),
+            }
+        })),
+    );
+}
+
+pub fn setup_is_instance_func(interpreter: &mut Interpreter, interner: &SharedInterner) {
+    interpreter.builtins.insert(
+        interner.write(|i| i.get_or_intern("является")),
+        BuiltinFn(Arc::new(move |interpreter, arguments, span| {
+            if arguments.len() != 2 {
+                return Err(RuntimeError::InvalidOperation(ErrorData::new(
+                    span,
+                    format!(
+                        "Функция 'является' ожидает 2 аргумент, получено {}",
+                        arguments.len()
+                    ),
+                )));
+            }
+            let target = &arguments[0];
+            let schema = &arguments[1];
+            match (target, schema) {
+                (Value::Object(obj), Value::Class(cls)) => {
+                    let obj_class_sym = obj.read(|i| i.class_name);
+                    let target_class_sym = cls.read(|c| c.name);
+                    Ok(Value::Boolean(obj_class_sym == target_class_sym))
+                }
+                (val, Value::Class(cls)) => {
+                    let target_class_sym = cls.read(|c| c.name);
+                    if let Some(actual_class_sym) = interpreter.get_class_for_value(val) {
+                        let obj_class_sym = actual_class_sym.read(|d| d.name);
+                        Ok(Value::Boolean(target_class_sym == obj_class_sym))
+                    } else {
+                        Ok(Value::Boolean(false))
+                    }
+                }
+                _ => {Ok(Value::Boolean(false))}
             }
         })),
     );
