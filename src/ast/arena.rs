@@ -151,6 +151,9 @@ impl AstArena {
             ("Массив", DataType::Array(Box::new(DataType::Any))),
             ("Словарь", DataType::Dict { key: Box::new(DataType::Any), value: Box::new(DataType::Any) }),
             ("Файл", DataType::Object(self.intern_string(interner, "Файл"))),
+            ("Терминал", DataType::Object(self.intern_string(interner, "Терминал"))),
+            ("Система", DataType::Object(self.intern_string(interner, "Система"))),
+            ("ДатаВремя", DataType::Object(self.intern_string(interner, "ДатаВремя"))),
         ];
 
         for (name, dt) in builtins {

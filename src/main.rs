@@ -35,6 +35,10 @@ enum Commands {
     Run {
         /// Путь к файлу с кодом
         file: String,
+
+        /// Аргументы для скрипта (передаются после --)
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        script_args: Vec<String>,
     },
     /// Запустить интерактивный режим (REPL)
     Repl,
@@ -44,7 +48,7 @@ fn main() {
     let cli = Cli::parse();
 
     match &cli.command {
-        Some(Commands::Run { file }) => {
+        Some(Commands::Run { file, .. }) => {
             if let Err(_) = run_file(file) {
                 std::process::exit(1);
             }

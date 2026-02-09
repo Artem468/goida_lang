@@ -10,3 +10,4 @@ pest = { version = "2.8.5" }
 pest_derive = { version = "2.8.5" }
 ariadne = { version = "0.6.0" }
 lazy_static = "1.5.0"
+chrono = "0.4.43"
