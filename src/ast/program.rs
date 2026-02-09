@@ -31,7 +31,7 @@ pub struct ImportItem {
 
 #[derive(Debug, Clone)]
 pub struct Import {
-    pub items: Vec<ImportItem>,
+    pub item: ImportItem,
     pub span: Span,
 }
 

@@ -920,13 +920,13 @@ impl ParserTrait {
         let path_token = inner.next().ok_or_else(|| {
             ParseError::InvalidSyntax(ErrorData::new(
                 import_span,
-                "???????? ???? ???????".into(),
+                "Неожиданный токен".into(),
             ))
         })?;
         let alias_token = inner.next().ok_or_else(|| {
             ParseError::InvalidSyntax(ErrorData::new(
                 import_span,
-                "????????? ??? ???????".into(),
+                "Неожиданный токен".into(),
             ))
         })?;
 
@@ -941,10 +941,10 @@ impl ParserTrait {
         let alias_symbol = self.module.arena.intern_string(&self.interner, alias_token.as_str());
 
         let import_data = Import {
-            items: vec![ImportItem {
+            item: ImportItem {
                 path: path_symbol,
                 alias: alias_symbol,
-            }],
+            },
             span: import_span,
         };
 

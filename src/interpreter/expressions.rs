@@ -65,11 +65,7 @@ impl ExpressionEvaluator for Interpreter {
                     let mod_sym = self.interner.write(|i| i.get_or_intern(mod_name));
                     let var_sym = self.interner.write(|i| i.get_or_intern(var_name));
 
-                    let target_module_symbol = if self.modules.contains_key(&mod_sym) {
-                        Some(mod_sym)
-                    } else {
-                        self.resolve_import_alias_symbol(current_module, mod_sym)
-                    };
+                    let target_module_symbol = self.resolve_import_alias_symbol(current_module, mod_sym);
 
                     return if let Some(target_module) =
                         target_module_symbol.and_then(|sym| self.modules.get(&sym))
@@ -83,7 +79,7 @@ impl ExpressionEvaluator for Interpreter {
                     } else {
                         Err(RuntimeError::InvalidOperation(ErrorData::new(
                             expr_kind.span,
-                            format!("?????? '{}' ?? ??????", mod_name),
+                            format!("Модуль '{}' не найден", mod_name),
                         )))
                     };
                 }
@@ -555,18 +551,14 @@ impl ExpressionEvaluator for Interpreter {
                             let class_sym = self.intern_string(class_simple_name);
 
                             let current_mod = self.modules.get(&current_module_id).unwrap();
-                            let target_module_symbol = if self.modules.contains_key(&mod_sym) {
-                                Some(mod_sym)
-                            } else {
-                                self.resolve_import_alias_symbol(current_mod, mod_sym)
-                            };
+                            let target_module_symbol = self.resolve_import_alias_symbol(current_mod, mod_sym);
 
                             let target_module = target_module_symbol
                                 .and_then(|sym| self.modules.get(&sym))
                                 .ok_or_else(|| {
                                     RuntimeError::InvalidOperation(ErrorData::new(
                                         expr_kind.span,
-                                        format!("?????? '{}' ?? ??????", mod_name),
+                                        format!("Модуль '{}' не найден", mod_name),
                                     ))
                                 })?;
 

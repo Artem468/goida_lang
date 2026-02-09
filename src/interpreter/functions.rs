@@ -77,11 +77,7 @@ impl InterpreterFunctions for Interpreter {
             let mod_sym = self.interner.write(|i| i.get_or_intern(mod_part));
             let func_sym = self.interner.write(|i| i.get_or_intern(func_part));
 
-            let target_module_symbol = if self.modules.contains_key(&mod_sym) {
-                Some(mod_sym)
-            } else {
-                self.resolve_import_alias_symbol(current_module, mod_sym)
-            };
+            let target_module_symbol = self.resolve_import_alias_symbol(current_module, mod_sym);
 
             if let Some(target_module) = target_module_symbol.and_then(|sym| self.modules.get(&sym)) {
                 if let Some(function) = target_module.functions.get(&func_sym) {

@@ -1,5 +1,6 @@
 use crate::ast::prelude::{ClassDefinition, ErrorData};
 use crate::ast::program::FieldData;
+use crate::ast::source::SourceManager;
 use crate::interpreter::prelude::{Environment, SharedInterner};
 use crate::interpreter::structs::{Interpreter, Module, RuntimeError, Value};
 use crate::parser::prelude::Parser;
@@ -11,7 +12,6 @@ use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
 use string_interner::{DefaultSymbol as Symbol, StringInterner};
-use crate::ast::source::SourceManager;
 
 impl CoreOperations for Interpreter {
     fn new() -> Self {
@@ -105,99 +105,98 @@ impl CoreOperations for Interpreter {
 
     fn load_imports(&mut self, module: &Module) -> Result<(), RuntimeError> {
         for import in &module.imports {
-            for item in &import.items {
-                let path = module
-                    .arena
-                    .resolve_symbol(&self.interner, item.path)
-                    .unwrap();
-                let relative_path = Path::new(&path);
-                let module_dir = module.path.parent().unwrap_or_else(|| Path::new("."));
-                let full_path = module_dir.join(relative_path).with_extension("goida");
-                let file_stem =
-                    full_path
-                        .file_stem()
-                        .and_then(|s| s.to_str())
-                        .ok_or_else(|| {
-                            RuntimeError::InvalidOperation(ErrorData::new(
-                                import.span,
-                                format!(
-                                    "Невозможно получить имя модуля из пути: {}",
-                                    full_path.display()
-                                ),
-                            ))
-                        })?;
-                let code = std::fs::read_to_string(&full_path).map_err(|err| {
-                    RuntimeError::IOError(ErrorData::new(
+            let item = &import.item;
+            let path = module
+                .arena
+                .resolve_symbol(&self.interner, item.path)
+                .unwrap();
+            let relative_path = Path::new(&path);
+            let module_dir = module.path.parent().unwrap_or_else(|| Path::new("."));
+            let full_path = module_dir.join(relative_path).with_extension("goida");
+            let file_stem = full_path
+                .file_stem()
+                .and_then(|s| s.to_str())
+                .ok_or_else(|| {
+                    RuntimeError::InvalidOperation(ErrorData::new(
                         import.span,
-                        format!("{} | {err}", full_path.display()),
+                        format!(
+                            "Невозможно получить имя модуля из пути: {}",
+                            full_path.display()
+                        ),
                     ))
                 })?;
+            let code = std::fs::read_to_string(&full_path).map_err(|err| {
+                RuntimeError::IOError(ErrorData::new(
+                    import.span,
+                    format!("{} | {err}", full_path.display()),
+                ))
+            })?;
 
-                let parser = Parser::new(self.interner.clone(), file_stem, full_path.clone());
-                
-                // Пустой модуль для вывода данных о нем на случай ошибки
-                let _module = parser.module.clone();
-                
-                match parser.parse(code.as_str()) {
-                    Ok(new_module) => {
-                        let module_symbol = self.interner.write(|i| i.get_or_intern(file_stem));
+            let parser = Parser::new(self.interner.clone(), file_stem, full_path.clone());
 
-                        if let Some(importer) = self.modules.get_mut(&module.name) {
-                            if importer.globals.contains_key(&item.alias)
-                                || importer.functions.contains_key(&item.alias)
-                                || importer.classes.contains_key(&item.alias)
-                            {
-                                let alias_name = self.resolve_symbol(item.alias).unwrap_or_default();
-                                return Err(RuntimeError::InvalidOperation(ErrorData::new(
-                                    import.span,
-                                    format!("Import alias '{}' is already used", alias_name),
-                                )));
-                            }
-                            importer.globals.insert(item.alias, Value::Module(module_symbol));
+            // Пустой модуль для вывода данных о нем на случай ошибки
+            let _module = parser.module.clone();
+
+            match parser.parse(code.as_str()) {
+                Ok(new_module) => {
+                    let module_symbol = self.interner.write(|i| i.get_or_intern(file_stem));
+
+                    if let Some(importer) = self.modules.get_mut(&module.name) {
+                        if importer.globals.contains_key(&item.alias)
+                            || importer.functions.contains_key(&item.alias)
+                            || importer.classes.contains_key(&item.alias)
+                        {
+                            let alias_name = self.resolve_symbol(item.alias).unwrap_or_default();
+                            return Err(RuntimeError::InvalidOperation(ErrorData::new(
+                                import.span,
+                                format!("Import alias '{}' is already used", alias_name),
+                            )));
                         }
-
-                        if self.modules.contains_key(&module_symbol) {
-                            continue;
-                        }
-
-                        self.modules.insert(module_symbol, new_module.clone());
-
-                        self.load_imports(&new_module)?;
-
-                        let previous_env = self.environment.clone();
-                        self.environment = SharedMut::new(Environment::new());
-
-                        for &stmt_id in &new_module.body {
-                            self.execute_statement(stmt_id, module_symbol)?;
-                        }
-
-                        self.environment = previous_env;
-
-                        for (_class_name, class_def) in &new_module.classes {
-                            let class_def_with_module =
-                                self.set_class_module(class_def.clone(), module_symbol);
-                            if let Some(module) = self.modules.get_mut(&module_symbol) {
-                                module.classes.insert(
-                                    class_def_with_module.read(|i| i.name),
-                                    class_def_with_module,
-                                );
-                            }
-                        }
-
-                        for (function_name, function_fn) in &new_module.functions {
-                            let func_value = Value::Function(Arc::new(function_fn.clone()));
-                            self.environment
-                                .write(|env| env.define(function_name.clone(), func_value.clone()));
-                            if let Some(module) = self.modules.get_mut(&module_symbol) {
-                                module.globals.insert(*function_name, func_value);
-                            }
-                        }
-
+                        importer
+                            .globals
+                            .insert(item.alias, Value::Module(module_symbol));
                     }
-                    Err(err) => {
-                        self.modules.insert(_module.name, _module);
-                        return Err(RuntimeError::ImportError(err));
+
+                    if self.modules.contains_key(&module_symbol) {
+                        continue;
                     }
+
+                    self.modules.insert(module_symbol, new_module.clone());
+
+                    self.load_imports(&new_module)?;
+
+                    let previous_env = self.environment.clone();
+                    self.environment = SharedMut::new(Environment::new());
+
+                    for &stmt_id in &new_module.body {
+                        self.execute_statement(stmt_id, module_symbol)?;
+                    }
+
+                    self.environment = previous_env;
+
+                    for (_class_name, class_def) in &new_module.classes {
+                        let class_def_with_module =
+                            self.set_class_module(class_def.clone(), module_symbol);
+                        if let Some(module) = self.modules.get_mut(&module_symbol) {
+                            module.classes.insert(
+                                class_def_with_module.read(|i| i.name),
+                                class_def_with_module,
+                            );
+                        }
+                    }
+
+                    for (function_name, function_fn) in &new_module.functions {
+                        let func_value = Value::Function(Arc::new(function_fn.clone()));
+                        self.environment
+                            .write(|env| env.define(function_name.clone(), func_value.clone()));
+                        if let Some(module) = self.modules.get_mut(&module_symbol) {
+                            module.globals.insert(*function_name, func_value);
+                        }
+                    }
+                }
+                Err(err) => {
+                    self.modules.insert(_module.name, _module);
+                    return Err(RuntimeError::ImportError(err));
                 }
             }
         }
@@ -247,14 +246,13 @@ impl Interpreter {
         }
 
         for import in &current_module.imports {
-            for item in &import.items {
-                if item.alias == alias {
-                    let path = current_module
-                        .arena
-                        .resolve_symbol(&self.interner, item.path)?;
-                    let file_stem = Path::new(&path).file_stem()?.to_str()?;
-                    return Some(self.interner.write(|i| i.get_or_intern(file_stem)));
-                }
+            let item = &import.item;
+            if item.alias == alias {
+                let path = current_module
+                    .arena
+                    .resolve_symbol(&self.interner, item.path)?;
+                let file_stem = Path::new(&path).file_stem()?.to_str()?;
+                return Some(self.interner.write(|i| i.get_or_intern(file_stem)));
             }
         }
 
