@@ -26,13 +26,13 @@ pub fn setup_array_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassD
         Visibility::Public,
         false,
         BuiltinFn(Arc::new(|_interp, args, span| {
-            if let Some(Value::List(list)) = args.get(0) {
-                let length = list.read(|i| i.len());
+            if let Some(Value::Array(arr)) = args.get(0) {
+                let length = arr.as_ref().len();
                 Ok(Value::Number(length as i64))
             } else {
                 Err(RuntimeError::TypeError(ErrorData::new(
                     span,
-                    "Ожидался List".into(),
+                    "Ожидался Array".into(),
                 )))
             }
         })),
@@ -44,13 +44,13 @@ pub fn setup_array_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassD
         Visibility::Public,
         false,
         BuiltinFn(Arc::new(|_interp, args, span| {
-            if let (Some(Value::List(list)), Some(Value::Text(sep))) = (args.get(0), args.get(1)) {
-                let res = list.read(|vec| {
-                    vec.iter()
-                        .map(|v| v.to_string())
-                        .collect::<Vec<_>>()
-                        .join(sep)
-                });
+            if let (Some(Value::Array(arr)), Some(Value::Text(sep))) = (args.get(0), args.get(1)) {
+                let res = arr
+                    .as_ref()
+                    .iter()
+                    .map(|v| v.to_string())
+                    .collect::<Vec<_>>()
+                    .join(sep);
 
                 Ok(Value::Text(res))
             } else {
@@ -68,8 +68,7 @@ pub fn setup_array_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassD
         Visibility::Public,
         false,
         BuiltinFn(Arc::new(|_interp, args, span| {
-            if let (Some(Value::Array(arr)), Some(idx)) = (args.get(0), args.get(1))
-            {
+            if let (Some(Value::Array(arr)), Some(idx)) = (args.get(0), args.get(1)) {
                 let i = idx.resolve_index(arr.len(), span)?;
                 Ok(arr[i].clone())
             } else {
@@ -83,7 +82,6 @@ pub fn setup_array_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassD
 
     (name, SharedMut::new(class_def))
 }
-
 
 pub fn setup_array_func(interpreter: &mut Interpreter, interner: &SharedInterner) {
     interpreter.builtins.insert(
