@@ -11,7 +11,7 @@ pub fn setup_datetime_class(interner_ref: &SharedInterner) -> (Symbol, SharedMut
 
     let ms_sym = interner_ref.write(|i| i.get_or_intern("_мс"));
 
-    class_def.set_constructor(BuiltinFn(Arc::new(move |interp, args, span| {
+    class_def.set_constructor(BuiltinFn(Arc::new(move |_interpreter, args, span| {
         let instance = match args.get(0) {
             Some(Value::Object(inst)) => inst,
             _ => return Err(RuntimeError::TypeError(ErrorData::new(span, "Ошибка инициализации self".into()))),
@@ -92,7 +92,7 @@ pub fn setup_datetime_class(interner_ref: &SharedInterner) -> (Symbol, SharedMut
             interner_ref.write(|i| i.get_or_intern(&add_name)),
             Visibility::Public,
             false,
-            BuiltinFn(Arc::new(move |_, args, span| {
+            BuiltinFn(Arc::new(move |_, args, _span| {
                 let current_ms = get_ms(&args)?;
                 let val = args.get(1).and_then(|v| v.as_i64()).unwrap_or(0);
 
@@ -111,7 +111,7 @@ pub fn setup_datetime_class(interner_ref: &SharedInterner) -> (Symbol, SharedMut
             interner_ref.write(|i| i.get_or_intern(&sub_name)),
             Visibility::Public,
             false,
-            BuiltinFn(Arc::new(move |_, args, span| {
+            BuiltinFn(Arc::new(move |_, args, _span| {
                 let current_ms = get_ms(&args)?;
                 let val = args.get(1).and_then(|v| v.as_i64()).unwrap_or(0);
 

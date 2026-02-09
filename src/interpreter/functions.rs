@@ -63,6 +63,13 @@ impl InterpreterFunctions for Interpreter {
 
         let name_str = self.resolve_symbol(name).unwrap();
 
+        let current_module = self.modules.get(&current_module_id).ok_or_else(|| {
+            RuntimeError::InvalidOperation(ErrorData::new(
+                span,
+                "Текущий модуль не найден".into(),
+            ))
+        })?;
+
         if let Some(dot_index) = name_str.find('.') {
             let mod_part = &name_str[..dot_index];
             let func_part = &name_str[dot_index + 1..];
@@ -70,9 +77,11 @@ impl InterpreterFunctions for Interpreter {
             let mod_sym = self.interner.write(|i| i.get_or_intern(mod_part));
             let func_sym = self.interner.write(|i| i.get_or_intern(func_part));
 
-            if let Some(target_module) = self.modules.get(&mod_sym) {
+            let target_module_symbol = self.resolve_import_alias_symbol(current_module, mod_sym);
+
+            if let Some(target_module) = target_module_symbol.and_then(|sym| self.modules.get(&sym)) {
                 if let Some(function) = target_module.functions.get(&func_sym) {
-                    return self.call_function(function.clone(), arguments, mod_sym, span);
+                    return self.call_function(function.clone(), arguments, target_module.name, span);
                 }
             }
             return Err(RuntimeError::UndefinedFunction(ErrorData::new(
@@ -80,10 +89,6 @@ impl InterpreterFunctions for Interpreter {
                 name_str,
             )));
         }
-
-        let current_module = self.modules.get(&current_module_id).ok_or_else(|| {
-            RuntimeError::InvalidOperation(ErrorData::new(span, "Текущий модуль не найден".into()))
-        })?;
 
         if let Some(function) = current_module.functions.get(&name) {
             let func_clone = function.clone();
@@ -93,17 +98,6 @@ impl InterpreterFunctions for Interpreter {
         if let Some(Value::Function(func)) = current_module.globals.get(&name) {
             let func_clone = (**func).clone();
             return self.call_function(func_clone, arguments, current_module_id, span);
-        }
-
-        for import in &current_module.imports {
-            for &module_symbol in &import.files {
-                if let Some(m) = self.modules.get(&module_symbol) {
-                    if let Some(f) = m.functions.get(&name) {
-                        let f_clone = f.clone();
-                        return self.call_function(f_clone, arguments, module_symbol, span);
-                    }
-                }
-            }
         }
 
         if let Some(builtin_fn) = self.builtins.get(&name) {
