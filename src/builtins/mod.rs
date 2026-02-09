@@ -1,15 +1,18 @@
 use crate::interpreter::prelude::Interpreter;
 
-pub mod array;
-pub mod bool;
-pub mod common;
-pub mod dict;
-pub mod file;
-pub mod float;
-pub mod io;
-pub mod list;
-pub mod number;
-pub mod text;
+mod array;
+mod bool;
+mod common;
+mod dict;
+mod file;
+mod float;
+mod io;
+mod list;
+mod number;
+mod text;
+mod system;
+mod terminal;
+mod datetime;
 
 impl Interpreter {
     pub fn define_builtins(&mut self) {
@@ -36,5 +39,11 @@ impl Interpreter {
         self.std_classes.insert(dict_name, dict_class);
         let (file_name, file_class) = file::setup_file_class(&interner);
         self.std_classes.insert(file_name, file_class);
+        let (system_name, system_class) = system::setup_system_class(&interner);
+        self.std_classes.insert(system_name, system_class);
+        let (color_name, color_class) = terminal::setup_terminal_class(&interner);
+        self.std_classes.insert(color_name, color_class);
+        let (datetime_name, datetime_class) = datetime::setup_datetime_class(&interner);
+        self.std_classes.insert(datetime_name, datetime_class);
     }
 }

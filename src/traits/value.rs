@@ -99,6 +99,22 @@ impl Value {
         }
     }
 
+    pub fn as_i64(&self) -> Option<i64> {
+        match self {
+            Value::Number(n) => Some(*n),
+            Value::Float(f) => Some(*f as i64),
+            _ => None,
+        }
+    }
+
+    pub fn as_str(&self) -> Option<&String> {
+        if let Value::Text(s) = self {
+            Some(s)
+        } else {
+            None
+        }
+    }
+
     pub fn resolve_index(&self, len: usize, span: Span) -> Result<usize, RuntimeError> {
         let raw_idx = match self {
             Value::Number(n) => *n,
