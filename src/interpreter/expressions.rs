@@ -579,7 +579,7 @@ impl ExpressionEvaluator for Interpreter {
                             let found = if let Some(class) = current_mod.classes.get(&class_name) {
                                 Some((class.clone(), current_module_id))
                             } else {
-                                let mut res = None;
+                                let res = None;
                                 res
                             };
 

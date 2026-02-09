@@ -131,7 +131,7 @@ pub fn setup_terminal_class(interner_ref: &SharedInterner) -> (Symbol, SharedMut
         interner_ref.write(|i| i.get_or_intern("позиция")),
         Visibility::Public,
         true,
-        BuiltinFn(Arc::new(move |_, args, span| {
+        BuiltinFn(Arc::new(move |_, args, _span| {
             let x = args.get(1).and_then(|v| v.as_i64()).unwrap_or(1);
             let y = args.get(2).and_then(|v| v.as_i64()).unwrap_or(1);
             // ANSI: \x1b[Y;XH (отсчет с 1)
