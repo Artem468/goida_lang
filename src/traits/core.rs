@@ -10,7 +10,6 @@ pub trait CoreOperations {
     fn resolve_symbol(&self, symbol: Symbol) -> Option<String>;
     fn intern_string(&self, s: &str) -> Symbol;
     fn load_imports(&mut self, module: &Module) -> Result<(), RuntimeError>;
-    fn collect_imported_globals(&self, module: &Module) -> Result<Vec<(Symbol, Value)>, RuntimeError>;
     fn get_class_for_value(&self, value: &Value) -> Option<SharedMut<ClassDefinition>>;
     fn get_file_path(&self, module_id: &Symbol) -> String;
 }

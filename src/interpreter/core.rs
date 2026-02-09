@@ -105,10 +105,10 @@ impl CoreOperations for Interpreter {
 
     fn load_imports(&mut self, module: &Module) -> Result<(), RuntimeError> {
         for import in &module.imports {
-            for path_symbol in &import.files {
+            for item in &import.items {
                 let path = module
                     .arena
-                    .resolve_symbol(&self.interner, *path_symbol)
+                    .resolve_symbol(&self.interner, item.path)
                     .unwrap();
                 let relative_path = Path::new(&path);
                 let module_dir = module.path.parent().unwrap_or_else(|| Path::new("."));
@@ -141,6 +141,20 @@ impl CoreOperations for Interpreter {
                 match parser.parse(code.as_str()) {
                     Ok(new_module) => {
                         let module_symbol = self.interner.write(|i| i.get_or_intern(file_stem));
+
+                        if let Some(importer) = self.modules.get_mut(&module.name) {
+                            if importer.globals.contains_key(&item.alias)
+                                || importer.functions.contains_key(&item.alias)
+                                || importer.classes.contains_key(&item.alias)
+                            {
+                                let alias_name = self.resolve_symbol(item.alias).unwrap_or_default();
+                                return Err(RuntimeError::InvalidOperation(ErrorData::new(
+                                    import.span,
+                                    format!("Import alias '{}' is already used", alias_name),
+                                )));
+                            }
+                            importer.globals.insert(item.alias, Value::Module(module_symbol));
+                        }
 
                         if self.modules.contains_key(&module_symbol) {
                             continue;
@@ -179,12 +193,6 @@ impl CoreOperations for Interpreter {
                             }
                         }
 
-                        let imported_globals = self.collect_imported_globals(&new_module)?;
-                        if let Some(module) = self.modules.get_mut(&module_symbol) {
-                            for (sym, val) in imported_globals {
-                                module.globals.insert(sym, val);
-                            }
-                        }
                     }
                     Err(err) => {
                         self.modules.insert(_module.name, _module);
@@ -194,23 +202,6 @@ impl CoreOperations for Interpreter {
             }
         }
         Ok(())
-    }
-
-    fn collect_imported_globals(
-        &self,
-        module: &Module,
-    ) -> Result<Vec<(Symbol, Value)>, RuntimeError> {
-        let mut result = Vec::new();
-        for import in &module.imports {
-            for &imp_mod_sym in &import.files {
-                if let Some(imp_module) = self.modules.get(&imp_mod_sym) {
-                    for (sym, val) in &imp_module.globals {
-                        result.push((*sym, val.clone()));
-                    }
-                }
-            }
-        }
-        Ok(result)
     }
 
     fn get_class_for_value(&self, value: &Value) -> Option<SharedMut<ClassDefinition>> {
@@ -242,5 +233,31 @@ impl CoreOperations for Interpreter {
             .to_string_lossy()
             .to_string();
         _name.strip_prefix(r"\\?\").unwrap_or(&_name).to_string()
+    }
+}
+
+impl Interpreter {
+    pub(crate) fn resolve_import_alias_symbol(
+        &self,
+        current_module: &Module,
+        alias: Symbol,
+    ) -> Option<Symbol> {
+        if let Some(Value::Module(module_symbol)) = current_module.globals.get(&alias) {
+            return Some(*module_symbol);
+        }
+
+        for import in &current_module.imports {
+            for item in &import.items {
+                if item.alias == alias {
+                    let path = current_module
+                        .arena
+                        .resolve_symbol(&self.interner, item.path)?;
+                    let file_stem = Path::new(&path).file_stem()?.to_str()?;
+                    return Some(self.interner.write(|i| i.get_or_intern(file_stem)));
+                }
+            }
+        }
+
+        None
     }
 }

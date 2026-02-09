@@ -24,8 +24,14 @@ pub struct Parameter {
 }
 
 #[derive(Debug, Clone)]
+pub struct ImportItem {
+    pub path: Symbol,
+    pub alias: Symbol,
+}
+
+#[derive(Debug, Clone)]
 pub struct Import {
-    pub files: Vec<Symbol>,
+    pub items: Vec<ImportItem>,
     pub span: Span,
 }
 

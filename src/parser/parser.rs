@@ -915,43 +915,49 @@ impl ParserTrait {
         pair: pest::iterators::Pair<Rule>,
     ) -> Result<StmtId, ParseError> {
         let import_span: Span = (pair.as_span(), self.module.name).into();
-        let inner = pair.into_inner();
+        let mut inner = pair.into_inner();
 
-        for token in inner {
-            if token.as_rule() == Rule::import_list {
-                let mut import_data = Import {
-                    files: vec![],
-                    span: import_span,
-                };
+        let path_token = inner.next().ok_or_else(|| {
+            ParseError::InvalidSyntax(ErrorData::new(
+                import_span,
+                "???????? ???? ???????".into(),
+            ))
+        })?;
+        let alias_token = inner.next().ok_or_else(|| {
+            ParseError::InvalidSyntax(ErrorData::new(
+                import_span,
+                "????????? ??? ???????".into(),
+            ))
+        })?;
 
-                for module in token.into_inner() {
-                    let raw_path = module.as_str();
-                    let clean_path = if raw_path.len() >= 2 {
-                        &raw_path[1..raw_path.len() - 1]
-                    } else {
-                        raw_path
-                    };
+        let raw_path = path_token.as_str();
+        let clean_path = if raw_path.len() >= 2 {
+            &raw_path[1..raw_path.len() - 1]
+        } else {
+            raw_path
+        };
 
-                    let path_symbol = self.module.arena.intern_string(&self.interner, clean_path);
-                    import_data.files.push(path_symbol);
-                }
+        let path_symbol = self.module.arena.intern_string(&self.interner, clean_path);
+        let alias_symbol = self.module.arena.intern_string(&self.interner, alias_token.as_str());
 
-                self.module.imports.push(import_data.clone());
-                let stmt_id = self
-                    .module
-                    .arena
-                    .add_statement(StatementKind::Empty, import_span);
+        let import_data = Import {
+            items: vec![ImportItem {
+                path: path_symbol,
+                alias: alias_symbol,
+            }],
+            span: import_span,
+        };
 
-                return Ok(stmt_id);
-            }
-        }
-        Err(ParseError::InvalidSyntax(ErrorData::new(
-            import_span,
-            "Ожидалась конструкция импорта".into(),
-        )))
+        self.module.imports.push(import_data);
+        let stmt_id = self
+            .module
+            .arena
+            .add_statement(StatementKind::Empty, import_span);
+
+        Ok(stmt_id)
     }
 
-    fn parse_expr_stmt(&mut self, pair: pest::iterators::Pair<Rule>) -> Result<StmtId, ParseError> {
+fn parse_expr_stmt(&mut self, pair: pest::iterators::Pair<Rule>) -> Result<StmtId, ParseError> {
         let expr_span = (pair.as_span(), self.module.name).into();
         let inner = pair.into_inner();
 

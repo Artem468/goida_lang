@@ -65,7 +65,15 @@ impl ExpressionEvaluator for Interpreter {
                     let mod_sym = self.interner.write(|i| i.get_or_intern(mod_name));
                     let var_sym = self.interner.write(|i| i.get_or_intern(var_name));
 
-                    return if let Some(target_module) = self.modules.get(&mod_sym) {
+                    let target_module_symbol = if self.modules.contains_key(&mod_sym) {
+                        Some(mod_sym)
+                    } else {
+                        self.resolve_import_alias_symbol(current_module, mod_sym)
+                    };
+
+                    return if let Some(target_module) =
+                        target_module_symbol.and_then(|sym| self.modules.get(&sym))
+                    {
                         target_module.globals.get(&var_sym).cloned().ok_or_else(|| {
                             RuntimeError::UndefinedVariable(ErrorData::new(
                                 expr_kind.span,
@@ -75,33 +83,13 @@ impl ExpressionEvaluator for Interpreter {
                     } else {
                         Err(RuntimeError::InvalidOperation(ErrorData::new(
                             expr_kind.span,
-                            format!("Модуль '{}' не найден", mod_name),
+                            format!("?????? '{}' ?? ??????", mod_name),
                         )))
                     };
                 }
 
-                for import in &current_module.imports {
-                    for &imp_mod_sym in &import.files {
-                        if let Some(m) = self.modules.get(&imp_mod_sym) {
-                            if let Some(val) = m.globals.get(&symbol) {
-                                return Ok(val.clone());
-                            }
-                            if let Some(recursive_val) = self.find_in_module_imports(&m, &symbol) {
-                                return Ok(recursive_val);
-                            }
-                        }
-                    }
-                }
-
-                for import in &current_module.imports {
-                    for &imp_mod_sym in &import.files {
-                        if let Some(mod_name) = self.resolve_symbol(imp_mod_sym) {
-                            let this_name = self.resolve_symbol(symbol).unwrap_or_default();
-                            if mod_name == this_name {
-                                return Ok(Value::Module(imp_mod_sym));
-                            }
-                        }
-                    }
+                if let Some(module_symbol) = self.resolve_import_alias_symbol(current_module, symbol) {
+                    return Ok(Value::Module(module_symbol));
                 }
 
                 Err(RuntimeError::UndefinedVariable(ErrorData::new(
@@ -566,12 +554,21 @@ impl ExpressionEvaluator for Interpreter {
                             let mod_sym = self.intern_string(mod_name);
                             let class_sym = self.intern_string(class_simple_name);
 
-                            let target_module = self.modules.get(&mod_sym).ok_or_else(|| {
-                                RuntimeError::InvalidOperation(ErrorData::new(
-                                    expr_kind.span,
-                                    format!("Модуль '{}' не найден", mod_name),
-                                ))
-                            })?;
+                            let current_mod = self.modules.get(&current_module_id).unwrap();
+                            let target_module_symbol = if self.modules.contains_key(&mod_sym) {
+                                Some(mod_sym)
+                            } else {
+                                self.resolve_import_alias_symbol(current_mod, mod_sym)
+                            };
+
+                            let target_module = target_module_symbol
+                                .and_then(|sym| self.modules.get(&sym))
+                                .ok_or_else(|| {
+                                    RuntimeError::InvalidOperation(ErrorData::new(
+                                        expr_kind.span,
+                                        format!("?????? '{}' ?? ??????", mod_name),
+                                    ))
+                                })?;
 
                             let class = target_module.classes.get(&class_sym).ok_or_else(|| {
                                 RuntimeError::UndefinedVariable(ErrorData::new(
@@ -591,19 +588,6 @@ impl ExpressionEvaluator for Interpreter {
                                 Some((class.clone(), current_module_id))
                             } else {
                                 let mut res = None;
-                                for import in &current_mod.imports {
-                                    for &imp_mod_sym in &import.files {
-                                        if let Some(m) = self.modules.get(&imp_mod_sym) {
-                                            if let Some(c) = m.classes.get(&class_name) {
-                                                res = Some((c.clone(), imp_mod_sym));
-                                                break;
-                                            }
-                                        }
-                                    }
-                                    if res.is_some() {
-                                        break;
-                                    }
-                                }
                                 res
                             };
 
@@ -660,25 +644,5 @@ impl ExpressionEvaluator for Interpreter {
             }
         };
         result
-    }
-
-    fn find_in_module_imports(
-        &self,
-        module: &crate::interpreter::structs::Module,
-        symbol: &string_interner::DefaultSymbol,
-    ) -> Option<Value> {
-        for import in &module.imports {
-            for &imp_mod_sym in &import.files {
-                if let Some(m) = self.modules.get(&imp_mod_sym) {
-                    if let Some(val) = m.globals.get(symbol) {
-                        return Some(val.clone());
-                    }
-                    if let Some(recursive_val) = self.find_in_module_imports(&m, symbol) {
-                        return Some(recursive_val);
-                    }
-                }
-            }
-        }
-        None
     }
 }

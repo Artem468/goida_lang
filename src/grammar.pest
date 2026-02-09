@@ -11,11 +11,7 @@ item = _{
 
 // === Import statements ===
 import_stmt = {
-    "подключить" ~ import_list ~ ";"
-}
-
-import_list = {
-    (NEWLINE | COMMENT)* ~ string_literal ~ ((NEWLINE | COMMENT)* ~ "," ~ (NEWLINE | COMMENT)* ~ string_literal)* ~ (NEWLINE | COMMENT)*
+    "подключить" ~ (NEWLINE | COMMENT)* ~ string_literal ~ (NEWLINE | COMMENT)* ~ "в" ~ (NEWLINE | COMMENT)* ~ identifier ~ (NEWLINE | COMMENT)* ~ ";"
 }
 
 // === Functions ===
