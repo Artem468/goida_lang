@@ -14,12 +14,12 @@ use std::sync::Arc;
 use string_interner::{DefaultSymbol as Symbol, StringInterner};
 
 impl CoreOperations for Interpreter {
-    fn new() -> Self {
+    fn new(interner: SharedInterner) -> Self {
         Interpreter {
             std_classes: HashMap::new(),
             builtins: HashMap::new(),
             modules: HashMap::new(),
-            interner: SharedInterner::new(StringInterner::new()),
+            interner,
             environment: SharedMut::new(Environment::new()),
             source_manager: SourceManager::new(),
         }

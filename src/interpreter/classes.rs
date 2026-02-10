@@ -161,16 +161,21 @@ impl ClassInstance {
 
     /// Проверить доступность поля (приватный или публичный доступ)
     pub fn is_field_accessible(&self, field_name: &Symbol, is_external_access: bool) -> bool {
-        self.class_ref.read(|class| {
-            if let Some((visibility, _, _)) = class.fields.get(field_name) {
-                match visibility {
-                    Visibility::Public => true,
-                    Visibility::Private => !is_external_access,
-                }
-            } else {
-                false
-            }
-        })
+        // 1. Сначала проверяем статическое определение в классе (там права доступа)
+        let access_from_class = self.class_ref.read(|class| {
+            class.fields.get(field_name).map(|(vis, _, _)| match vis {
+                Visibility::Public => true,
+                Visibility::Private => !is_external_access,
+            })
+        });
+
+        if let Some(allowed) = access_from_class {
+            return allowed;
+        }
+
+        // 2. Если в классе поле не описано, проверяем, существует ли оно в инстансе
+        // (Это позволяет динамически добавлять поля в конструкторе)
+        self.field_values.contains_key(field_name)
     }
 
     /// Получить метод по имени

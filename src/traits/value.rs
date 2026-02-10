@@ -1,8 +1,9 @@
 use crate::ast::prelude::{ErrorData, Span};
 use crate::ast::program::FieldData;
-use crate::interpreter::prelude::RuntimeError;
+use crate::interpreter::prelude::{ClassInstance, RuntimeError};
 use crate::interpreter::structs::Value;
 use crate::shared::SharedMut;
+use crate::INTERNER;
 use std::fmt;
 use std::sync::Arc;
 
@@ -44,31 +45,52 @@ impl Value {
                     "ложь".to_string()
                 }
             }
-            Value::Object(obj) => format!("<Объект {:p}>", obj),
-            Value::Class(cls) => format!("<Класс {:p}>", cls),
-            Value::Function(func) => format!("<Функция {:p}>", func),
-            Value::Builtin(func) => format!("<Встроенная функция {:p}>", func),
-            Value::Module(_) => "<Модуль>".to_string(),
-            Value::List(list) => {
-                list.read(|items| {
-                    let strings: Vec<String> = items.iter().map(|v| v.to_string()).collect();
-                    format!("[{}]", strings.join(", "))
-                })
+            Value::Object(obj) => {
+                let cls_name = INTERNER.read(|i| {
+                    i.resolve(obj.read(|i| i.class_name))
+                        .unwrap_or("неизвестно")
+                        .to_string()
+                });
+                format!("<Объект \"{}\" {:p}>", cls_name, obj)
             }
+            Value::Class(cls) => {
+                let cls_name = INTERNER.read(|i| {
+                    i.resolve(cls.read(|i| i.name))
+                        .unwrap_or("неизвестно")
+                        .to_string()
+                });
+                format!("<Класс \"{}\" {:p}>", cls_name, cls)
+            }
+            Value::Function(func) => {
+                let fun_name = INTERNER.read(|i| {
+                    i.resolve(func.as_ref().name)
+                        .unwrap_or("неизвестно")
+                        .to_string()
+                });
+                format!("<Функция {} {:p}>", fun_name, func)
+            }
+            Value::Builtin(func) => format!("<Встроенная функция {:p}>", func),
+            Value::Module(module) => {
+                let module_name =
+                    INTERNER.read(|i| i.resolve(*module).unwrap_or("неизвестно").to_string());
+                format!("<Модуль {}>", module_name)
+            }
+            Value::List(list) => list.read(|items| {
+                let strings: Vec<String> = items.iter().map(|v| v.to_string()).collect();
+                format!("[{}]", strings.join(", "))
+            }),
             Value::Array(array) => {
                 let strings: Vec<String> = array.iter().map(|v| v.to_string()).collect();
                 format!("[{}]", strings.join(", "))
             }
-            Value::Dict(dict) => {
-                dict.read(|items| {
-                    let mut pairs: Vec<String> = items
-                        .iter()
-                        .map(|(k, v)| format!("\"{}\": {}", k, v.to_string()))
-                        .collect();
-                    pairs.sort();
-                    format!("{{{}}}", pairs.join(", "))
-                })
-            }
+            Value::Dict(dict) => dict.read(|items| {
+                let mut pairs: Vec<String> = items
+                    .iter()
+                    .map(|(k, v)| format!("\"{}\": {}", k, v.to_string()))
+                    .collect();
+                pairs.sort();
+                format!("{{{}}}", pairs.join(", "))
+            }),
             Value::NativeResource(resource) => format!("<Ресурс {:p}>", resource),
             Value::Empty => "пустота".to_string(),
         }
@@ -115,13 +137,26 @@ impl Value {
         }
     }
 
+    pub fn as_object(&self, span: Span) -> Result<SharedMut<ClassInstance>, RuntimeError> {
+        if let Value::Object(obj) = self {
+            Ok(obj.clone())
+        } else {
+            Err(RuntimeError::TypeError(ErrorData::new(
+                span,
+                "Ожидался объект".into(),
+            )))
+        }
+    }
+
     pub fn resolve_index(&self, len: usize, span: Span) -> Result<usize, RuntimeError> {
         let raw_idx = match self {
             Value::Number(n) => *n,
-            _ => return Err(RuntimeError::TypeError(ErrorData::new(
-                span,
-                format!("Индекс должен быть числом, получено {:?}", self)
-            ))),
+            _ => {
+                return Err(RuntimeError::TypeError(ErrorData::new(
+                    span,
+                    format!("Индекс должен быть числом, получено {:?}", self),
+                )))
+            }
         };
 
         let final_idx = if raw_idx < 0 {
@@ -129,7 +164,10 @@ impl Value {
             if abs_idx > len {
                 return Err(RuntimeError::InvalidOperation(ErrorData::new(
                     span,
-                    format!("Отрицательный индекс {} слишком велик (длина {})", raw_idx, len)
+                    format!(
+                        "Отрицательный индекс {} слишком велик (длина {})",
+                        raw_idx, len
+                    ),
                 )));
             }
             len - abs_idx
@@ -140,7 +178,7 @@ impl Value {
         if final_idx >= len {
             return Err(RuntimeError::InvalidOperation(ErrorData::new(
                 span,
-                format!("Индекс {} вне границ (длина {})", raw_idx, len)
+                format!("Индекс {} вне границ (длина {})", raw_idx, len),
             )));
         }
 

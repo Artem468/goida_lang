@@ -15,10 +15,13 @@ use std::io::{self, Write};
 use std::path::PathBuf;
 use std::sync::RwLock;
 use std::{env, fs};
+use string_interner::StringInterner;
 use traits::prelude::CoreOperations;
+use crate::interpreter::prelude::SharedInterner;
 
 lazy_static! {
-    static ref INTERPRETER: RwLock<Interpreter> = RwLock::new(Interpreter::new());
+    static ref INTERNER: SharedInterner = SharedInterner::new(StringInterner::new());
+    static ref INTERPRETER: RwLock<Interpreter> = RwLock::new(Interpreter::new(INTERNER.clone()));
 }
 
 #[derive(Parser)]
