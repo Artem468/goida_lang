@@ -37,7 +37,7 @@ impl CoreOperations for Interpreter {
         for (class_name, class_def) in &module.classes {
             let class_value = Value::Class(class_def.clone());
             self.environment
-                .write(|env| env.define(class_name.clone(), class_value.clone()));
+                .write(|env| env.define(*class_name, class_value.clone()));
             if let Some(mod_entry) = self.modules.get_mut(&module.name) {
                 mod_entry.globals.insert(*class_name, class_value);
             }
@@ -61,7 +61,7 @@ impl CoreOperations for Interpreter {
         for (function_name, function_fn) in &module.functions {
             let func_value = Value::Function(Arc::new(function_fn.clone()));
             self.environment
-                .write(|env| env.define(function_name.clone(), func_value.clone()));
+                .write(|env| env.define(*function_name, func_value.clone()));
             if let Some(mod_entry) = self.modules.get_mut(&module.name) {
                 mod_entry.globals.insert(*function_name, func_value);
             }
@@ -69,7 +69,7 @@ impl CoreOperations for Interpreter {
 
         for (builtin_name, builtin_fn) in &self.builtins.clone() {
             self.environment
-                .write(|env| env.define(builtin_name.clone(), Value::Builtin(builtin_fn.clone())));
+                .write(|env| env.define(*builtin_name, Value::Builtin(builtin_fn.clone())));
         }
 
         for (name_symbol, class_def) in &self.std_classes.clone() {
@@ -188,7 +188,7 @@ impl CoreOperations for Interpreter {
                     for (function_name, function_fn) in &new_module.functions {
                         let func_value = Value::Function(Arc::new(function_fn.clone()));
                         self.environment
-                            .write(|env| env.define(function_name.clone(), func_value.clone()));
+                            .write(|env| env.define(*function_name, func_value.clone()));
                         if let Some(module) = self.modules.get_mut(&module_symbol) {
                             module.globals.insert(*function_name, func_value);
                         }

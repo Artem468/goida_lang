@@ -178,7 +178,7 @@ impl ExpressionEvaluator for Interpreter {
                                 builtin_func(self, arguments, func_expr.span)
                             }
                             _ => Err(RuntimeError::InvalidOperation(ErrorData::new(
-                                expr_kind.span.into(),
+                                expr_kind.span,
                                 "Выражение не является вызываемой функцией".to_string(),
                             ))),
                         }
@@ -303,7 +303,7 @@ impl ExpressionEvaluator for Interpreter {
                                 instance
                                     .get_field(&property)
                                     .cloned()
-                                    .map(|opt_expr| Err(opt_expr))
+                                    .map(Err)
                             };
 
                             (data, accessible)
@@ -488,20 +488,20 @@ impl ExpressionEvaluator for Interpreter {
                     match target_value {
                         Value::Module(mod_symbol) => {
                             if let Some(target_module) = self.modules.get(&mod_symbol) {
-                                if let Some(function) = target_module.functions.get(&method) {
-                                    return self.call_function(
+                                return if let Some(function) = target_module.functions.get(&method) {
+                                    self.call_function(
                                         function.clone(),
                                         arguments,
                                         mod_symbol,
                                         obj_expr.span,
-                                    );
+                                    )
                                 } else {
                                     let m_name = self.resolve_symbol(method).unwrap();
                                     let mod_name = self.resolve_symbol(mod_symbol).unwrap();
-                                    return Err(RuntimeError::UndefinedFunction(ErrorData::new(
+                                    Err(RuntimeError::UndefinedFunction(ErrorData::new(
                                         expr_kind.span,
                                         format!("Функция '{}' не найдена в модуле '{}'", m_name, mod_name),
-                                    )));
+                                    )))
                                 }
                             }
                         }
@@ -576,12 +576,7 @@ impl ExpressionEvaluator for Interpreter {
                         } else {
                             let current_mod = self.modules.get(&current_module_id).unwrap();
 
-                            let found = if let Some(class) = current_mod.classes.get(&class_name) {
-                                Some((class.clone(), current_module_id))
-                            } else {
-                                let res = None;
-                                res
-                            };
+                            let found = current_mod.classes.get(&class_name).map(|class| (class.clone(), current_module_id));
 
                             let final_found = found.or_else(|| {
                                 self.std_classes

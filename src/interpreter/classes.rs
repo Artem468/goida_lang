@@ -75,7 +75,7 @@ impl InterpreterClasses for Interpreter {
                 let updated_method = match method_type {
                     MethodType::User(func_def) => {
                         let mut updated_func = func_def.clone();
-                        Arc::make_mut(&mut updated_func).module = Some(module.clone());
+                        Arc::make_mut(&mut updated_func).module = Some(module);
                         MethodType::User(updated_func)
                     }
                     MethodType::Native(builtin) => MethodType::Native(builtin.clone()),
@@ -90,14 +90,14 @@ impl InterpreterClasses for Interpreter {
 
         let new_class_def = class_def.read(|c| {
             ClassDefinition {
-                name: c.name.clone(),
+                name: c.name,
                 fields: c.fields.clone(),
                 methods,
                 constructor: c.constructor.as_ref().map(|constructor| {
                     match constructor {
                         MethodType::User(func_def) => {
                             let mut updated_func = func_def.clone();
-                            Arc::make_mut(&mut updated_func).module = Some(module.clone());
+                            Arc::make_mut(&mut updated_func).module = Some(module);
                             MethodType::User(updated_func)
                         }
                         MethodType::Native(builtin) => MethodType::Native(builtin.clone()),

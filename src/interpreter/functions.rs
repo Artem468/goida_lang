@@ -18,7 +18,7 @@ impl InterpreterFunctions for Interpreter {
 
         if arguments.len() != function.params.len() {
             return Err(RuntimeError::InvalidOperation(ErrorData::new(
-                span.into(),
+                span,
                 format!(
                     "Функция {} ожидает {} аргументов, получено {}",
                     arena.resolve_symbol(&self.interner, function.name).unwrap(),
@@ -85,7 +85,7 @@ impl InterpreterFunctions for Interpreter {
                 }
             }
             return Err(RuntimeError::UndefinedFunction(ErrorData::new(
-                span.into(),
+                span,
                 name_str,
             )));
         }
@@ -105,7 +105,7 @@ impl InterpreterFunctions for Interpreter {
         }
 
         Err(RuntimeError::UndefinedFunction(ErrorData::new(
-            span.into(),
+            span,
             name_str,
         )))
     }
