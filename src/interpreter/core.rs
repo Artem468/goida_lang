@@ -11,7 +11,7 @@ use crate::traits::prelude::{
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
-use string_interner::{DefaultSymbol as Symbol, StringInterner};
+use string_interner::{DefaultSymbol as Symbol};
 
 impl CoreOperations for Interpreter {
     fn new(interner: SharedInterner) -> Self {
