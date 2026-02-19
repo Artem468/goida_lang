@@ -11,7 +11,7 @@ pub fn setup_dict_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassDe
     let mut class_def = ClassDefinition::new(name, Span::default());
 
     class_def.set_constructor(BuiltinFn(Arc::new(|_interp, args, span| {
-        if let Some(Value::Object(instance)) = args.get(0) {
+        if let Some(Value::Object(instance)) = args.first() {
             let internal_dict = Value::Dict(SharedMut::new(HashMap::new()));
 
             let data_sym = _interp.interner.write(|i| i.get_or_intern("__data"));
@@ -32,7 +32,7 @@ pub fn setup_dict_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassDe
         false,
         BuiltinFn(Arc::new(|_interp, args, span| {
             if let (Some(Value::Dict(dict)), Some(Value::Text(key)), Some(val)) =
-                (args.get(0), args.get(1), args.get(2))
+                (args.first(), args.get(1), args.get(2))
             {
                 dict.write(|i| i.insert(key.clone(), val.clone()));
                 Ok(Value::Empty)
@@ -51,7 +51,7 @@ pub fn setup_dict_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassDe
         Visibility::Public,
         false,
         BuiltinFn(Arc::new(|_interp, args, span| {
-            if let (Some(Value::Dict(dict)), Some(Value::Text(key))) = (args.get(0), args.get(1)) {
+            if let (Some(Value::Dict(dict)), Some(Value::Text(key))) = (args.first(), args.get(1)) {
                 let result = dict.read(|d| {
                     d.get(key)
                         .cloned() // Клонируем значение из словаря
@@ -74,7 +74,7 @@ pub fn setup_dict_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassDe
         Visibility::Public,
         false,
         BuiltinFn(Arc::new(|_interp, args, span| {
-            if let (Some(Value::Dict(dict)), Some(Value::Text(key))) = (args.get(0), args.get(1)) {
+            if let (Some(Value::Dict(dict)), Some(Value::Text(key))) = (args.first(), args.get(1)) {
                 Ok(Value::Boolean(dict.read(|i| i.contains_key(key))))
             } else {
                 Err(RuntimeError::TypeError(ErrorData::new(
@@ -91,7 +91,7 @@ pub fn setup_dict_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassDe
         Visibility::Public,
         false,
         BuiltinFn(Arc::new(|_interp, args, span| {
-            if let Some(Value::Dict(dict)) = args.get(0) {
+            if let Some(Value::Dict(dict)) = args.first() {
                 let keys: Vec<Value> =
                     dict.read(|i| i.keys().map(|k| Value::Text(k.clone())).collect());
                 Ok(Value::List(SharedMut::new(keys)))
@@ -110,7 +110,7 @@ pub fn setup_dict_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassDe
         Visibility::Public,
         false,
         BuiltinFn(Arc::new(|_interp, args, span| {
-            if let Some(Value::Dict(dict)) = args.get(0) {
+            if let Some(Value::Dict(dict)) = args.first() {
                 let values: Vec<Value> = dict.read(|i| i.values().cloned().collect());
                 Ok(Value::List(SharedMut::new(values)))
             } else {
@@ -128,7 +128,7 @@ pub fn setup_dict_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassDe
         Visibility::Public,
         false,
         BuiltinFn(Arc::new(|_interp, args, span| {
-            if let (Some(Value::Dict(dict)), Some(Value::Text(key))) = (args.get(0), args.get(1)) {
+            if let (Some(Value::Dict(dict)), Some(Value::Text(key))) = (args.first(), args.get(1)) {
                 Ok(dict.write(|i| i.remove(key)).unwrap_or(Value::Empty))
             } else {
                 Err(RuntimeError::TypeError(ErrorData::new(
@@ -145,7 +145,7 @@ pub fn setup_dict_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassDe
         Visibility::Public,
         false,
         BuiltinFn(Arc::new(|_interp, args, span| {
-            if let Some(Value::Dict(dict)) = args.get(0) {
+            if let Some(Value::Dict(dict)) = args.first() {
                 Ok(Value::Number(dict.read(|i| i.len() as i64)))
             } else {
                 Err(RuntimeError::TypeError(ErrorData::new(

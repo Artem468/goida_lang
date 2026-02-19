@@ -12,7 +12,7 @@ pub fn setup_datetime_class(interner_ref: &SharedInterner) -> (Symbol, SharedMut
     let ms_sym = interner_ref.write(|i| i.get_or_intern("_мс"));
 
     class_def.set_constructor(BuiltinFn(Arc::new(move |_interpreter, args, span| {
-        let instance = match args.get(0) {
+        let instance = match args.first() {
             Some(Value::Object(inst)) => inst,
             _ => return Err(RuntimeError::TypeError(ErrorData::new(span, "Ошибка инициализации self".into()))),
         };
@@ -30,7 +30,7 @@ pub fn setup_datetime_class(interner_ref: &SharedInterner) -> (Symbol, SharedMut
 
     // --- Вспомогательная функция: извлечь мс из self ---
     let get_ms = move |args: &Vec<Value>| -> Result<i64, RuntimeError> {
-        if let Some(Value::Object(inst)) = args.get(0) {
+        if let Some(Value::Object(inst)) = args.first() {
             inst.read(|i| {
                 i.field_values
                     .get(&ms_sym)
@@ -98,7 +98,7 @@ pub fn setup_datetime_class(interner_ref: &SharedInterner) -> (Symbol, SharedMut
 
                 let new_ms = current_ms + (val * ms_unit);
 
-                if let Some(Value::Object(inst)) = args.get(0) {
+                if let Some(Value::Object(inst)) = args.first() {
                     inst.write(|i| i.field_values.insert(ms_sym, Value::Number(new_ms)));
                 }
                 Ok(args[0].clone())
@@ -117,7 +117,7 @@ pub fn setup_datetime_class(interner_ref: &SharedInterner) -> (Symbol, SharedMut
 
                 let new_ms = current_ms - (val * ms_unit);
 
-                if let Some(Value::Object(inst)) = args.get(0) {
+                if let Some(Value::Object(inst)) = args.first() {
                     inst.write(|i| i.field_values.insert(ms_sym, Value::Number(new_ms)));
                 }
                 Ok(args[0].clone())

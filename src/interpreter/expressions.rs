@@ -624,7 +624,7 @@ impl ExpressionEvaluator for Interpreter {
 
                 self.environment.read(|env| env.get(&this_sym)).ok_or_else(|| {
                     RuntimeError::InvalidOperation(ErrorData::new(
-                        expr_kind.span.into(),
+                        expr_kind.span,
                         "'это' можно использовать только внутри методов класса".to_string(),
                     ))
                 })

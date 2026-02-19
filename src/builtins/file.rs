@@ -14,7 +14,7 @@ pub fn setup_file_class(interner_ref: &SharedInterner) -> (Symbol, SharedMut<Cla
     let mut class_def = ClassDefinition::new(name, Span::default());
 
     class_def.set_constructor(BuiltinFn(Arc::new(|interp, args, span| {
-        if let (Some(Value::Object(instance)), Some(Value::Text(path))) = (args.get(0), args.get(1))
+        if let (Some(Value::Object(instance)), Some(Value::Text(path))) = (args.first(), args.get(1))
         {
             let path_sym = interp.interner.write(|i| i.get_or_intern("путь"));
             instance.write(|i| i.field_values.insert(path_sym, Value::Text(path.clone())));
@@ -28,9 +28,9 @@ pub fn setup_file_class(interner_ref: &SharedInterner) -> (Symbol, SharedMut<Cla
     })));
 
     let get_path = |args: &Vec<Value>| -> Result<String, RuntimeError> {
-        if let Some(Value::Object(instance)) = args.get(0) {
+        if let Some(Value::Object(instance)) = args.first() {
             return instance.read(|i| {
-                for (_, val) in &i.field_values {
+                for val in i.field_values.values() {
                     if let Value::Text(p) = val {
                         return Ok(p.clone());
                     }

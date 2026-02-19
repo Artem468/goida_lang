@@ -26,7 +26,7 @@ pub fn setup_response_class(interner_ref: &SharedInterner) -> (Symbol, SharedMut
         Visibility::Public,
         false,
         BuiltinFn(Arc::new(move |_, args, span| {
-            let inst = args.get(0).unwrap().as_object(span)?;
+            let inst = args.first().unwrap().as_object(span)?;
             let val = inst
                 .read(|i| i.field_values.get(&status_sym).cloned())
                 .unwrap_or(Value::Number(0));
@@ -40,7 +40,7 @@ pub fn setup_response_class(interner_ref: &SharedInterner) -> (Symbol, SharedMut
         Visibility::Public,
         false,
         BuiltinFn(Arc::new(move |_, args, span| {
-            let inst = args.get(0).unwrap().as_object(span)?;
+            let inst = args.first().unwrap().as_object(span)?;
             let val = inst
                 .read(|i| i.field_values.get(&headers_sym).cloned())
                 .unwrap_or_else(|| Value::Dict(SharedMut::new(HashMap::new())));
@@ -54,7 +54,7 @@ pub fn setup_response_class(interner_ref: &SharedInterner) -> (Symbol, SharedMut
         Visibility::Public,
         false,
         BuiltinFn(Arc::new(move |_, args, span| {
-            let inst = args.get(0).unwrap().as_object(span)?;
+            let inst = args.first().unwrap().as_object(span)?;
             let val = inst
                 .read(|i| i.field_values.get(&body_raw_sym).cloned())
                 .unwrap_or_else(|| Value::Text("".into()));
@@ -68,7 +68,7 @@ pub fn setup_response_class(interner_ref: &SharedInterner) -> (Symbol, SharedMut
         Visibility::Public,
         false,
         BuiltinFn(Arc::new(move |_interp, args, span| {
-            let inst = args.get(0).unwrap().as_object(span)?;
+            let inst = args.first().unwrap().as_object(span)?;
 
             // Извлекаем сырой текст тела
             let raw_text = inst

@@ -10,7 +10,7 @@ pub fn setup_array_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassD
     let mut class_def = ClassDefinition::new(name, Span::default());
 
     class_def.set_constructor(BuiltinFn(Arc::new(|_interp, args, _span| {
-        if let Some(Value::Object(instance)) = args.get(0) {
+        if let Some(Value::Object(instance)) = args.first() {
             let items = args[1..].to_vec();
             let internal_array = Value::Array(Arc::new(items));
 
@@ -26,7 +26,7 @@ pub fn setup_array_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassD
         Visibility::Public,
         false,
         BuiltinFn(Arc::new(|_interp, args, span| {
-            if let Some(Value::Array(arr)) = args.get(0) {
+            if let Some(Value::Array(arr)) = args.first() {
                 let length = arr.as_ref().len();
                 Ok(Value::Number(length as i64))
             } else {
@@ -44,7 +44,7 @@ pub fn setup_array_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassD
         Visibility::Public,
         false,
         BuiltinFn(Arc::new(|_interp, args, span| {
-            if let (Some(Value::Array(arr)), Some(Value::Text(sep))) = (args.get(0), args.get(1)) {
+            if let (Some(Value::Array(arr)), Some(Value::Text(sep))) = (args.first(), args.get(1)) {
                 let res = arr
                     .as_ref()
                     .iter()
@@ -68,7 +68,7 @@ pub fn setup_array_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassD
         Visibility::Public,
         false,
         BuiltinFn(Arc::new(|_interp, args, span| {
-            if let (Some(Value::Array(arr)), Some(idx)) = (args.get(0), args.get(1)) {
+            if let (Some(Value::Array(arr)), Some(idx)) = (args.first(), args.get(1)) {
                 let i = idx.resolve_index(arr.len(), span)?;
                 Ok(arr[i].clone())
             } else {

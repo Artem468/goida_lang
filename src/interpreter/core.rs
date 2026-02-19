@@ -174,7 +174,7 @@ impl CoreOperations for Interpreter {
 
                     self.environment = previous_env;
 
-                    for (_class_name, class_def) in &new_module.classes {
+                    for class_def in new_module.classes.values() {
                         let class_def_with_module =
                             self.set_class_module(class_def.clone(), module_symbol);
                         if let Some(module) = self.modules.get_mut(&module_symbol) {

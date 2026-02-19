@@ -30,7 +30,6 @@ pub fn setup_type_func(interpreter: &mut Interpreter, interner: &SharedInterner)
                             span,
                             "Тип не найден".into()
                         )))?
-                        .to_string()
                 ))),
                 Value::Class(cls) => Ok(Value::Text(format!(
                     "класс \"{}\"",
@@ -40,7 +39,6 @@ pub fn setup_type_func(interpreter: &mut Interpreter, interner: &SharedInterner)
                             span,
                             "Тип не найден".into()
                         )))?
-                        .to_string()
                 ))),
                 Value::Function(obj) => Ok(Value::Text(format!(
                     "функция \"{}\"",
@@ -50,7 +48,6 @@ pub fn setup_type_func(interpreter: &mut Interpreter, interner: &SharedInterner)
                             span,
                             "Тип не найден".into()
                         )))?
-                        .to_string()
                 ))),
                 Value::Builtin(_) => Ok(Value::Text("встроенная функция".to_string())),
                 Value::Module(sym) => Ok(Value::Text(format!(

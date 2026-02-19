@@ -16,21 +16,21 @@ impl SourceManager {
     }
 
     pub fn get_file_content(&self, path: &str) -> String {
-        if let Some(_) = self.files.read().unwrap().get(path) {
+        if self.files.read().unwrap().get(path).is_some() {
             return std::fs::read_to_string(path).unwrap_or_default();
         }
         std::fs::read_to_string(path).unwrap_or_default()
     }
 }
 
-impl<'s, 'a> Cache<&'a String> for &'s SourceManager {
+impl<'a> Cache<&'a String> for &SourceManager {
     type Storage = String;
 
     fn fetch(&mut self, path: &&'a String) -> Result<&Source<<Self as Cache<&'a String>>::Storage>, impl Debug> {
-        let path_str: &str = *path;
+        let path_str: &str = path;
 
         if let Some(source) = self.files.read().unwrap().get(path_str) {
-            return Ok::<&Source, String>(unsafe { std::mem::transmute(source) });
+            return Ok::<&Source, String>(unsafe { std::mem::transmute::<&Source, &Source>(source) });
         }
 
         let content = std::fs::read_to_string(path)
@@ -40,7 +40,7 @@ impl<'s, 'a> Cache<&'a String> for &'s SourceManager {
         map.insert(path_str.to_string(), Source::from(content));
 
         Ok(unsafe {
-            std::mem::transmute(map.get(path_str).unwrap())
+            std::mem::transmute::<&Source, &Source>(map.get(path_str).unwrap())
         })
     }
 

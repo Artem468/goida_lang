@@ -18,7 +18,7 @@ pub fn setup_request_class(interner_ref: &SharedInterner) -> (Symbol, SharedMut<
     let mut class_def = ClassDefinition::new(name_sym, Span::default());
 
     class_def.set_constructor(BuiltinFn(Arc::new(move |_interp, args, span| {
-        let inst = args.get(0).unwrap().as_object(span)?;
+        let inst = args.first().unwrap().as_object(span)?;
         let url = args.get(1)
             .and_then(|v| v.as_str())
             .ok_or_else(|| RuntimeError::TypeError(ErrorData::new(span, "Ожидалась строка".into())))?;
@@ -38,7 +38,7 @@ pub fn setup_request_class(interner_ref: &SharedInterner) -> (Symbol, SharedMut<
         Visibility::Public,
         false,
         BuiltinFn(Arc::new(move |_, args, span| {
-            let inst = args.get(0).unwrap().as_object(span)?;
+            let inst = args.first().unwrap().as_object(span)?;
             let m = args.get(1)
                 .and_then(|v| v.as_str())
                 .ok_or_else(|| RuntimeError::TypeError(ErrorData::new(span, "Ожидалась строка".into())))?;
@@ -55,7 +55,7 @@ pub fn setup_request_class(interner_ref: &SharedInterner) -> (Symbol, SharedMut<
         Visibility::Public,
         false,
         BuiltinFn(Arc::new(move |_interp, args, span| {
-            let inst = args.get(0).unwrap().as_object(span)?;
+            let inst = args.first().unwrap().as_object(span)?;
             let key = args.get(1)
                 .and_then(|v| v.as_str())
                 .ok_or_else(|| RuntimeError::TypeError(ErrorData::new(span, "Ожидалась строка ключа".into())))?;
@@ -77,7 +77,7 @@ pub fn setup_request_class(interner_ref: &SharedInterner) -> (Symbol, SharedMut<
         Visibility::Public,
         false,
         BuiltinFn(Arc::new(move |interp, args, span| {
-            let inst = args.get(0).unwrap().as_object(span)?;
+            let inst = args.first().unwrap().as_object(span)?;
 
             // Извлекаем данные, используя захваченные символы
             let (url, method, headers, body) = inst.read(|i| {

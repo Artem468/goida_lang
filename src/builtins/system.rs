@@ -15,7 +15,7 @@ pub fn setup_system_class(interner_ref: &SharedInterner) -> (Symbol, SharedMut<C
         Visibility::Public,
         true, // Делаем статическим, если ваш движок это поддерживает
         BuiltinFn(Arc::new(move |_, args, _| {
-            let code = match args.get(0) {
+            let code = match args.first() {
                 Some(Value::Number(n)) => *n as i32,
                 _ => 0,
             };
