@@ -216,7 +216,12 @@ impl StatementExecutor for Interpreter {
             }
 
             StatementKind::ClassDefinition(cls) => {
-                let def = SharedMut::new(cls.clone());
+                let def = self
+                    .modules
+                    .get(&current_module_id)
+                    .and_then(|module| module.classes.get(&cls.name))
+                    .cloned()
+                    .unwrap_or_else(|| SharedMut::new(cls.clone()));
                 let value = Value::Class(def.clone());
                 self.environment.write(|env| env.define(cls.name, value));
                 Ok(())
