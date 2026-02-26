@@ -2,7 +2,7 @@ use crate::ast::prelude::{ClassDefinition, ErrorData, ExprId, Span, Visibility};
 use crate::ast::program::{FieldData, MethodType};
 use crate::interpreter::prelude::{ClassInstance, Environment, Interpreter, RuntimeError, Value};
 use crate::shared::SharedMut;
-use crate::traits::prelude::{CoreOperations, InterpreterClasses, StatementExecutor};
+use crate::traits::prelude::{CoreOperations, ExpressionEvaluator, InterpreterClasses, StatementExecutor};
 use std::collections::HashMap;
 use std::sync::Arc;
 use string_interner::DefaultSymbol as Symbol;
@@ -20,40 +20,54 @@ impl InterpreterClasses for Interpreter {
         match method {
             MethodType::User(func) => {
                 let method_module = func.module.unwrap_or(current_module_id);
-
                 let previous_env = self.environment.clone();
+
+                let mut final_arguments = arguments;
+                let total_params = func.params.len();
+
+                if final_arguments.len() > total_params {
+                    return Err(RuntimeError::InvalidOperation(ErrorData::new(
+                        span,
+                        format!("Слишком много аргументов: ожидалось {}, получено {}", total_params, final_arguments.len()),
+                    )));
+                }
+
+                if final_arguments.len() < total_params {
+                    for i in final_arguments.len()..total_params {
+                        let param = &func.params[i];
+                        if let Some(default_expr_id) = param.default_value {
+                            let val = self.evaluate_expression(default_expr_id, method_module)?;
+                            final_arguments.push(val);
+                        } else {
+                            let param_name = self.resolve_symbol(param.name).unwrap_or_default();
+                            return Err(RuntimeError::InvalidOperation(ErrorData::new(
+                                span,
+                                format!("Аргумент '{}' не передан в метод", param_name),
+                            )));
+                        }
+                    }
+                }
+
                 let mut local_env = Environment::with_parent(previous_env.clone());
 
                 let this_sym = self.intern_string("this");
                 local_env.define(this_sym, this_obj);
 
-                if arguments.len() != func.params.len() {
-                    self.environment = previous_env;
-                    return Err(RuntimeError::InvalidOperation(ErrorData::new(
-                        span,
-                        format!(
-                            "Ожидалось {} аргументов, получено {}",
-                            func.params.len(),
-                            arguments.len()
-                        ),
-                    )));
-                }
-
-                for (param, arg_value) in func.params.iter().zip(arguments.iter()) {
+                for (param, arg_value) in func.params.iter().zip(final_arguments.iter()) {
                     local_env.define(param.name, arg_value.clone());
                 }
 
                 self.environment = SharedMut::new(local_env);
 
-                let mut result = Ok(Value::Empty);
-                match self.execute_statement(func.body, method_module) {
-                    Ok(()) => {}
-                    Err(RuntimeError::Return(_, val)) => result = Ok(val),
-                    Err(e) => result = Err(e),
-                }
+                let execution_result = self.execute_statement(func.body, method_module);
 
                 self.environment = previous_env;
-                result
+
+                match execution_result {
+                    Ok(()) => Ok(Value::Empty),
+                    Err(RuntimeError::Return(_, val)) => Ok(val),
+                    Err(e) => Err(e),
+                }
             }
 
             MethodType::Native(builtin) => {
@@ -107,7 +121,6 @@ impl InterpreterClasses for Interpreter {
             }
         });
 
-        // Оборачиваем результат в SharedMut
         SharedMut::new(new_class_def)
     }
 }

@@ -31,7 +31,10 @@ impl ParserTrait {
                 pest::error::InputLocation::Pos(pos) => (pos, pos),
                 pest::error::InputLocation::Span((start, end)) => (start, end),
             };
-            ParseError::UnexpectedToken(ErrorData::new(Span::new(start, end, self.module.name), message))
+            ParseError::UnexpectedToken(ErrorData::new(
+                Span::new(start, end, self.module.name),
+                message,
+            ))
         })?;
         self.module.arena.init_builtin_types(&self.interner);
         for pair in pairs {
@@ -154,7 +157,7 @@ impl ParserTrait {
                             .arena
                             .add_statement(StatementKind::FunctionDefinition(func_def), func_span);
                         Ok(stmt_id)
-                    }
+                    };
                 }
                 _ => {}
             }
@@ -387,7 +390,7 @@ impl ParserTrait {
         let mut body = None;
 
         for token in inner {
-            let token_span: Span =(token.as_span(), self.module.name).into();
+            let token_span: Span = (token.as_span(), self.module.name).into();
             match token.as_rule() {
                 Rule::visibility => {
                     visibility = if token.as_str() == "публичный" {
@@ -459,36 +462,70 @@ impl ParserTrait {
         pair: pest::iterators::Pair<Rule>,
     ) -> Result<Vec<Parameter>, ParseError> {
         let mut params = Vec::new();
+        let mut saw_default = false;
 
         for param_pair in pair.into_inner() {
             if param_pair.as_rule() == Rule::param {
                 let token_span: Span = (param_pair.as_span(), self.module.name).into();
                 let mut param_inner = param_pair.into_inner();
-                let name = param_inner
+
+                let name_str = param_inner
                     .next()
                     .map(|p| p.as_str().to_string())
                     .unwrap_or_default();
-                let param_type = if let Some(type_pair) = param_inner.next() {
-                    let type_span = (type_pair.as_span(), self.module.name).into();
-                    let type_str = type_pair.as_str();
-                    self.module
-                        .arena
-                        .find_type_by_name(&self.interner, type_str)
-                        .ok_or_else(|| {
-                            ParseError::TypeError(ErrorData::new(
-                                type_span,
-                                format!("Неизвестный тип: {}", type_str),
-                            ))
-                        })?
-                } else {
+                let name_symbol = self.module.arena.intern_string(&self.interner, &name_str);
+
+                let mut param_type = None;
+                let mut default_value = None;
+
+                for inner in param_inner {
+                    match inner.as_rule() {
+                        Rule::type_name => {
+                            let type_span = (inner.as_span(), self.module.name).into();
+                            let type_str = inner.as_str();
+                            param_type = Some(
+                                self.module
+                                    .arena
+                                    .find_type_by_name(&self.interner, type_str)
+                                    .ok_or_else(|| {
+                                        ParseError::TypeError(ErrorData::new(
+                                            type_span,
+                                            format!("Неизвестный тип: {}", type_str),
+                                        ))
+                                    })?,
+                            );
+                        }
+                        Rule::expression => {
+                            let expr_id = self.parse_expression(inner)?;
+                            default_value = Some(expr_id);
+                        }
+                        _ => {}
+                    }
+                }
+
+                if default_value.is_some() {
+                    saw_default = true;
+                } else if saw_default {
+                    // Если у этого параметра НЕТ дефолта, но у предыдущего ОН БЫЛ
+                    return Err(ParseError::TypeError(ErrorData::new(
+                        token_span,
+                        format!(
+                            "Обязательный параметр '{}' не может следовать за параметром со значением по умолчанию",
+                            name_str
+                        ),
+                    )));
+                }
+
+                let final_type = param_type.unwrap_or_else(|| {
                     self.module
                         .arena
                         .register_custom_type(&self.interner, "неизвестно")
-                };
+                });
 
                 params.push(Parameter {
-                    name: self.module.arena.intern_string(&self.interner, &name),
-                    param_type,
+                    name: name_symbol,
+                    param_type: final_type,
+                    default_value,
                     span: token_span,
                 });
             }
@@ -917,16 +954,10 @@ impl ParserTrait {
         let mut inner = pair.into_inner();
 
         let path_token = inner.next().ok_or_else(|| {
-            ParseError::InvalidSyntax(ErrorData::new(
-                import_span,
-                "Неожиданный токен".into(),
-            ))
+            ParseError::InvalidSyntax(ErrorData::new(import_span, "Неожиданный токен".into()))
         })?;
         let alias_token = inner.next().ok_or_else(|| {
-            ParseError::InvalidSyntax(ErrorData::new(
-                import_span,
-                "Неожиданный токен".into(),
-            ))
+            ParseError::InvalidSyntax(ErrorData::new(import_span, "Неожиданный токен".into()))
         })?;
 
         let raw_path = path_token.as_str();
@@ -937,7 +968,10 @@ impl ParserTrait {
         };
 
         let path_symbol = self.module.arena.intern_string(&self.interner, clean_path);
-        let alias_symbol = self.module.arena.intern_string(&self.interner, alias_token.as_str());
+        let alias_symbol = self
+            .module
+            .arena
+            .intern_string(&self.interner, alias_token.as_str());
 
         let import_data = Import {
             item: ImportItem {
@@ -956,7 +990,7 @@ impl ParserTrait {
         Ok(stmt_id)
     }
 
-fn parse_expr_stmt(&mut self, pair: pest::iterators::Pair<Rule>) -> Result<StmtId, ParseError> {
+    fn parse_expr_stmt(&mut self, pair: pest::iterators::Pair<Rule>) -> Result<StmtId, ParseError> {
         let expr_span = (pair.as_span(), self.module.name).into();
         let inner = pair.into_inner();
 
@@ -1373,7 +1407,15 @@ fn parse_expr_stmt(&mut self, pair: pest::iterators::Pair<Rule>) -> Result<StmtI
             Rule::string_literal => {
                 let s = pair.as_str();
                 let trimmed = &s[1..s.len() - 1];
-                let text_symbol = self.module.arena.intern_string(&self.interner, trimmed);
+                let text_symbol = self.module.arena.intern_string(
+                    &self.interner,
+                    trimmed
+                        .replace("\\n", "\n")
+                        .replace("\\t", "\t")
+                        .replace("\\\"", "\"")
+                        .replace("\\\\", "\\")
+                        .as_str(),
+                );
                 Ok(self.module.arena.add_expression(
                     ExpressionKind::Literal(LiteralValue::Text(text_symbol)),
                     primary_span,
