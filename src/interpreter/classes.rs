@@ -1,8 +1,8 @@
-use crate::ast::prelude::{ClassDefinition, ErrorData, ExprId, Span, Visibility};
+use crate::ast::prelude::{ClassDefinition, ExprId, Span, Visibility};
 use crate::ast::program::{FieldData, MethodType};
-use crate::interpreter::prelude::{ClassInstance, Environment, Interpreter, RuntimeError, Value};
+use crate::interpreter::prelude::{CallArgValue, ClassInstance, Environment, Interpreter, RuntimeError, Value};
 use crate::shared::SharedMut;
-use crate::traits::prelude::{CoreOperations, ExpressionEvaluator, InterpreterClasses, StatementExecutor};
+use crate::traits::prelude::{CoreOperations, InterpreterClasses, StatementExecutor};
 use std::collections::HashMap;
 use std::sync::Arc;
 use string_interner::DefaultSymbol as Symbol;
@@ -12,7 +12,7 @@ impl InterpreterClasses for Interpreter {
     fn call_method(
         &mut self,
         method: MethodType,
-        arguments: Vec<Value>,
+        arguments: Vec<CallArgValue>,
         this_obj: Value,
         current_module_id: Symbol,
         span: Span,
@@ -22,31 +22,8 @@ impl InterpreterClasses for Interpreter {
                 let method_module = func.module.unwrap_or(current_module_id);
                 let previous_env = self.environment.clone();
 
-                let mut final_arguments = arguments;
-                let total_params = func.params.len();
-
-                if final_arguments.len() > total_params {
-                    return Err(RuntimeError::InvalidOperation(ErrorData::new(
-                        span,
-                        format!("Слишком много аргументов: ожидалось {}, получено {}", total_params, final_arguments.len()),
-                    )));
-                }
-
-                if final_arguments.len() < total_params {
-                    for i in final_arguments.len()..total_params {
-                        let param = &func.params[i];
-                        if let Some(default_expr_id) = param.default_value {
-                            let val = self.evaluate_expression(default_expr_id, method_module)?;
-                            final_arguments.push(val);
-                        } else {
-                            let param_name = self.resolve_symbol(param.name).unwrap_or_default();
-                            return Err(RuntimeError::InvalidOperation(ErrorData::new(
-                                span,
-                                format!("Аргумент '{}' не передан в метод", param_name),
-                            )));
-                        }
-                    }
-                }
+                let final_arguments =
+                    self.bind_call_arguments(&func, arguments, method_module, span, "Метод")?;
 
                 let mut local_env = Environment::with_parent(previous_env.clone());
 
@@ -72,7 +49,9 @@ impl InterpreterClasses for Interpreter {
 
             MethodType::Native(builtin) => {
                 let mut final_args = vec![this_obj];
-                final_args.extend(arguments);
+                let positional =
+                    self.collect_positional_args(arguments, span, "нативного метода")?;
+                final_args.extend(positional);
                 builtin(self, final_args, span)
             }
         }

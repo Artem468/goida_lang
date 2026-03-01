@@ -30,6 +30,12 @@ pub enum Value {
     Empty,
 }
 
+#[derive(Clone, Debug)]
+pub struct CallArgValue {
+    pub name: Option<Symbol>,
+    pub value: Value,
+}
+
 #[derive(Clone)]
 pub struct BuiltinFn(
     pub Arc<dyn Fn(&Interpreter, Vec<Value>, Span) -> Result<Value, RuntimeError> + Send + Sync>,

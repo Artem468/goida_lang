@@ -1252,10 +1252,7 @@ impl ParserTrait {
                     let mut args = Vec::new();
                     for arg_pair in token.into_inner() {
                         if arg_pair.as_rule() == Rule::arg_list {
-                            for arg in arg_pair.into_inner() {
-                                let arg_expr = self.parse_expression(arg)?;
-                                args.push(arg_expr);
-                            }
+                            args = self.parse_arg_list(arg_pair)?;
                         }
                     }
 
@@ -1287,10 +1284,7 @@ impl ParserTrait {
                     let mut args = Vec::new();
                     if let Some(arg_list) = method_inner.next() {
                         if arg_list.as_rule() == Rule::arg_list {
-                            for arg_pair in arg_list.into_inner() {
-                                let arg_expr = self.parse_expression(arg_pair)?;
-                                args.push(arg_expr);
-                            }
+                            args = self.parse_arg_list(arg_list)?;
                         }
                     }
 
@@ -1392,10 +1386,7 @@ impl ParserTrait {
                 let mut args = Vec::new();
                 if let Some(arg_list) = inner.next() {
                     if arg_list.as_rule() == Rule::arg_list {
-                        for arg_pair in arg_list.into_inner() {
-                            let arg_expr = self.parse_expression(arg_pair)?;
-                            args.push(arg_expr);
-                        }
+                        args = self.parse_arg_list(arg_list)?;
                     }
                 }
 
@@ -1476,5 +1467,60 @@ impl ParserTrait {
                 "Неожиданное выражение".into(),
             ))),
         }
+    }
+
+    fn parse_arg_list(
+        &mut self,
+        pair: pest::iterators::Pair<Rule>,
+    ) -> Result<Vec<CallArg>, ParseError> {
+        let mut args = Vec::new();
+        let mut saw_named = false;
+
+        for arg_pair in pair.into_inner() {
+            let arg_span: Span = (arg_pair.as_span(), self.module.name).into();
+            match arg_pair.as_rule() {
+                Rule::named_arg => {
+                    saw_named = true;
+                    let mut inner = arg_pair.into_inner();
+                    let name_token = inner.next().ok_or_else(|| {
+                        ParseError::InvalidSyntax(ErrorData::new(
+                            arg_span,
+                            "Ожидалось имя аргумента".into(),
+                        ))
+                    })?;
+                    let name_str = name_token.as_str().to_string();
+                    let name = self.module.arena.intern_string(&self.interner, &name_str);
+
+                    let value_token = inner.next().ok_or_else(|| {
+                        ParseError::InvalidSyntax(ErrorData::new(
+                            arg_span,
+                            "Ожидалось выражение".into(),
+                        ))
+                    })?;
+                    let value_expr = self.parse_expression(value_token)?;
+
+                    args.push(CallArg {
+                        name: Some(name),
+                        value: value_expr,
+                    });
+                }
+                Rule::expression => {
+                    if saw_named {
+                        return Err(ParseError::InvalidSyntax(ErrorData::new(
+                            arg_span,
+                            "Именованные аргументы должны идти после позиционных".into(),
+                        )));
+                    }
+                    let value_expr = self.parse_expression(arg_pair)?;
+                    args.push(CallArg {
+                        name: None,
+                        value: value_expr,
+                    });
+                }
+                _ => {}
+            }
+        }
+
+        Ok(args)
     }
 }

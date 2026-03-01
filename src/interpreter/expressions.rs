@@ -3,7 +3,7 @@ use crate::ast::prelude::{
     UnaryOperator, Visibility,
 };
 use crate::ast::program::FieldData;
-use crate::interpreter::structs::{Interpreter, RuntimeError, Value};
+use crate::interpreter::structs::{CallArgValue, Interpreter, RuntimeError, Value};
 use crate::shared::SharedMut;
 use crate::traits::prelude::{
     CoreOperations, ExpressionEvaluator, InterpreterClasses, InterpreterFunctions, ValueOperations,
@@ -154,8 +154,12 @@ impl ExpressionEvaluator for Interpreter {
                 };
 
                 let mut arguments = Vec::new();
-                for arg_id in args {
-                    arguments.push(self.evaluate_expression(arg_id, current_module_id)?);
+                for arg in args {
+                    let value = self.evaluate_expression(arg.value, current_module_id)?;
+                    arguments.push(CallArgValue {
+                        name: arg.name,
+                        value,
+                    });
                 }
 
                 match &func_expr.kind {
@@ -175,7 +179,12 @@ impl ExpressionEvaluator for Interpreter {
                                 func_expr.span,
                             ),
                             Value::Builtin(builtin_func) => {
-                                builtin_func(self, arguments, func_expr.span)
+                                let positional = self.collect_positional_args(
+                                    arguments,
+                                    func_expr.span,
+                                    "встроенной функции",
+                                )?;
+                                builtin_func(self, positional, func_expr.span)
                             }
                             _ => Err(RuntimeError::InvalidOperation(ErrorData::new(
                                 expr_kind.span,
@@ -439,8 +448,12 @@ impl ExpressionEvaluator for Interpreter {
                     };
 
                     let mut arguments = Vec::new();
-                    for arg_id in args {
-                        arguments.push(self.evaluate_expression(arg_id, current_module_id)?);
+                    for arg in args {
+                        let value = self.evaluate_expression(arg.value, current_module_id)?;
+                        arguments.push(CallArgValue {
+                            name: arg.name,
+                            value,
+                        });
                     }
 
                     let target_value = self.evaluate_expression(object, current_module_id)?;
@@ -535,8 +548,12 @@ impl ExpressionEvaluator for Interpreter {
 
             ExpressionKind::ObjectCreation { class_name, args } => {
                 let mut arguments = Vec::new();
-                for arg_id in args {
-                    arguments.push(self.evaluate_expression(arg_id, current_module_id)?);
+                for arg in args {
+                    let value = self.evaluate_expression(arg.value, current_module_id)?;
+                    arguments.push(CallArgValue {
+                        name: arg.name,
+                        value,
+                    });
                 }
                 let (class_rc, definition_module) =
                     if let Some(Value::Class(cls)) = self.environment.read(|env| env.get(&class_name)) {

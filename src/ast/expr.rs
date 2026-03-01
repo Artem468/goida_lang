@@ -4,6 +4,12 @@ use crate::ast::prelude::{BinaryOperator, Span, TypeId, UnaryOperator};
 pub type ExprId = u32;
 
 #[derive(Debug, Clone)]
+pub struct CallArg {
+    pub name: Option<Symbol>,
+    pub value: ExprId,
+}
+
+#[derive(Debug, Clone)]
 pub enum ExpressionKind {
     Literal(LiteralValue),
     Identifier(Symbol),
@@ -18,7 +24,7 @@ pub enum ExpressionKind {
     },
     FunctionCall {
         function: ExprId,
-        args: Vec<ExprId>,
+        args: Vec<CallArg>,
     },
     Index {
         object: ExprId,
@@ -32,11 +38,11 @@ pub enum ExpressionKind {
     MethodCall {
         object: ExprId,
         method: Symbol,
-        args: Vec<ExprId>,
+        args: Vec<CallArg>,
     },
     ObjectCreation {
         class_name: Symbol,
-        args: Vec<ExprId>,
+        args: Vec<CallArg>,
     },
     This,
 }

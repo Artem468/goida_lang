@@ -1,6 +1,6 @@
 pub use super::arena::{AstArena};
 pub use super::class::{Visibility, ClassField, ClassMethod};
-pub use super::expr::{ExprId, ExpressionKind, LiteralValue, ExpressionNode};
+pub use super::expr::{CallArg, ExprId, ExpressionKind, LiteralValue, ExpressionNode};
 pub use super::program::{FunctionDefinition, ClassDefinition, Parameter, Import, ImportItem, ErrorData};
 pub use super::span::{Span};
 pub use super::stmt::{StmtId, StatementKind, StatementNode};
