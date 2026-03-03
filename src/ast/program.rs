@@ -20,6 +20,7 @@ pub struct FunctionDefinition {
 pub struct Parameter {
     pub name: Symbol,
     pub param_type: TypeId,
+    pub default_value: Option<ExprId>,
     pub span: Span,
 }
 

@@ -15,10 +15,13 @@ use std::io::{self, Write};
 use std::path::PathBuf;
 use std::sync::RwLock;
 use std::{env, fs};
+use string_interner::StringInterner;
 use traits::prelude::CoreOperations;
+use crate::interpreter::prelude::SharedInterner;
 
 lazy_static! {
-    static ref INTERPRETER: RwLock<Interpreter> = RwLock::new(Interpreter::new());
+    static ref INTERNER: SharedInterner = SharedInterner::new(StringInterner::new());
+    static ref INTERPRETER: RwLock<Interpreter> = RwLock::new(Interpreter::new(INTERNER.clone()));
 }
 
 #[derive(Parser)]
@@ -49,7 +52,7 @@ fn main() {
 
     match &cli.command {
         Some(Commands::Run { file, .. }) => {
-            if let Err(_) = run_file(file) {
+            if run_file(file).is_err() {
                 std::process::exit(1);
             }
         }
@@ -202,7 +205,7 @@ fn execute_code_with_interpreter(
                         let (msg, error) = match err {
                             ParseError::UnexpectedToken(e) => ("Неожиданный токен", e),
                             ParseError::TypeError(e) => ("Ошибка типов", e),
-                            ParseError::InvalidSyntax(e) => ("Ошибка синтаксиса".into(), e),
+                            ParseError::InvalidSyntax(e) => ("Ошибка синтаксиса", e),
                         };
                         (msg.to_string(), error)
                     }

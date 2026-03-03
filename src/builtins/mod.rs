@@ -13,6 +13,8 @@ mod text;
 mod system;
 mod terminal;
 mod datetime;
+mod request;
+mod response;
 
 impl Interpreter {
     pub fn define_builtins(&mut self) {
@@ -45,5 +47,9 @@ impl Interpreter {
         self.std_classes.insert(color_name, color_class);
         let (datetime_name, datetime_class) = datetime::setup_datetime_class(&interner);
         self.std_classes.insert(datetime_name, datetime_class);
+        let (req_name, req_class) = request::setup_request_class(&interner);
+        self.std_classes.insert(req_name, req_class);
+        let (resp_name, resp_class) = response::setup_response_class(&interner);
+        self.std_classes.insert(resp_name, resp_class);
     }
 }

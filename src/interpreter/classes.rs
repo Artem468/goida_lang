@@ -1,6 +1,6 @@
-use crate::ast::prelude::{ClassDefinition, ErrorData, ExprId, Span, Visibility};
+use crate::ast::prelude::{ClassDefinition, ExprId, Span, Visibility};
 use crate::ast::program::{FieldData, MethodType};
-use crate::interpreter::prelude::{ClassInstance, Environment, Interpreter, RuntimeError, Value};
+use crate::interpreter::prelude::{CallArgValue, ClassInstance, Environment, Interpreter, RuntimeError, Value};
 use crate::shared::SharedMut;
 use crate::traits::prelude::{CoreOperations, InterpreterClasses, StatementExecutor};
 use std::collections::HashMap;
@@ -12,7 +12,7 @@ impl InterpreterClasses for Interpreter {
     fn call_method(
         &mut self,
         method: MethodType,
-        arguments: Vec<Value>,
+        arguments: Vec<CallArgValue>,
         this_obj: Value,
         current_module_id: Symbol,
         span: Span,
@@ -20,45 +20,38 @@ impl InterpreterClasses for Interpreter {
         match method {
             MethodType::User(func) => {
                 let method_module = func.module.unwrap_or(current_module_id);
-
                 let previous_env = self.environment.clone();
+
+                let final_arguments =
+                    self.bind_call_arguments(&func, arguments, method_module, span, "Метод")?;
+
                 let mut local_env = Environment::with_parent(previous_env.clone());
 
                 let this_sym = self.intern_string("this");
                 local_env.define(this_sym, this_obj);
 
-                if arguments.len() != func.params.len() {
-                    self.environment = previous_env;
-                    return Err(RuntimeError::InvalidOperation(ErrorData::new(
-                        span,
-                        format!(
-                            "Ожидалось {} аргументов, получено {}",
-                            func.params.len(),
-                            arguments.len()
-                        ),
-                    )));
-                }
-
-                for (param, arg_value) in func.params.iter().zip(arguments.iter()) {
+                for (param, arg_value) in func.params.iter().zip(final_arguments.iter()) {
                     local_env.define(param.name, arg_value.clone());
                 }
 
                 self.environment = SharedMut::new(local_env);
 
-                let mut result = Ok(Value::Empty);
-                match self.execute_statement(func.body, method_module) {
-                    Ok(()) => {}
-                    Err(RuntimeError::Return(_, val)) => result = Ok(val),
-                    Err(e) => result = Err(e),
-                }
+                let execution_result = self.execute_statement(func.body, method_module);
 
                 self.environment = previous_env;
-                result
+
+                match execution_result {
+                    Ok(()) => Ok(Value::Empty),
+                    Err(RuntimeError::Return(_, val)) => Ok(val),
+                    Err(e) => Err(e),
+                }
             }
 
             MethodType::Native(builtin) => {
                 let mut final_args = vec![this_obj];
-                final_args.extend(arguments);
+                let positional =
+                    self.collect_positional_args(arguments, span, "нативного метода")?;
+                final_args.extend(positional);
                 builtin(self, final_args, span)
             }
         }
@@ -75,7 +68,7 @@ impl InterpreterClasses for Interpreter {
                 let updated_method = match method_type {
                     MethodType::User(func_def) => {
                         let mut updated_func = func_def.clone();
-                        Arc::make_mut(&mut updated_func).module = Some(module.clone());
+                        Arc::make_mut(&mut updated_func).module = Some(module);
                         MethodType::User(updated_func)
                     }
                     MethodType::Native(builtin) => MethodType::Native(builtin.clone()),
@@ -90,14 +83,14 @@ impl InterpreterClasses for Interpreter {
 
         let new_class_def = class_def.read(|c| {
             ClassDefinition {
-                name: c.name.clone(),
+                name: c.name,
                 fields: c.fields.clone(),
                 methods,
                 constructor: c.constructor.as_ref().map(|constructor| {
                     match constructor {
                         MethodType::User(func_def) => {
                             let mut updated_func = func_def.clone();
-                            Arc::make_mut(&mut updated_func).module = Some(module.clone());
+                            Arc::make_mut(&mut updated_func).module = Some(module);
                             MethodType::User(updated_func)
                         }
                         MethodType::Native(builtin) => MethodType::Native(builtin.clone()),
@@ -107,7 +100,6 @@ impl InterpreterClasses for Interpreter {
             }
         });
 
-        // Оборачиваем результат в SharedMut
         SharedMut::new(new_class_def)
     }
 }
@@ -161,16 +153,21 @@ impl ClassInstance {
 
     /// Проверить доступность поля (приватный или публичный доступ)
     pub fn is_field_accessible(&self, field_name: &Symbol, is_external_access: bool) -> bool {
-        self.class_ref.read(|class| {
-            if let Some((visibility, _, _)) = class.fields.get(field_name) {
-                match visibility {
-                    Visibility::Public => true,
-                    Visibility::Private => !is_external_access,
-                }
-            } else {
-                false
-            }
-        })
+        // 1. Сначала проверяем статическое определение в классе (там права доступа)
+        let access_from_class = self.class_ref.read(|class| {
+            class.fields.get(field_name).map(|(vis, _, _)| match vis {
+                Visibility::Public => true,
+                Visibility::Private => !is_external_access,
+            })
+        });
+
+        if let Some(allowed) = access_from_class {
+            return allowed;
+        }
+
+        // 2. Если в классе поле не описано, проверяем, существует ли оно в инстансе
+        // (Это позволяет динамически добавлять поля в конструкторе)
+        self.field_values.contains_key(field_name)
     }
 
     /// Получить метод по имени

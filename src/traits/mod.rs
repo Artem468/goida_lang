@@ -7,3 +7,4 @@ pub mod functions;
 pub mod classes;
 pub mod builtins;
 pub mod module;
+pub(crate) mod json;

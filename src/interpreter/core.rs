@@ -11,15 +11,15 @@ use crate::traits::prelude::{
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
-use string_interner::{DefaultSymbol as Symbol, StringInterner};
+use string_interner::{DefaultSymbol as Symbol};
 
 impl CoreOperations for Interpreter {
-    fn new() -> Self {
+    fn new(interner: SharedInterner) -> Self {
         Interpreter {
             std_classes: HashMap::new(),
             builtins: HashMap::new(),
             modules: HashMap::new(),
-            interner: SharedInterner::new(StringInterner::new()),
+            interner,
             environment: SharedMut::new(Environment::new()),
             source_manager: SourceManager::new(),
         }
@@ -37,7 +37,7 @@ impl CoreOperations for Interpreter {
         for (class_name, class_def) in &module.classes {
             let class_value = Value::Class(class_def.clone());
             self.environment
-                .write(|env| env.define(class_name.clone(), class_value.clone()));
+                .write(|env| env.define(*class_name, class_value.clone()));
             if let Some(mod_entry) = self.modules.get_mut(&module.name) {
                 mod_entry.globals.insert(*class_name, class_value);
             }
@@ -61,7 +61,7 @@ impl CoreOperations for Interpreter {
         for (function_name, function_fn) in &module.functions {
             let func_value = Value::Function(Arc::new(function_fn.clone()));
             self.environment
-                .write(|env| env.define(function_name.clone(), func_value.clone()));
+                .write(|env| env.define(*function_name, func_value.clone()));
             if let Some(mod_entry) = self.modules.get_mut(&module.name) {
                 mod_entry.globals.insert(*function_name, func_value);
             }
@@ -69,7 +69,7 @@ impl CoreOperations for Interpreter {
 
         for (builtin_name, builtin_fn) in &self.builtins.clone() {
             self.environment
-                .write(|env| env.define(builtin_name.clone(), Value::Builtin(builtin_fn.clone())));
+                .write(|env| env.define(*builtin_name, Value::Builtin(builtin_fn.clone())));
         }
 
         for (name_symbol, class_def) in &self.std_classes.clone() {
@@ -174,7 +174,7 @@ impl CoreOperations for Interpreter {
 
                     self.environment = previous_env;
 
-                    for (_class_name, class_def) in &new_module.classes {
+                    for class_def in new_module.classes.values() {
                         let class_def_with_module =
                             self.set_class_module(class_def.clone(), module_symbol);
                         if let Some(module) = self.modules.get_mut(&module_symbol) {
@@ -188,7 +188,7 @@ impl CoreOperations for Interpreter {
                     for (function_name, function_fn) in &new_module.functions {
                         let func_value = Value::Function(Arc::new(function_fn.clone()));
                         self.environment
-                            .write(|env| env.define(function_name.clone(), func_value.clone()));
+                            .write(|env| env.define(*function_name, func_value.clone()));
                         if let Some(module) = self.modules.get_mut(&module_symbol) {
                             module.globals.insert(*function_name, func_value);
                         }

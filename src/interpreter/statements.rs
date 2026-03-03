@@ -79,7 +79,7 @@ impl StatementExecutor for Interpreter {
                 local_env_inner.parent = Some(previous_env.clone());
 
                 let init_val = self.evaluate_expression(init, current_module_id)?;
-                local_env_inner.define(variable.clone(), init_val);
+                local_env_inner.define(variable, init_val);
 
                 self.environment = SharedMut::new(local_env_inner);
 
@@ -92,7 +92,7 @@ impl StatementExecutor for Interpreter {
                         self.execute_statement(body, current_module_id)?;
 
                         let update_val = self.evaluate_expression(update, current_module_id)?;
-                        self.environment.write(|env| env.define(variable.clone(), update_val));
+                        self.environment.write(|env| env.define(variable, update_val));
                     }
                     Ok(())
                 })();
@@ -216,7 +216,12 @@ impl StatementExecutor for Interpreter {
             }
 
             StatementKind::ClassDefinition(cls) => {
-                let def = SharedMut::new(cls.clone());
+                let def = self
+                    .modules
+                    .get(&current_module_id)
+                    .and_then(|module| module.classes.get(&cls.name))
+                    .cloned()
+                    .unwrap_or_else(|| SharedMut::new(cls.clone()));
                 let value = Value::Class(def.clone());
                 self.environment.write(|env| env.define(cls.name, value));
                 Ok(())

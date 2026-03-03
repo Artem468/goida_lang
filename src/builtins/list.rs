@@ -13,7 +13,7 @@ pub fn setup_list_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassDe
     class_def.set_constructor(BuiltinFn(Arc::new(|_interp, args, _span| {
         // args[0] - это временный ClassInstance (this)
         // args[1..] - это элементы: новый Список(1, 2, 3)
-        if let Some(Value::Object(instance)) = args.get(0) {
+        if let Some(Value::Object(instance)) = args.first() {
             let items = args[1..].to_vec();
             let internal_list = Value::List(SharedMut::new(items));
 
@@ -29,7 +29,7 @@ pub fn setup_list_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassDe
         Visibility::Public,
         false,
         BuiltinFn(Arc::new(|_interp, args, span| {
-            if let (Some(Value::List(list)), Some(val)) = (args.get(0), args.get(1)) {
+            if let (Some(Value::List(list)), Some(val)) = (args.first(), args.get(1)) {
                 list.write(|i| i.push(val.clone()));
                 Ok(Value::Empty)
             } else {
@@ -48,7 +48,7 @@ pub fn setup_list_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassDe
         false,
         BuiltinFn(Arc::new(|_interp, args, span| {
             if let (Some(Value::List(list)), Some(raw_idx), Some(new_val)) =
-                (args.get(0), args.get(1), args.get(2))
+                (args.first(), args.get(1), args.get(2))
             {
                 list.write(|vec| {
                     let idx = raw_idx.resolve_index(vec.len(), span)?;
@@ -70,7 +70,7 @@ pub fn setup_list_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassDe
         Visibility::Public,
         false,
         BuiltinFn(Arc::new(|_interp, args, span| {
-            if let Some(Value::List(list)) = args.get(0) {
+            if let Some(Value::List(list)) = args.first() {
                 let length = list.read(|i| i.len());
                 Ok(Value::Number(length as i64))
             } else {
@@ -88,7 +88,7 @@ pub fn setup_list_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassDe
         Visibility::Public,
         false,
         BuiltinFn(Arc::new(|_interp, args, span| {
-            if let Some(Value::List(list)) = args.get(0) {
+            if let Some(Value::List(list)) = args.first() {
                 list.write(|vec| {
                     if vec.is_empty() {
                         return Err(RuntimeError::InvalidOperation(ErrorData::new(
@@ -120,7 +120,7 @@ pub fn setup_list_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassDe
         Visibility::Public,
         false,
         BuiltinFn(Arc::new(|_interp, args, span| {
-            if let Some(Value::List(list)) = args.get(0) {
+            if let Some(Value::List(list)) = args.first() {
                 list.write(|i| i.clear());
                 Ok(Value::Empty)
             } else {
@@ -138,7 +138,7 @@ pub fn setup_list_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassDe
         Visibility::Public,
         false,
         BuiltinFn(Arc::new(|_interp, args, span| {
-            if let (Some(Value::List(list)), Some(Value::Text(sep))) = (args.get(0), args.get(1)) {
+            if let (Some(Value::List(list)), Some(Value::Text(sep))) = (args.first(), args.get(1)) {
                 let vec = list.read(|i| {
                     i.iter()
                         .map(|v| v.to_string())
@@ -161,7 +161,7 @@ pub fn setup_list_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassDe
         Visibility::Public,
         false,
         BuiltinFn(Arc::new(|_interp, args, span| {
-            if let (Some(Value::List(list)), Some(idx)) = (args.get(0), args.get(1))
+            if let (Some(Value::List(list)), Some(idx)) = (args.first(), args.get(1))
             {
                 list.read(|vec| {
                     let i = idx.resolve_index(vec.len(), span)?;

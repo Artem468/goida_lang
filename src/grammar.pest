@@ -218,12 +218,16 @@ param_list = {
 }
 
 param = {
-    identifier ~ (":" ~ type_name)?
+    identifier ~ (":" ~ type_name)? ~ ("=" ~ expression)?
 }
 
 arg_list = {
-    (NEWLINE | COMMENT)* ~ expression ~ ((NEWLINE | COMMENT)* ~ "," ~ (NEWLINE | COMMENT)* ~ expression)* ~ (NEWLINE | COMMENT)*
+    (NEWLINE | COMMENT)* ~ arg ~ ((NEWLINE | COMMENT)* ~ "," ~ (NEWLINE | COMMENT)* ~ arg)* ~ (NEWLINE | COMMENT)*
 }
+
+arg = _{ named_arg | expression }
+
+named_arg = { identifier ~ "=" ~ expression }
 
 type_hint = {
     ":" ~ type_name

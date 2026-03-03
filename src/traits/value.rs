@@ -1,8 +1,9 @@
 use crate::ast::prelude::{ErrorData, Span};
 use crate::ast::program::FieldData;
-use crate::interpreter::prelude::RuntimeError;
+use crate::interpreter::prelude::{ClassInstance, RuntimeError};
 use crate::interpreter::structs::Value;
 use crate::shared::SharedMut;
+use crate::INTERNER;
 use std::fmt;
 use std::sync::Arc;
 
@@ -32,48 +33,6 @@ pub trait ValueOperations {
 }
 
 impl Value {
-    pub fn to_string(&self) -> String {
-        match self {
-            Value::Number(n) => n.to_string(),
-            Value::Float(n) => n.to_string(),
-            Value::Text(s) => s.clone(),
-            Value::Boolean(b) => {
-                if *b {
-                    "истина".to_string()
-                } else {
-                    "ложь".to_string()
-                }
-            }
-            Value::Object(obj) => format!("<Объект {:p}>", obj),
-            Value::Class(cls) => format!("<Класс {:p}>", cls),
-            Value::Function(func) => format!("<Функция {:p}>", func),
-            Value::Builtin(func) => format!("<Встроенная функция {:p}>", func),
-            Value::Module(_) => "<Модуль>".to_string(),
-            Value::List(list) => {
-                list.read(|items| {
-                    let strings: Vec<String> = items.iter().map(|v| v.to_string()).collect();
-                    format!("[{}]", strings.join(", "))
-                })
-            }
-            Value::Array(array) => {
-                let strings: Vec<String> = array.iter().map(|v| v.to_string()).collect();
-                format!("[{}]", strings.join(", "))
-            }
-            Value::Dict(dict) => {
-                dict.read(|items| {
-                    let mut pairs: Vec<String> = items
-                        .iter()
-                        .map(|(k, v)| format!("\"{}\": {}", k, v.to_string()))
-                        .collect();
-                    pairs.sort();
-                    format!("{{{}}}", pairs.join(", "))
-                })
-            }
-            Value::NativeResource(resource) => format!("<Ресурс {:p}>", resource),
-            Value::Empty => "пустота".to_string(),
-        }
-    }
-
     pub(crate) fn is_truthy(&self) -> bool {
         match self {
             Value::Boolean(b) => *b,
@@ -115,13 +74,26 @@ impl Value {
         }
     }
 
+    pub fn as_object(&self, span: Span) -> Result<SharedMut<ClassInstance>, RuntimeError> {
+        if let Value::Object(obj) = self {
+            Ok(obj.clone())
+        } else {
+            Err(RuntimeError::TypeError(ErrorData::new(
+                span,
+                "Ожидался объект".into(),
+            )))
+        }
+    }
+
     pub fn resolve_index(&self, len: usize, span: Span) -> Result<usize, RuntimeError> {
         let raw_idx = match self {
             Value::Number(n) => *n,
-            _ => return Err(RuntimeError::TypeError(ErrorData::new(
-                span,
-                format!("Индекс должен быть числом, получено {:?}", self)
-            ))),
+            _ => {
+                return Err(RuntimeError::TypeError(ErrorData::new(
+                    span,
+                    format!("Индекс должен быть числом, получено {:?}", self),
+                )))
+            }
         };
 
         let final_idx = if raw_idx < 0 {
@@ -129,7 +101,10 @@ impl Value {
             if abs_idx > len {
                 return Err(RuntimeError::InvalidOperation(ErrorData::new(
                     span,
-                    format!("Отрицательный индекс {} слишком велик (длина {})", raw_idx, len)
+                    format!(
+                        "Отрицательный индекс {} слишком велик (длина {})",
+                        raw_idx, len
+                    ),
                 )));
             }
             len - abs_idx
@@ -140,7 +115,7 @@ impl Value {
         if final_idx >= len {
             return Err(RuntimeError::InvalidOperation(ErrorData::new(
                 span,
-                format!("Индекс {} вне границ (длина {})", raw_idx, len)
+                format!("Индекс {} вне границ (длина {})", raw_idx, len),
             )));
         }
 
@@ -149,10 +124,69 @@ impl Value {
 }
 
 impl fmt::Display for Value {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        self.to_string().fmt(f)
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Value::Number(n) => write!(f, "{}", n),
+            Value::Float(n) => write!(f, "{}", n),
+            Value::Text(s) => write!(f, "{}", s),
+            Value::Boolean(b) => write!(f, "{}", if *b { "истина" } else { "ложь" }),
+            Value::Object(obj) => {
+                INTERNER.read(|i| {
+                    let cls_name = i.resolve(obj.read(|o| o.class_name)).unwrap_or("неизвестно");
+                    write!(f, "<Объект \"{}\" {:p}>", cls_name, obj)
+                })
+            }
+            Value::Class(cls) => {
+                INTERNER.read(|i| {
+                    let cls_name = i.resolve(cls.read(|c| c.name)).unwrap_or("неизвестно");
+                    write!(f, "<Класс \"{}\" {:p}>", cls_name, cls)
+                })
+            }
+            Value::Function(func) => {
+                INTERNER.read(|i| {
+                    let fun_name = i.resolve(func.as_ref().name).unwrap_or("неизвестно");
+                    write!(f, "<Функция {} {:p}>", fun_name, func)
+                })
+            }
+            Value::Builtin(func) => write!(f, "<Встроенная функция {:p}>", func),
+            Value::Module(module) => {
+                INTERNER.read(|i| {
+                    let module_name = i.resolve(*module).unwrap_or("неизвестно");
+                    write!(f, "<Модуль {}>", module_name)
+                })
+            }
+            Value::List(list) => list.read(|items| {
+                write!(f, "[")?;
+                for (i, item) in items.iter().enumerate() {
+                    if i > 0 { write!(f, ", ")?; }
+                    write!(f, "{}", item)?;
+                }
+                write!(f, "]")
+            }),
+            Value::Array(array) => {
+                write!(f, "[")?;
+                for (i, item) in array.iter().enumerate() {
+                    if i > 0 { write!(f, ", ")?; }
+                    write!(f, "{}", item)?;
+                }
+                write!(f, "]")
+            }
+            Value::Dict(dict) => dict.read(|items| {
+                let mut pairs: Vec<_> = items.iter().collect();
+                pairs.sort_by_key(|(k, _)| *k);
+                write!(f, "{{")?;
+                for (i, (k, v)) in pairs.iter().enumerate() {
+                    if i > 0 { write!(f, ", ")?; }
+                    write!(f, "\"{}\": {}", k, v)?;
+                }
+                write!(f, "}}")
+            }),
+            Value::NativeResource(resource) => write!(f, "<Ресурс {:p}>", resource),
+            Value::Empty => write!(f, "пустота"),
+        }
     }
 }
+
 
 impl TryFrom<Value> for f64 {
     type Error = String;

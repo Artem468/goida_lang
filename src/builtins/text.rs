@@ -10,7 +10,7 @@ pub fn setup_text_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassDe
     let mut class_def = ClassDefinition::new(name, Span::default());
 
     class_def.set_constructor(BuiltinFn(Arc::new(|_interp, args, _span| {
-        if let Some(Value::Object(instance)) = args.get(0) {
+        if let Some(Value::Object(instance)) = args.first() {
             let content = match args.get(1) {
                 Some(Value::Text(s)) => s.clone(),
                 Some(Value::Number(n)) => n.to_string(),
@@ -31,7 +31,7 @@ pub fn setup_text_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassDe
         Visibility::Public,
         false,
         BuiltinFn(Arc::new(|_interp, args, span| {
-            if let Some(Value::Text(s)) = args.get(0) {
+            if let Some(Value::Text(s)) = args.first() {
                 Ok(Value::Number(s.chars().count() as i64))
             } else {
                 Err(RuntimeError::TypeError(ErrorData::new(
@@ -48,7 +48,7 @@ pub fn setup_text_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassDe
         Visibility::Public,
         false,
         BuiltinFn(Arc::new(|_interp, args, span| {
-            if let (Some(Value::Text(s)), Some(Value::Text(sep))) = (args.get(0), args.get(1)) {
+            if let (Some(Value::Text(s)), Some(Value::Text(sep))) = (args.first(), args.get(1)) {
                 let parts: Vec<Value> = s
                     .split(sep)
                     .map(|part| Value::Text(part.to_string()))
@@ -69,7 +69,7 @@ pub fn setup_text_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassDe
         Visibility::Public,
         false,
         BuiltinFn(Arc::new(|_interp, args, span| {
-            if let Some(Value::Text(s)) = args.get(0) {
+            if let Some(Value::Text(s)) = args.first() {
                 Ok(Value::Text(s.to_uppercase()))
             } else {
                 Err(RuntimeError::TypeError(ErrorData::new(
@@ -86,7 +86,7 @@ pub fn setup_text_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassDe
         Visibility::Public,
         false,
         BuiltinFn(Arc::new(|_interp, args, span| {
-            if let Some(Value::Text(s)) = args.get(0) {
+            if let Some(Value::Text(s)) = args.first() {
                 Ok(Value::Text(s.to_lowercase()))
             } else {
                 Err(RuntimeError::TypeError(ErrorData::new(
@@ -103,7 +103,7 @@ pub fn setup_text_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassDe
         Visibility::Public,
         false,
         BuiltinFn(Arc::new(|_interp, args, span| {
-            if let (Some(Value::Text(s)), Some(Value::Text(sub))) = (args.get(0), args.get(1)) {
+            if let (Some(Value::Text(s)), Some(Value::Text(sub))) = (args.first(), args.get(1)) {
                 Ok(Value::Boolean(s.contains(sub)))
             } else {
                 Err(RuntimeError::TypeError(ErrorData::new(
@@ -121,7 +121,7 @@ pub fn setup_text_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassDe
         false,
         BuiltinFn(Arc::new(|_interp, args, span| {
             if let (Some(Value::Text(s)), Some(Value::Text(old)), Some(Value::Text(new))) =
-                (args.get(0), args.get(1), args.get(2))
+                (args.first(), args.get(1), args.get(2))
             {
                 Ok(Value::Text(s.replace(old, new)))
             } else {

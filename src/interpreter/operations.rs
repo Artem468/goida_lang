@@ -11,8 +11,8 @@ impl ValueOperations for Interpreter {
             (Value::Float(a), Value::Float(b)) => Ok(Value::Float(a + b)), // Не забудь про дробь!
 
             (Value::Text(a), Value::Text(b)) => Ok(Value::Text(format!("{}{}", a, b))),
-            (Value::Text(a), any) => Ok(Value::Text(format!("{}{}", a, any.to_string()))),
-            (any, Value::Text(b)) => Ok(Value::Text(format!("{}{}", any.to_string(), b))),
+            (Value::Text(a), any) => Ok(Value::Text(format!("{}{}", a, any))),
+            (any, Value::Text(b)) => Ok(Value::Text(format!("{}{}", any, b))),
 
             (Value::List(a), Value::List(b)) => {
                 let new_vec = a.read(|vec_a| {
@@ -62,7 +62,7 @@ impl ValueOperations for Interpreter {
         match (left, right) {
             (Value::Number(a), Value::Number(b)) => Ok(Value::Number(a - b)),
             _ => Err(RuntimeError::TypeMismatch(ErrorData::new(
-                span.into(),
+                span,
                 "Вычитание применимо только к числам".to_string(),
             ))),
         }
@@ -77,7 +77,7 @@ impl ValueOperations for Interpreter {
         match (left, right) {
             (Value::Number(a), Value::Number(b)) => Ok(Value::Number(a * b)),
             _ => Err(RuntimeError::TypeMismatch(ErrorData::new(
-                span.into(),
+                span,
                 "Умножение применимо только к числам".to_string(),
             ))),
         }
@@ -88,7 +88,7 @@ impl ValueOperations for Interpreter {
             (Value::Number(a), Value::Number(b)) => {
                 if b == 0 {
                     Err(RuntimeError::DivisionByZero(ErrorData::new(
-                        span.into(),
+                        span,
                         "Деление на 0 запрещено".into(),
                     )))
                 } else {
@@ -96,7 +96,7 @@ impl ValueOperations for Interpreter {
                 }
             }
             _ => Err(RuntimeError::TypeMismatch(ErrorData::new(
-                span.into(),
+                span,
                 "Деление применимо только к числам".to_string(),
             ))),
         }
@@ -107,7 +107,7 @@ impl ValueOperations for Interpreter {
             (Value::Number(a), Value::Number(b)) => {
                 if b == 0 {
                     Err(RuntimeError::DivisionByZero(ErrorData::new(
-                        span.into(),
+                        span,
                         "Деление на 0 запрещено".into(),
                     )))
                 } else {
@@ -115,7 +115,7 @@ impl ValueOperations for Interpreter {
                 }
             }
             _ => Err(RuntimeError::TypeMismatch(ErrorData::new(
-                span.into(),
+                span,
                 "Остаток от деления применим только к числам".to_string(),
             ))),
         }
@@ -130,7 +130,7 @@ impl ValueOperations for Interpreter {
         match (left, right) {
             (Value::Number(a), Value::Number(b)) => Ok(Value::Boolean(a > b)),
             _ => Err(RuntimeError::TypeMismatch(ErrorData::new(
-                span.into(),
+                span,
                 "Сравнение применимо только к числам".to_string(),
             ))),
         }
@@ -140,7 +140,7 @@ impl ValueOperations for Interpreter {
         match (left, right) {
             (Value::Number(a), Value::Number(b)) => Ok(Value::Boolean(a < b)),
             _ => Err(RuntimeError::TypeMismatch(ErrorData::new(
-                span.into(),
+                span,
                 "Сравнение применимо только к числам".to_string(),
             ))),
         }
@@ -155,7 +155,7 @@ impl ValueOperations for Interpreter {
         match (left, right) {
             (Value::Number(a), Value::Number(b)) => Ok(Value::Boolean(a >= b)),
             _ => Err(RuntimeError::TypeMismatch(ErrorData::new(
-                span.into(),
+                span,
                 "Сравнение применимо только к числам".to_string(),
             ))),
         }
@@ -170,7 +170,7 @@ impl ValueOperations for Interpreter {
         match (left, right) {
             (Value::Number(a), Value::Number(b)) => Ok(Value::Boolean(a <= b)),
             _ => Err(RuntimeError::TypeMismatch(ErrorData::new(
-                span.into(),
+                span,
                 "Сравнение применимо только к числам".to_string(),
             ))),
         }

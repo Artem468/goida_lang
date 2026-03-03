@@ -3,7 +3,7 @@ use crate::ast::prelude::{
     UnaryOperator, Visibility,
 };
 use crate::ast::program::FieldData;
-use crate::interpreter::structs::{Interpreter, RuntimeError, Value};
+use crate::interpreter::structs::{CallArgValue, Interpreter, RuntimeError, Value};
 use crate::shared::SharedMut;
 use crate::traits::prelude::{
     CoreOperations, ExpressionEvaluator, InterpreterClasses, InterpreterFunctions, ValueOperations,
@@ -154,8 +154,12 @@ impl ExpressionEvaluator for Interpreter {
                 };
 
                 let mut arguments = Vec::new();
-                for arg_id in args {
-                    arguments.push(self.evaluate_expression(arg_id, current_module_id)?);
+                for arg in args {
+                    let value = self.evaluate_expression(arg.value, current_module_id)?;
+                    arguments.push(CallArgValue {
+                        name: arg.name,
+                        value,
+                    });
                 }
 
                 match &func_expr.kind {
@@ -175,10 +179,15 @@ impl ExpressionEvaluator for Interpreter {
                                 func_expr.span,
                             ),
                             Value::Builtin(builtin_func) => {
-                                builtin_func(self, arguments, func_expr.span)
+                                let positional = self.collect_positional_args(
+                                    arguments,
+                                    func_expr.span,
+                                    "встроенной функции",
+                                )?;
+                                builtin_func(self, positional, func_expr.span)
                             }
                             _ => Err(RuntimeError::InvalidOperation(ErrorData::new(
-                                expr_kind.span.into(),
+                                expr_kind.span,
                                 "Выражение не является вызываемой функцией".to_string(),
                             ))),
                         }
@@ -303,7 +312,7 @@ impl ExpressionEvaluator for Interpreter {
                                 instance
                                     .get_field(&property)
                                     .cloned()
-                                    .map(|opt_expr| Err(opt_expr))
+                                    .map(Err)
                             };
 
                             (data, accessible)
@@ -439,8 +448,12 @@ impl ExpressionEvaluator for Interpreter {
                     };
 
                     let mut arguments = Vec::new();
-                    for arg_id in args {
-                        arguments.push(self.evaluate_expression(arg_id, current_module_id)?);
+                    for arg in args {
+                        let value = self.evaluate_expression(arg.value, current_module_id)?;
+                        arguments.push(CallArgValue {
+                            name: arg.name,
+                            value,
+                        });
                     }
 
                     let target_value = self.evaluate_expression(object, current_module_id)?;
@@ -488,20 +501,20 @@ impl ExpressionEvaluator for Interpreter {
                     match target_value {
                         Value::Module(mod_symbol) => {
                             if let Some(target_module) = self.modules.get(&mod_symbol) {
-                                if let Some(function) = target_module.functions.get(&method) {
-                                    return self.call_function(
+                                return if let Some(function) = target_module.functions.get(&method) {
+                                    self.call_function(
                                         function.clone(),
                                         arguments,
                                         mod_symbol,
                                         obj_expr.span,
-                                    );
+                                    )
                                 } else {
                                     let m_name = self.resolve_symbol(method).unwrap();
                                     let mod_name = self.resolve_symbol(mod_symbol).unwrap();
-                                    return Err(RuntimeError::UndefinedFunction(ErrorData::new(
+                                    Err(RuntimeError::UndefinedFunction(ErrorData::new(
                                         expr_kind.span,
                                         format!("Функция '{}' не найдена в модуле '{}'", m_name, mod_name),
-                                    )));
+                                    )))
                                 }
                             }
                         }
@@ -535,8 +548,12 @@ impl ExpressionEvaluator for Interpreter {
 
             ExpressionKind::ObjectCreation { class_name, args } => {
                 let mut arguments = Vec::new();
-                for arg_id in args {
-                    arguments.push(self.evaluate_expression(arg_id, current_module_id)?);
+                for arg in args {
+                    let value = self.evaluate_expression(arg.value, current_module_id)?;
+                    arguments.push(CallArgValue {
+                        name: arg.name,
+                        value,
+                    });
                 }
                 let (class_rc, definition_module) =
                     if let Some(Value::Class(cls)) = self.environment.read(|env| env.get(&class_name)) {
@@ -576,12 +593,7 @@ impl ExpressionEvaluator for Interpreter {
                         } else {
                             let current_mod = self.modules.get(&current_module_id).unwrap();
 
-                            let found = if let Some(class) = current_mod.classes.get(&class_name) {
-                                Some((class.clone(), current_module_id))
-                            } else {
-                                let res = None;
-                                res
-                            };
+                            let found = current_mod.classes.get(&class_name).map(|class| (class.clone(), current_module_id));
 
                             let final_found = found.or_else(|| {
                                 self.std_classes
@@ -629,7 +641,7 @@ impl ExpressionEvaluator for Interpreter {
 
                 self.environment.read(|env| env.get(&this_sym)).ok_or_else(|| {
                     RuntimeError::InvalidOperation(ErrorData::new(
-                        expr_kind.span.into(),
+                        expr_kind.span,
                         "'это' можно использовать только внутри методов класса".to_string(),
                     ))
                 })

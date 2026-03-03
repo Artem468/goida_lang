@@ -1,6 +1,6 @@
 use crate::ast::prelude::{ClassDefinition, Span};
 use crate::ast::program::MethodType;
-use crate::interpreter::prelude::{ClassInstance, RuntimeError, Value};
+use crate::interpreter::prelude::{CallArgValue, ClassInstance, RuntimeError, Value};
 use crate::shared::SharedMut;
 use string_interner::DefaultSymbol as Symbol;
 
@@ -8,7 +8,7 @@ pub trait InterpreterClasses {
     fn call_method(
         &mut self,
         method: MethodType,
-        arguments: Vec<Value>,
+        arguments: Vec<CallArgValue>,
         this_obj: Value,
         current_module_id: Symbol,
         span: Span,
