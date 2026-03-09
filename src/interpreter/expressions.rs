@@ -179,12 +179,7 @@ impl ExpressionEvaluator for Interpreter {
                                 func_expr.span,
                             ),
                             Value::Builtin(builtin_func) => {
-                                let positional = self.collect_positional_args(
-                                    arguments,
-                                    func_expr.span,
-                                    "встроенной функции",
-                                )?;
-                                builtin_func(self, positional, func_expr.span)
+                                builtin_func(self, arguments, func_expr.span)
                             }
                             _ => Err(RuntimeError::InvalidOperation(ErrorData::new(
                                 expr_kind.span,

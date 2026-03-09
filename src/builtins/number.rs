@@ -15,7 +15,7 @@ pub fn setup_number_func(interpreter: &mut Interpreter, interner: &SharedInterne
                     ),
                 )));
             }
-            let n: i64 = match arguments[0].clone().try_into() {
+            let n: i64 = match arguments[0].value.clone().try_into() {
                 Ok(i) => i,
                 Err(err) => {
                     return Err(RuntimeError::InvalidOperation(ErrorData::new(span, err)))

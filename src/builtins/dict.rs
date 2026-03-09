@@ -1,5 +1,5 @@
 use crate::ast::prelude::{ClassDefinition, ErrorData, Span, Visibility};
-use crate::interpreter::prelude::{BuiltinFn, Interpreter, RuntimeError, SharedInterner, Value};
+use crate::interpreter::prelude::{BuiltinFn, CallArgListExt, Interpreter, RuntimeError, SharedInterner, Value};
 use crate::shared::SharedMut;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -11,7 +11,7 @@ pub fn setup_dict_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassDe
     let mut class_def = ClassDefinition::new(name, Span::default());
 
     class_def.set_constructor(BuiltinFn(Arc::new(|_interp, args, span| {
-        if let Some(Value::Object(instance)) = args.first() {
+        if let Some(Value::Object(instance)) = CallArgListExt::first_value(&args) {
             let internal_dict = Value::Dict(SharedMut::new(HashMap::new()));
 
             let data_sym = _interp.interner.write(|i| i.get_or_intern("__data"));
@@ -32,7 +32,7 @@ pub fn setup_dict_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassDe
         false,
         BuiltinFn(Arc::new(|_interp, args, span| {
             if let (Some(Value::Dict(dict)), Some(Value::Text(key)), Some(val)) =
-                (args.first(), args.get(1), args.get(2))
+                (CallArgListExt::first_value(&args), CallArgListExt::get_value(&args, 1), CallArgListExt::get_value(&args, 2))
             {
                 dict.write(|i| i.insert(key.clone(), val.clone()));
                 Ok(Value::Empty)
@@ -51,11 +51,11 @@ pub fn setup_dict_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassDe
         Visibility::Public,
         false,
         BuiltinFn(Arc::new(|_interp, args, span| {
-            if let (Some(Value::Dict(dict)), Some(Value::Text(key))) = (args.first(), args.get(1)) {
+            if let (Some(Value::Dict(dict)), Some(Value::Text(key))) = (CallArgListExt::first_value(&args), CallArgListExt::get_value(&args, 1)) {
                 let result = dict.read(|d| {
                     d.get(key)
                         .cloned() // Клонируем значение из словаря
-                        .unwrap_or_else(|| args.get(2).cloned().unwrap_or(Value::Empty))
+                        .unwrap_or_else(|| CallArgListExt::get_value(&args, 2).cloned().unwrap_or(Value::Empty))
                 });
 
                 Ok(result)
@@ -74,7 +74,7 @@ pub fn setup_dict_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassDe
         Visibility::Public,
         false,
         BuiltinFn(Arc::new(|_interp, args, span| {
-            if let (Some(Value::Dict(dict)), Some(Value::Text(key))) = (args.first(), args.get(1)) {
+            if let (Some(Value::Dict(dict)), Some(Value::Text(key))) = (CallArgListExt::first_value(&args), CallArgListExt::get_value(&args, 1)) {
                 Ok(Value::Boolean(dict.read(|i| i.contains_key(key))))
             } else {
                 Err(RuntimeError::TypeError(ErrorData::new(
@@ -91,7 +91,7 @@ pub fn setup_dict_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassDe
         Visibility::Public,
         false,
         BuiltinFn(Arc::new(|_interp, args, span| {
-            if let Some(Value::Dict(dict)) = args.first() {
+            if let Some(Value::Dict(dict)) = CallArgListExt::first_value(&args) {
                 let keys: Vec<Value> =
                     dict.read(|i| i.keys().map(|k| Value::Text(k.clone())).collect());
                 Ok(Value::List(SharedMut::new(keys)))
@@ -110,7 +110,7 @@ pub fn setup_dict_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassDe
         Visibility::Public,
         false,
         BuiltinFn(Arc::new(|_interp, args, span| {
-            if let Some(Value::Dict(dict)) = args.first() {
+            if let Some(Value::Dict(dict)) = CallArgListExt::first_value(&args) {
                 let values: Vec<Value> = dict.read(|i| i.values().cloned().collect());
                 Ok(Value::List(SharedMut::new(values)))
             } else {
@@ -128,7 +128,7 @@ pub fn setup_dict_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassDe
         Visibility::Public,
         false,
         BuiltinFn(Arc::new(|_interp, args, span| {
-            if let (Some(Value::Dict(dict)), Some(Value::Text(key))) = (args.first(), args.get(1)) {
+            if let (Some(Value::Dict(dict)), Some(Value::Text(key))) = (CallArgListExt::first_value(&args), CallArgListExt::get_value(&args, 1)) {
                 Ok(dict.write(|i| i.remove(key)).unwrap_or(Value::Empty))
             } else {
                 Err(RuntimeError::TypeError(ErrorData::new(
@@ -145,7 +145,7 @@ pub fn setup_dict_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassDe
         Visibility::Public,
         false,
         BuiltinFn(Arc::new(|_interp, args, span| {
-            if let Some(Value::Dict(dict)) = args.first() {
+            if let Some(Value::Dict(dict)) = CallArgListExt::first_value(&args) {
                 Ok(Value::Number(dict.read(|i| i.len() as i64)))
             } else {
                 Err(RuntimeError::TypeError(ErrorData::new(
@@ -172,11 +172,11 @@ pub fn setup_dict_func(interpreter: &mut Interpreter, interner: &SharedInterner)
 
             let mut dict = HashMap::new();
             for i in (0..arguments.len()).step_by(2) {
-                let key = match &arguments[i] {
+                let key = match &arguments[i].value {
                     Value::Text(s) => s.clone(),
                     v => v.to_string(),
                 };
-                let value = arguments[i + 1].clone();
+                let value = arguments[i + 1].value.clone();
                 dict.insert(key, value);
             }
 

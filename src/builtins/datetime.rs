@@ -1,5 +1,5 @@
 use crate::ast::prelude::{ClassDefinition, ErrorData, Span, Visibility};
-use crate::interpreter::prelude::{BuiltinFn, RuntimeError, SharedInterner, Value};
+use crate::interpreter::prelude::{BuiltinFn, CallArgListExt, CallArgValue, RuntimeError, SharedInterner, Value};
 use crate::shared::SharedMut;
 use chrono::{Datelike, Local, TimeZone, Timelike};
 use std::sync::Arc;
@@ -12,12 +12,12 @@ pub fn setup_datetime_class(interner_ref: &SharedInterner) -> (Symbol, SharedMut
     let ms_sym = interner_ref.write(|i| i.get_or_intern("_мс"));
 
     class_def.set_constructor(BuiltinFn(Arc::new(move |_interpreter, args, span| {
-        let instance = match args.first() {
+        let instance = match CallArgListExt::first_value(&args) {
             Some(Value::Object(inst)) => inst,
             _ => return Err(RuntimeError::TypeError(ErrorData::new(span, "Ошибка инициализации self".into()))),
         };
 
-        let ms = if let Some(val) = args.get(1) {
+        let ms = if let Some(val) = CallArgListExt::get_value(&args, 1) {
             val.as_i64().ok_or_else(|| RuntimeError::TypeError(ErrorData::new(span, "Аргумент должен быть числом".into())))?
         } else {
             Local::now().timestamp_millis()
@@ -29,8 +29,8 @@ pub fn setup_datetime_class(interner_ref: &SharedInterner) -> (Symbol, SharedMut
     })));
 
     // --- Вспомогательная функция: извлечь мс из self ---
-    let get_ms = move |args: &Vec<Value>| -> Result<i64, RuntimeError> {
-        if let Some(Value::Object(inst)) = args.first() {
+    let get_ms = move |args: &Vec<CallArgValue>| -> Result<i64, RuntimeError> {
+        if let Some(Value::Object(inst)) = CallArgListExt::first_value(args) {
             inst.read(|i| {
                 i.field_values
                     .get(&ms_sym)
@@ -94,14 +94,14 @@ pub fn setup_datetime_class(interner_ref: &SharedInterner) -> (Symbol, SharedMut
             false,
             BuiltinFn(Arc::new(move |_, args, _span| {
                 let current_ms = get_ms(&args)?;
-                let val = args.get(1).and_then(|v| v.as_i64()).unwrap_or(0);
+                let val = CallArgListExt::get_value(&args, 1).and_then(|v| v.as_i64()).unwrap_or(0);
 
                 let new_ms = current_ms + (val * ms_unit);
 
-                if let Some(Value::Object(inst)) = args.first() {
+                if let Some(Value::Object(inst)) = CallArgListExt::first_value(&args) {
                     inst.write(|i| i.field_values.insert(ms_sym, Value::Number(new_ms)));
                 }
-                Ok(args[0].clone())
+                Ok(args[0].value.clone())
             })),
         );
 
@@ -113,14 +113,14 @@ pub fn setup_datetime_class(interner_ref: &SharedInterner) -> (Symbol, SharedMut
             false,
             BuiltinFn(Arc::new(move |_, args, _span| {
                 let current_ms = get_ms(&args)?;
-                let val = args.get(1).and_then(|v| v.as_i64()).unwrap_or(0);
+                let val = CallArgListExt::get_value(&args, 1).and_then(|v| v.as_i64()).unwrap_or(0);
 
                 let new_ms = current_ms - (val * ms_unit);
 
-                if let Some(Value::Object(inst)) = args.first() {
+                if let Some(Value::Object(inst)) = CallArgListExt::first_value(&args) {
                     inst.write(|i| i.field_values.insert(ms_sym, Value::Number(new_ms)));
                 }
-                Ok(args[0].clone())
+                Ok(args[0].value.clone())
             })),
         );
     }
@@ -133,7 +133,7 @@ pub fn setup_datetime_class(interner_ref: &SharedInterner) -> (Symbol, SharedMut
         BuiltinFn(Arc::new(move |_, args, _| {
             let now = Local::now();
 
-            let pattern = match args.get(1) {
+            let pattern = match CallArgListExt::get_value(&args, 1) {
                 Some(Value::Text(t)) => t.as_str(),
                 _ => "%d.%m.%Y %H:%M:%S",
             };
@@ -151,8 +151,7 @@ pub fn setup_datetime_class(interner_ref: &SharedInterner) -> (Symbol, SharedMut
         BuiltinFn(Arc::new(move |_, args, _| {
             let ms = get_ms(&args)?;
             let dt = Local.timestamp_millis_opt(ms).unwrap();
-            let pattern = args
-                .get(1)
+            let pattern = CallArgListExt::get_value(&args, 1)
                 .and_then(|v| v.as_str())
                 .map(|s| s.as_str())
                 .unwrap_or("%d.%m.%Y %H:%M:%S");

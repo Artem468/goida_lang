@@ -1,6 +1,6 @@
 use std::io::Write;
 use crate::ast::prelude::{ClassDefinition, ErrorData, Span, Visibility};
-use crate::interpreter::prelude::{BuiltinFn, RuntimeError, SharedInterner, Value};
+use crate::interpreter::prelude::{BuiltinFn, CallArgListExt, RuntimeError, SharedInterner, Value};
 use crate::shared::SharedMut;
 use std::sync::Arc;
 use string_interner::DefaultSymbol as Symbol;
@@ -15,7 +15,7 @@ pub fn setup_system_class(interner_ref: &SharedInterner) -> (Symbol, SharedMut<C
         Visibility::Public,
         true, // Делаем статическим, если ваш движок это поддерживает
         BuiltinFn(Arc::new(move |_, args, _| {
-            let code = match args.first() {
+            let code = match CallArgListExt::first_value(&args) {
                 Some(Value::Number(n)) => *n as i32,
                 _ => 0,
             };
@@ -29,7 +29,7 @@ pub fn setup_system_class(interner_ref: &SharedInterner) -> (Symbol, SharedMut<C
         Visibility::Public,
         true,
         BuiltinFn(Arc::new(move |_, args, span| {
-            let msg = args.get(1).map(|v| v.to_string()).unwrap_or_else(|| "Неизвестная ошибка".into());
+            let msg = CallArgListExt::get_value(&args, 1).map(|v| v.to_string()).unwrap_or_else(|| "Неизвестная ошибка".into());
             Err(RuntimeError::Panic(ErrorData::new(span, msg)))
         })),
     );
@@ -82,7 +82,7 @@ pub fn setup_system_class(interner_ref: &SharedInterner) -> (Symbol, SharedMut<C
         Visibility::Public,
         true,
         BuiltinFn(Arc::new(move |_, args, span| {
-            let ms = match args.get(1) {
+            let ms = match CallArgListExt::get_value(&args, 1) {
                 Some(Value::Number(n)) => *n,
                 _ => return Err(RuntimeError::TypeError(ErrorData::new(
                     span,

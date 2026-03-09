@@ -15,7 +15,7 @@ pub fn setup_bool_func(interpreter: &mut Interpreter, interner: &SharedInterner)
                     ),
                 )));
             }
-            let n: bool = arguments[0].clone().try_into()?;
+            let n: bool = arguments[0].value.clone().try_into()?;
             Ok(Value::Boolean(n))
         })),
     );

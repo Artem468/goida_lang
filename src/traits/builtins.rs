@@ -3,7 +3,7 @@ use std::fmt::Debug;
 use std::sync::Arc;
 use crate::ast::prelude::Span;
 use crate::ast::program::MethodType;
-use crate::interpreter::prelude::{BuiltinFn, Interpreter, RuntimeError, Value};
+use crate::interpreter::prelude::{BuiltinFn, CallArgValue, Interpreter, RuntimeError, Value};
 
 impl Debug for BuiltinFn {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -12,7 +12,7 @@ impl Debug for BuiltinFn {
 }
 
 impl std::ops::Deref for BuiltinFn {
-    type Target = dyn Fn(&Interpreter, Vec<Value>, Span) -> Result<Value, RuntimeError> + Send + Sync;
+    type Target = dyn Fn(&Interpreter, Vec<CallArgValue>, Span) -> Result<Value, RuntimeError> + Send + Sync;
     fn deref(&self) -> &Self::Target {
         &*self.0
     }

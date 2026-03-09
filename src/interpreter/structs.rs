@@ -36,9 +36,34 @@ pub struct CallArgValue {
     pub value: Value,
 }
 
+pub trait CallArgListExt {
+    fn first_value(&self) -> Option<&Value>;
+    fn get_value(&self, index: usize) -> Option<&Value>;
+}
+
+impl CallArgListExt for [CallArgValue] {
+    fn first_value(&self) -> Option<&Value> {
+        self.first().map(|arg| &arg.value)
+    }
+
+    fn get_value(&self, index: usize) -> Option<&Value> {
+        self.get(index).map(|arg| &arg.value)
+    }
+}
+
+impl CallArgListExt for Vec<CallArgValue> {
+    fn first_value(&self) -> Option<&Value> {
+        self.as_slice().first_value()
+    }
+
+    fn get_value(&self, index: usize) -> Option<&Value> {
+        self.as_slice().get_value(index)
+    }
+}
+
 #[derive(Clone)]
 pub struct BuiltinFn(
-    pub Arc<dyn Fn(&Interpreter, Vec<Value>, Span) -> Result<Value, RuntimeError> + Send + Sync>,
+    pub Arc<dyn Fn(&Interpreter, Vec<CallArgValue>, Span) -> Result<Value, RuntimeError> + Send + Sync>,
 );
 
 #[derive(Debug)]
