@@ -300,7 +300,7 @@ impl ParserTrait {
         pair: pest::iterators::Pair<Rule>,
     ) -> Result<ClassMethod, ParseError> {
         let constructor_span: Span = (pair.as_span(), self.module.name).into();
-        let mut inner = pair.into_inner();
+        let inner = pair.into_inner();
         let mut visibility = Visibility::Private;
         let mut is_static = false;
         let mut method_name = String::new();

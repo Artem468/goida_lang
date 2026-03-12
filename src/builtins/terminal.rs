@@ -1,6 +1,6 @@
 use crate::ast::prelude::{ClassDefinition, Span, Visibility};
 use crate::ast::program::FieldData;
-use crate::interpreter::prelude::{BuiltinFn, SharedInterner, Value};
+use crate::interpreter::prelude::{BuiltinFn, CallArgListExt, SharedInterner, Value};
 use crate::shared::SharedMut;
 use std::io::{stdin, stdout, Write};
 use std::sync::Arc;
@@ -95,7 +95,7 @@ pub fn setup_terminal_class(interner_ref: &SharedInterner) -> (Symbol, SharedMut
         Visibility::Public,
         true,
         BuiltinFn(Arc::new(move |_, args, _| {
-            let title = args.get(1).map(|v| v.to_string()).unwrap_or_default();
+            let title = CallArgListExt::get_value(&args, 1).map(|v| v.to_string()).unwrap_or_default();
             print!("\x1b]0;{}\x07", title);
             let _ = stdout().flush();
             Ok(Value::Empty)
@@ -132,8 +132,8 @@ pub fn setup_terminal_class(interner_ref: &SharedInterner) -> (Symbol, SharedMut
         Visibility::Public,
         true,
         BuiltinFn(Arc::new(move |_, args, _span| {
-            let x = args.get(1).and_then(|v| v.as_i64()).unwrap_or(1);
-            let y = args.get(2).and_then(|v| v.as_i64()).unwrap_or(1);
+            let x = CallArgListExt::get_value(&args, 1).and_then(|v| v.as_i64()).unwrap_or(1);
+            let y = CallArgListExt::get_value(&args, 2).and_then(|v| v.as_i64()).unwrap_or(1);
             // ANSI: \x1b[Y;XH (отсчет с 1)
             print!("\x1b[{};{}H", y, x);
             let _ = stdout().flush();
@@ -147,7 +147,7 @@ pub fn setup_terminal_class(interner_ref: &SharedInterner) -> (Symbol, SharedMut
         Visibility::Public,
         true,
         BuiltinFn(Arc::new(move |_, args, _| {
-            let msg = args.get(1)
+            let msg = CallArgListExt::get_value(&args, 1)
                 .and_then(|v| v.as_str())
                 .map(|s| s.as_str())
                 .unwrap_or("Нажмите Enter, чтобы продолжить...");

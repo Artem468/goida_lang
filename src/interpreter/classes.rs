@@ -48,10 +48,12 @@ impl InterpreterClasses for Interpreter {
             }
 
             MethodType::Native(builtin) => {
-                let mut final_args = vec![this_obj];
-                let positional =
-                    self.collect_positional_args(arguments, span, "нативного метода")?;
-                final_args.extend(positional);
+                let mut final_args = Vec::with_capacity(arguments.len() + 1);
+                final_args.push(CallArgValue {
+                    name: None,
+                    value: this_obj,
+                });
+                final_args.extend(arguments);
                 builtin(self, final_args, span)
             }
         }

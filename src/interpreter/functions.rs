@@ -46,9 +46,7 @@ impl InterpreterFunctions for Interpreter {
                     return self.call_function(func_clone, arguments, current_module_id, span);
                 }
                 Value::Builtin(builtin) => {
-                    let positional =
-                        self.collect_positional_args(arguments, span, "встроенной функции")?;
-                    return builtin(self, positional, span);
+                    return builtin(self, arguments, span);
                 }
                 _ => {}
             }
@@ -99,9 +97,7 @@ impl InterpreterFunctions for Interpreter {
         }
 
         if let Some(builtin_fn) = self.builtins.get(&name) {
-            let positional =
-                self.collect_positional_args(arguments, span, "встроенной функции")?;
-            return builtin_fn(self, positional, span);
+            return builtin_fn(self, arguments, span);
         }
 
         Err(RuntimeError::UndefinedFunction(ErrorData::new(
@@ -214,21 +210,5 @@ impl Interpreter {
             .into_iter()
             .map(|val| val.expect("argument binding should be complete"))
             .collect())
-    }
-
-    pub(crate) fn collect_positional_args(
-        &self,
-        arguments: Vec<CallArgValue>,
-        span: Span,
-        kind_label: &str,
-    ) -> Result<Vec<Value>, RuntimeError> {
-        if arguments.iter().any(|arg| arg.name.is_some()) {
-            return Err(RuntimeError::InvalidOperation(ErrorData::new(
-                span,
-                format!("Именованные аргументы не поддерживаются для {}", kind_label),
-            )));
-        }
-
-        Ok(arguments.into_iter().map(|arg| arg.value).collect())
     }
 }

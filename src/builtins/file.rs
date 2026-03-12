@@ -1,6 +1,6 @@
 use crate::ast::prelude::{ClassDefinition, ErrorData, Span, Visibility};
 use crate::ast::program::MethodType;
-use crate::interpreter::prelude::{BuiltinFn, RuntimeError, SharedInterner, Value};
+use crate::interpreter::prelude::{BuiltinFn, CallArgListExt, CallArgValue, RuntimeError, SharedInterner, Value};
 use crate::shared::SharedMut;
 use std::fs;
 use std::io::Write;
@@ -14,7 +14,7 @@ pub fn setup_file_class(interner_ref: &SharedInterner) -> (Symbol, SharedMut<Cla
     let mut class_def = ClassDefinition::new(name, Span::default());
 
     class_def.set_constructor(BuiltinFn(Arc::new(|interp, args, span| {
-        if let (Some(Value::Object(instance)), Some(Value::Text(path))) = (args.first(), args.get(1))
+        if let (Some(Value::Object(instance)), Some(Value::Text(path))) = (CallArgListExt::first_value(&args), CallArgListExt::get_value(&args, 1))
         {
             let path_sym = interp.interner.write(|i| i.get_or_intern("путь"));
             instance.write(|i| i.field_values.insert(path_sym, Value::Text(path.clone())));
@@ -27,8 +27,8 @@ pub fn setup_file_class(interner_ref: &SharedInterner) -> (Symbol, SharedMut<Cla
         }
     })));
 
-    let get_path = |args: &Vec<Value>| -> Result<String, RuntimeError> {
-        if let Some(Value::Object(instance)) = args.first() {
+    let get_path = |args: &Vec<CallArgValue>| -> Result<String, RuntimeError> {
+        if let Some(Value::Object(instance)) = CallArgListExt::first_value(args) {
             return instance.read(|i| {
                 for val in i.field_values.values() {
                     if let Value::Text(p) = val {
@@ -79,7 +79,7 @@ pub fn setup_file_class(interner_ref: &SharedInterner) -> (Symbol, SharedMut<Cla
         false,
         BuiltinFn(Arc::new(move |_, args, span| {
             let path = get_path(&args)?;
-            let text = if let Some(t) = args.get(1) {
+            let text = if let Some(t) = CallArgListExt::get_value(&args, 1) {
                 t.to_string()
             } else {
                 "".into()
@@ -103,7 +103,7 @@ pub fn setup_file_class(interner_ref: &SharedInterner) -> (Symbol, SharedMut<Cla
         false,
         MethodType::Native(Arc::from(BuiltinFn(Arc::new(move |_, args, span| {
             let path = get_path(&args)?;
-            let text = if let Some(t) = args.get(1) {
+            let text = if let Some(t) = CallArgListExt::get_value(&args, 1) {
                 t.to_string()
             } else {
                 "".into()

@@ -1,6 +1,6 @@
 use crate::ast::prelude::{ClassDefinition, ErrorData, Span, Visibility};
 use crate::builtins::response::build_response_object;
-use crate::interpreter::prelude::{BuiltinFn, RuntimeError, SharedInterner, Value};
+use crate::interpreter::prelude::{BuiltinFn, CallArgListExt, RuntimeError, SharedInterner, Value};
 use crate::shared::SharedMut;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -18,8 +18,8 @@ pub fn setup_request_class(interner_ref: &SharedInterner) -> (Symbol, SharedMut<
     let mut class_def = ClassDefinition::new(name_sym, Span::default());
 
     class_def.set_constructor(BuiltinFn(Arc::new(move |_interp, args, span| {
-        let inst = args.first().unwrap().as_object(span)?;
-        let url = args.get(1)
+        let inst = CallArgListExt::first_value(&args).unwrap().as_object(span)?;
+        let url = CallArgListExt::get_value(&args, 1)
             .and_then(|v| v.as_str())
             .ok_or_else(|| RuntimeError::TypeError(ErrorData::new(span, "Ожидалась строка".into())))?;
 
@@ -38,14 +38,14 @@ pub fn setup_request_class(interner_ref: &SharedInterner) -> (Symbol, SharedMut<
         Visibility::Public,
         false,
         BuiltinFn(Arc::new(move |_, args, span| {
-            let inst = args.first().unwrap().as_object(span)?;
-            let m = args.get(1)
+            let inst = CallArgListExt::first_value(&args).unwrap().as_object(span)?;
+            let m = CallArgListExt::get_value(&args, 1)
                 .and_then(|v| v.as_str())
                 .ok_or_else(|| RuntimeError::TypeError(ErrorData::new(span, "Ожидалась строка".into())))?;
 
             // Исправлено: записываем в поле 'метод', а не в имя класса
             inst.write(|i| i.field_values.insert(method_sym, Value::Text(m.clone())));
-            Ok(args[0].clone())
+            Ok(args[0].value.clone())
         })),
     );
 
@@ -55,11 +55,11 @@ pub fn setup_request_class(interner_ref: &SharedInterner) -> (Symbol, SharedMut<
         Visibility::Public,
         false,
         BuiltinFn(Arc::new(move |_interp, args, span| {
-            let inst = args.first().unwrap().as_object(span)?;
-            let key = args.get(1)
+            let inst = CallArgListExt::first_value(&args).unwrap().as_object(span)?;
+            let key = CallArgListExt::get_value(&args, 1)
                 .and_then(|v| v.as_str())
                 .ok_or_else(|| RuntimeError::TypeError(ErrorData::new(span, "Ожидалась строка ключа".into())))?;
-            let val = args.get(2).unwrap().clone();
+            let val = CallArgListExt::get_value(&args, 2).unwrap().clone();
 
             let headers_val = inst.read(|i| i.field_values.get(&headers_sym).cloned())
                 .ok_or_else(|| RuntimeError::Panic(ErrorData::new(span, "Поле заголовков не инициализировано".into())))?;
@@ -67,7 +67,7 @@ pub fn setup_request_class(interner_ref: &SharedInterner) -> (Symbol, SharedMut<
             if let Value::Dict(d) = headers_val {
                 d.write(|map| map.insert(key.clone(), val));
             }
-            Ok(args[0].clone())
+            Ok(args[0].value.clone())
         })),
     );
 
@@ -77,7 +77,7 @@ pub fn setup_request_class(interner_ref: &SharedInterner) -> (Symbol, SharedMut<
         Visibility::Public,
         false,
         BuiltinFn(Arc::new(move |interp, args, span| {
-            let inst = args.first().unwrap().as_object(span)?;
+            let inst = CallArgListExt::first_value(&args).unwrap().as_object(span)?;
 
             // Извлекаем данные, используя захваченные символы
             let (url, method, headers, body) = inst.read(|i| {
