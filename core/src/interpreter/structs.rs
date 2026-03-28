@@ -93,10 +93,10 @@ pub type SharedInterner = SharedMut<StringInterner<StringBackend>>;
 pub struct Interpreter {
     pub(crate) std_classes: HashMap<Symbol, SharedMut<ClassDefinition>>,
     pub(crate) builtins: HashMap<Symbol, BuiltinFn>,
-    pub(crate) modules: HashMap<Symbol, Module>,
-    pub(crate) interner: SharedInterner,
+    pub modules: HashMap<Symbol, Module>,
+    pub interner: SharedInterner,
     pub(crate) environment: SharedMut<Environment>,
-    pub(crate) source_manager: SourceManager,
+    pub source_manager: SourceManager,
 }
 
 #[derive(Clone, Debug)]

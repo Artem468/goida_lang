@@ -49,7 +49,7 @@ impl From<Span> for Range<usize> {
 }
 
 impl Span {
-    pub(crate) fn as_ariadne(&self, code: &str) -> Range<usize> {
+    pub fn as_ariadne(&self, code: &str) -> Range<usize> {
         let start = self.start as usize;
         let end = self.end as usize;
 

@@ -1,0 +1,46 @@
+{
+    "name": "goida-vscode",
+    "displayName": "Goida Language Support",
+    "version": "0.0.1",
+    "engines": {
+        "vscode": "^1.75.0"
+    },
+    "activationEvents": [
+        "onLanguage:goida"
+    ],
+    "main": "./out/extension.js",
+    "scripts": {
+        "vscode:prepublish": "npm run compile",
+        "compile": "tsc -p ./",
+        "watch": "tsc -watch -p ./",
+        "pretest": "npm run compile && npm run lint",
+        "lint": "eslint src --ext ts",
+        "test": "node ./out/test/runTest.js"
+    },
+    "dependencies": {
+        "vscode-languageclient": "^9.0.1"
+    },
+    "contributes": {
+        "languages": [
+            {
+                "id": "goida",
+                "extensions": [
+                    ".goida"
+                ],
+                "configuration": "./language-configuration.json"
+            }
+        ],
+        "grammars": [
+            {
+                "language": "goida",
+                "scopeName": "source.goida",
+                "path": "./syntaxes/goida.tmLanguage.json"
+            }
+        ]
+    },
+    "devDependencies": {
+        "@types/node": "^25.5.0",
+        "@types/vscode": "^1.110.0",
+        "typescript": "^6.0.2"
+    }
+}

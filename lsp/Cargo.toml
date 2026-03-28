@@ -1,0 +1,10 @@
+[package]
+name = "lsp"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+goida_core = { path = "../core" }
+tower-lsp = "0.20"
+tokio = { version = "1.0", features = ["full"] }
+string-interner = "0.19.0"
