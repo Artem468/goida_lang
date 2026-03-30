@@ -3,18 +3,19 @@ use crate::interpreter::prelude::Interpreter;
 mod array;
 mod bool;
 mod common;
+mod datetime;
 mod dict;
 mod file;
 mod float;
 mod io;
+mod json;
 mod list;
 mod number;
-mod text;
-mod system;
-mod terminal;
-mod datetime;
 mod request;
 mod response;
+mod system;
+mod terminal;
+mod text;
 
 impl Interpreter {
     pub fn define_builtins(&mut self) {
@@ -27,6 +28,7 @@ impl Interpreter {
         number::setup_number_func(self, &interner);
         float::setup_float_func(self, &interner);
         bool::setup_bool_func(self, &interner);
+        json::setup_json_funcs(self, &interner);
         io::setup_io_func(self, &interner);
         common::setup_type_func(self, &interner);
         common::setup_is_instance_func(self, &interner);

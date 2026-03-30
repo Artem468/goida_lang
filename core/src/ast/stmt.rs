@@ -47,5 +47,5 @@ pub enum StatementKind {
         property: Symbol,
         value: ExprId,
     },
-    Empty
+    Empty,
 }

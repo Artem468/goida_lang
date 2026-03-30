@@ -18,7 +18,9 @@ impl LanguageServer for Backend {
     async fn initialize(&self, _: InitializeParams) -> Result<InitializeResult> {
         Ok(InitializeResult {
             capabilities: ServerCapabilities {
-                text_document_sync: Some(TextDocumentSyncCapability::Kind(TextDocumentSyncKind::FULL)),
+                text_document_sync: Some(TextDocumentSyncCapability::Kind(
+                    TextDocumentSyncKind::FULL,
+                )),
                 ..Default::default()
             },
             ..Default::default()
@@ -26,7 +28,8 @@ impl LanguageServer for Backend {
     }
 
     async fn did_open(&self, params: DidOpenTextDocumentParams) {
-        self.validate(params.text_document.uri, params.text_document.text).await;
+        self.validate(params.text_document.uri, params.text_document.text)
+            .await;
     }
 
     async fn did_change(&self, params: DidChangeTextDocumentParams) {
@@ -35,7 +38,9 @@ impl LanguageServer for Backend {
         }
     }
 
-    async fn shutdown(&self) -> Result<()> { Ok(()) }
+    async fn shutdown(&self) -> Result<()> {
+        Ok(())
+    }
 }
 
 impl Backend {
@@ -45,24 +50,23 @@ impl Backend {
 
         let intp = self.interpreter.read().await;
 
-        let parser = Parser::new(
-            intp.interner.clone(),
-            filename,
-            path_buf.clone()
-        );
+        let parser = Parser::new(intp.interner.clone(), filename, path_buf.clone());
 
         let mut diagnostics = Vec::new();
 
         if let Err(err) = parser.parse(&text) {
             let (msg, err_data) = match err {
-                ParseError::UnexpectedToken(e) => ("Неожиданный токен", e),
                 ParseError::TypeError(e) => ("Ошибка типов", e),
                 ParseError::InvalidSyntax(e) => ("Ошибка синтаксиса", e),
             };
 
             let span = err_data.location.as_ariadne(text.as_ref());
-            let (sl, sc) = intp.source_manager.get_line_col_from_char_offset(text.as_ref(), span.start);
-            let (el, ec) = intp.source_manager.get_line_col_from_char_offset(text.as_ref(), span.end);
+            let (sl, sc) = intp
+                .source_manager
+                .get_line_col_from_char_offset(text.as_ref(), span.start);
+            let (el, ec) = intp
+                .source_manager
+                .get_line_col_from_char_offset(text.as_ref(), span.end);
 
             let range = Range::new(
                 Position::new(sl as u32, sc as u32),
@@ -78,7 +82,9 @@ impl Backend {
             });
         }
 
-        self.client.publish_diagnostics(uri, diagnostics, None).await;
+        self.client
+            .publish_diagnostics(uri, diagnostics, None)
+            .await;
     }
 }
 
@@ -90,6 +96,9 @@ async fn main() {
     let interner = SharedInterner::new(StringInterner::new());
     let interpreter = Arc::new(RwLock::new(Interpreter::new(interner)));
 
-    let (service, socket) = LspService::new(|client| Backend { client, interpreter });
+    let (service, socket) = LspService::new(|client| Backend {
+        client,
+        interpreter,
+    });
     Server::new(stdin, stdout, socket).serve(service).await;
 }

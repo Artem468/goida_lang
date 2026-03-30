@@ -1,7 +1,9 @@
-﻿use crate::ast::prelude::{ErrorData, FunctionDefinition, Span};
+use crate::ast::prelude::{ErrorData, FunctionDefinition, Span};
 use crate::interpreter::structs::{CallArgValue, Environment, Interpreter, RuntimeError, Value};
 use crate::shared::SharedMut;
-use crate::traits::prelude::{CoreOperations, ExpressionEvaluator, InterpreterFunctions, StatementExecutor};
+use crate::traits::prelude::{
+    CoreOperations, ExpressionEvaluator, InterpreterFunctions, StatementExecutor,
+};
 use string_interner::DefaultSymbol as Symbol;
 
 impl InterpreterFunctions for Interpreter {
@@ -55,10 +57,7 @@ impl InterpreterFunctions for Interpreter {
         let name_str = self.resolve_symbol(name).unwrap();
 
         let current_module = self.modules.get(&current_module_id).ok_or_else(|| {
-            RuntimeError::InvalidOperation(ErrorData::new(
-                span,
-                "Текущий модуль не найден".into(),
-            ))
+            RuntimeError::InvalidOperation(ErrorData::new(span, "Текущий модуль не найден".into()))
         })?;
 
         if let Some(dot_index) = name_str.find('.') {
@@ -115,7 +114,9 @@ impl Interpreter {
         span: Span,
         kind_label: &str,
     ) -> Result<Vec<Value>, RuntimeError> {
-        let function_name = self.modules.get(&current_module_id)
+        let function_name = self
+            .modules
+            .get(&current_module_id)
             .and_then(|m| m.arena.resolve_symbol(&self.interner, function.name))
             .unwrap_or_else(|| "неизвестно".to_string());
 

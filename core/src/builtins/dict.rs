@@ -1,5 +1,7 @@
 use crate::ast::prelude::{ClassDefinition, ErrorData, Span, Visibility};
-use crate::interpreter::prelude::{BuiltinFn, CallArgListExt, Interpreter, RuntimeError, SharedInterner, Value};
+use crate::interpreter::prelude::{
+    BuiltinFn, CallArgListExt, Interpreter, RuntimeError, SharedInterner, Value,
+};
 use crate::shared::SharedMut;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -31,9 +33,11 @@ pub fn setup_dict_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassDe
         Visibility::Public,
         false,
         BuiltinFn(Arc::new(|_interp, args, span| {
-            if let (Some(Value::Dict(dict)), Some(Value::Text(key)), Some(val)) =
-                (CallArgListExt::first_value(&args), CallArgListExt::get_value(&args, 1), CallArgListExt::get_value(&args, 2))
-            {
+            if let (Some(Value::Dict(dict)), Some(Value::Text(key)), Some(val)) = (
+                CallArgListExt::first_value(&args),
+                CallArgListExt::get_value(&args, 1),
+                CallArgListExt::get_value(&args, 2),
+            ) {
                 dict.write(|i| i.insert(key.clone(), val.clone()));
                 Ok(Value::Empty)
             } else {
@@ -51,11 +55,18 @@ pub fn setup_dict_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassDe
         Visibility::Public,
         false,
         BuiltinFn(Arc::new(|_interp, args, span| {
-            if let (Some(Value::Dict(dict)), Some(Value::Text(key))) = (CallArgListExt::first_value(&args), CallArgListExt::get_value(&args, 1)) {
+            if let (Some(Value::Dict(dict)), Some(Value::Text(key))) = (
+                CallArgListExt::first_value(&args),
+                CallArgListExt::get_value(&args, 1),
+            ) {
                 let result = dict.read(|d| {
                     d.get(key)
                         .cloned() // Клонируем значение из словаря
-                        .unwrap_or_else(|| CallArgListExt::get_value(&args, 2).cloned().unwrap_or(Value::Empty))
+                        .unwrap_or_else(|| {
+                            CallArgListExt::get_value(&args, 2)
+                                .cloned()
+                                .unwrap_or(Value::Empty)
+                        })
                 });
 
                 Ok(result)
@@ -74,7 +85,10 @@ pub fn setup_dict_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassDe
         Visibility::Public,
         false,
         BuiltinFn(Arc::new(|_interp, args, span| {
-            if let (Some(Value::Dict(dict)), Some(Value::Text(key))) = (CallArgListExt::first_value(&args), CallArgListExt::get_value(&args, 1)) {
+            if let (Some(Value::Dict(dict)), Some(Value::Text(key))) = (
+                CallArgListExt::first_value(&args),
+                CallArgListExt::get_value(&args, 1),
+            ) {
                 Ok(Value::Boolean(dict.read(|i| i.contains_key(key))))
             } else {
                 Err(RuntimeError::TypeError(ErrorData::new(
@@ -128,7 +142,10 @@ pub fn setup_dict_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassDe
         Visibility::Public,
         false,
         BuiltinFn(Arc::new(|_interp, args, span| {
-            if let (Some(Value::Dict(dict)), Some(Value::Text(key))) = (CallArgListExt::first_value(&args), CallArgListExt::get_value(&args, 1)) {
+            if let (Some(Value::Dict(dict)), Some(Value::Text(key))) = (
+                CallArgListExt::first_value(&args),
+                CallArgListExt::get_value(&args, 1),
+            ) {
                 Ok(dict.write(|i| i.remove(key)).unwrap_or(Value::Empty))
             } else {
                 Err(RuntimeError::TypeError(ErrorData::new(
@@ -166,7 +183,8 @@ pub fn setup_dict_func(interpreter: &mut Interpreter, interner: &SharedInterner)
             if arguments.len() % 2 != 0 {
                 return Err(RuntimeError::InvalidOperation(ErrorData::new(
                     span,
-                    "Функция 'словарь' ожидает четное количество аргументов (пары ключ-значение)".to_string()
+                    "Функция 'словарь' ожидает четное количество аргументов (пары ключ-значение)"
+                        .to_string(),
                 )));
             }
 

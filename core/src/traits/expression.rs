@@ -1,7 +1,7 @@
-use string_interner::DefaultSymbol;
 use crate::ast::prelude::{ExprId, ExpressionKind, LiteralValue};
 use crate::ast::program::FieldData;
 use crate::interpreter::prelude::{RuntimeError, Value};
+use string_interner::DefaultSymbol;
 
 pub trait ExpressionEvaluator {
     fn evaluate_expression(

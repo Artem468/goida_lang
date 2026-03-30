@@ -130,35 +130,31 @@ impl fmt::Display for Value {
             Value::Float(n) => write!(f, "{}", n),
             Value::Text(s) => write!(f, "{}", s),
             Value::Boolean(b) => write!(f, "{}", if *b { "истина" } else { "ложь" }),
-            Value::Object(obj) => {
-                INTERNER.read(|i| {
-                    let cls_name = i.resolve(obj.read(|o| o.class_name)).unwrap_or("неизвестно");
-                    write!(f, "<Объект \"{}\" {:p}>", cls_name, obj)
-                })
-            }
-            Value::Class(cls) => {
-                INTERNER.read(|i| {
-                    let cls_name = i.resolve(cls.read(|c| c.name)).unwrap_or("неизвестно");
-                    write!(f, "<Класс \"{}\" {:p}>", cls_name, cls)
-                })
-            }
-            Value::Function(func) => {
-                INTERNER.read(|i| {
-                    let fun_name = i.resolve(func.as_ref().name).unwrap_or("неизвестно");
-                    write!(f, "<Функция {} {:p}>", fun_name, func)
-                })
-            }
+            Value::Object(obj) => INTERNER.read(|i| {
+                let cls_name = i
+                    .resolve(obj.read(|o| o.class_name))
+                    .unwrap_or("неизвестно");
+                write!(f, "<Объект \"{}\" {:p}>", cls_name, obj)
+            }),
+            Value::Class(cls) => INTERNER.read(|i| {
+                let cls_name = i.resolve(cls.read(|c| c.name)).unwrap_or("неизвестно");
+                write!(f, "<Класс \"{}\" {:p}>", cls_name, cls)
+            }),
+            Value::Function(func) => INTERNER.read(|i| {
+                let fun_name = i.resolve(func.as_ref().name).unwrap_or("неизвестно");
+                write!(f, "<Функция {} {:p}>", fun_name, func)
+            }),
             Value::Builtin(func) => write!(f, "<Встроенная функция {:p}>", func),
-            Value::Module(module) => {
-                INTERNER.read(|i| {
-                    let module_name = i.resolve(*module).unwrap_or("неизвестно");
-                    write!(f, "<Модуль {}>", module_name)
-                })
-            }
+            Value::Module(module) => INTERNER.read(|i| {
+                let module_name = i.resolve(*module).unwrap_or("неизвестно");
+                write!(f, "<Модуль {}>", module_name)
+            }),
             Value::List(list) => list.read(|items| {
                 write!(f, "[")?;
                 for (i, item) in items.iter().enumerate() {
-                    if i > 0 { write!(f, ", ")?; }
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
                     write!(f, "{}", item)?;
                 }
                 write!(f, "]")
@@ -166,7 +162,9 @@ impl fmt::Display for Value {
             Value::Array(array) => {
                 write!(f, "[")?;
                 for (i, item) in array.iter().enumerate() {
-                    if i > 0 { write!(f, ", ")?; }
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
                     write!(f, "{}", item)?;
                 }
                 write!(f, "]")
@@ -176,7 +174,9 @@ impl fmt::Display for Value {
                 pairs.sort_by_key(|(k, _)| *k);
                 write!(f, "{{")?;
                 for (i, (k, v)) in pairs.iter().enumerate() {
-                    if i > 0 { write!(f, ", ")?; }
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
                     write!(f, "\"{}\": {}", k, v)?;
                 }
                 write!(f, "}}")
@@ -186,7 +186,6 @@ impl fmt::Display for Value {
         }
     }
 }
-
 
 impl TryFrom<Value> for f64 {
     type Error = String;

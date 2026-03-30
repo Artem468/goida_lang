@@ -1,5 +1,7 @@
 use crate::ast::prelude::{ClassDefinition, ErrorData, Span, Visibility};
-use crate::interpreter::prelude::{BuiltinFn, CallArgListExt, CallArgValue, RuntimeError, SharedInterner, Value};
+use crate::interpreter::prelude::{
+    BuiltinFn, CallArgListExt, CallArgValue, RuntimeError, SharedInterner, Value,
+};
 use crate::shared::SharedMut;
 use chrono::{Datelike, Local, TimeZone, Timelike};
 use std::sync::Arc;
@@ -14,11 +16,18 @@ pub fn setup_datetime_class(interner_ref: &SharedInterner) -> (Symbol, SharedMut
     class_def.set_constructor(BuiltinFn(Arc::new(move |_interpreter, args, span| {
         let instance = match CallArgListExt::first_value(&args) {
             Some(Value::Object(inst)) => inst,
-            _ => return Err(RuntimeError::TypeError(ErrorData::new(span, "Ошибка инициализации self".into()))),
+            _ => {
+                return Err(RuntimeError::TypeError(ErrorData::new(
+                    span,
+                    "Ошибка инициализации self".into(),
+                )))
+            }
         };
 
         let ms = if let Some(val) = CallArgListExt::get_value(&args, 1) {
-            val.as_i64().ok_or_else(|| RuntimeError::TypeError(ErrorData::new(span, "Аргумент должен быть числом".into())))?
+            val.as_i64().ok_or_else(|| {
+                RuntimeError::TypeError(ErrorData::new(span, "Аргумент должен быть числом".into()))
+            })?
         } else {
             Local::now().timestamp_millis()
         };
@@ -94,7 +103,9 @@ pub fn setup_datetime_class(interner_ref: &SharedInterner) -> (Symbol, SharedMut
             false,
             BuiltinFn(Arc::new(move |_, args, _span| {
                 let current_ms = get_ms(&args)?;
-                let val = CallArgListExt::get_value(&args, 1).and_then(|v| v.as_i64()).unwrap_or(0);
+                let val = CallArgListExt::get_value(&args, 1)
+                    .and_then(|v| v.as_i64())
+                    .unwrap_or(0);
 
                 let new_ms = current_ms + (val * ms_unit);
 
@@ -113,7 +124,9 @@ pub fn setup_datetime_class(interner_ref: &SharedInterner) -> (Symbol, SharedMut
             false,
             BuiltinFn(Arc::new(move |_, args, _span| {
                 let current_ms = get_ms(&args)?;
-                let val = CallArgListExt::get_value(&args, 1).and_then(|v| v.as_i64()).unwrap_or(0);
+                let val = CallArgListExt::get_value(&args, 1)
+                    .and_then(|v| v.as_i64())
+                    .unwrap_or(0);
 
                 let new_ms = current_ms - (val * ms_unit);
 

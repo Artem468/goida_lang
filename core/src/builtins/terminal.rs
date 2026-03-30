@@ -21,7 +21,6 @@ pub fn setup_terminal_class(interner_ref: &SharedInterner) -> (Symbol, SharedMut
         ("инверсия", "\x1b[7m"),
         ("скрытый", "\x1b[8m"),
         ("зачеркнутый", "\x1b[9m"),
-
         // --- Цвета текста (Стандартные) ---
         ("черный", "\x1b[30m"),
         ("красный", "\x1b[31m"),
@@ -31,7 +30,6 @@ pub fn setup_terminal_class(interner_ref: &SharedInterner) -> (Symbol, SharedMut
         ("пурпурный", "\x1b[35m"),
         ("циан", "\x1b[36m"),
         ("белый", "\x1b[37m"),
-
         // --- Цвета текста (Яркие) ---
         ("серый", "\x1b[90m"),
         ("ярко_красный", "\x1b[91m"),
@@ -41,7 +39,6 @@ pub fn setup_terminal_class(interner_ref: &SharedInterner) -> (Symbol, SharedMut
         ("ярко_пурпурный", "\x1b[95m"),
         ("ярко_циан", "\x1b[96m"),
         ("ярко_белый", "\x1b[97m"),
-
         // --- Цвета фона (Стандартные) ---
         ("фон_черный", "\x1b[40m"),
         ("фон_красный", "\x1b[41m"),
@@ -51,7 +48,6 @@ pub fn setup_terminal_class(interner_ref: &SharedInterner) -> (Symbol, SharedMut
         ("фон_пурпурный", "\x1b[45m"),
         ("фон_циан", "\x1b[46m"),
         ("фон_белый", "\x1b[47m"),
-
         // --- Цвета фона (Яркие) ---
         ("фон_серый", "\x1b[100m"),
         ("фон_ярко_красный", "\x1b[101m"),
@@ -71,8 +67,8 @@ pub fn setup_terminal_class(interner_ref: &SharedInterner) -> (Symbol, SharedMut
             (
                 Visibility::Public,
                 true,
-                FieldData::Value(SharedMut::new(Value::Text(code.to_string())))
-            )
+                FieldData::Value(SharedMut::new(Value::Text(code.to_string()))),
+            ),
         );
     }
 
@@ -95,7 +91,9 @@ pub fn setup_terminal_class(interner_ref: &SharedInterner) -> (Symbol, SharedMut
         Visibility::Public,
         true,
         BuiltinFn(Arc::new(move |_, args, _| {
-            let title = CallArgListExt::get_value(&args, 1).map(|v| v.to_string()).unwrap_or_default();
+            let title = CallArgListExt::get_value(&args, 1)
+                .map(|v| v.to_string())
+                .unwrap_or_default();
             print!("\x1b]0;{}\x07", title);
             let _ = stdout().flush();
             Ok(Value::Empty)
@@ -132,13 +130,17 @@ pub fn setup_terminal_class(interner_ref: &SharedInterner) -> (Symbol, SharedMut
         Visibility::Public,
         true,
         BuiltinFn(Arc::new(move |_, args, _span| {
-            let x = CallArgListExt::get_value(&args, 1).and_then(|v| v.as_i64()).unwrap_or(1);
-            let y = CallArgListExt::get_value(&args, 2).and_then(|v| v.as_i64()).unwrap_or(1);
+            let x = CallArgListExt::get_value(&args, 1)
+                .and_then(|v| v.as_i64())
+                .unwrap_or(1);
+            let y = CallArgListExt::get_value(&args, 2)
+                .and_then(|v| v.as_i64())
+                .unwrap_or(1);
             // ANSI: \x1b[Y;XH (отсчет с 1)
             print!("\x1b[{};{}H", y, x);
             let _ = stdout().flush();
             Ok(Value::Empty)
-        }))
+        })),
     );
 
     // --- Терминал.пауза(сообщение) ---
@@ -159,7 +161,7 @@ pub fn setup_terminal_class(interner_ref: &SharedInterner) -> (Symbol, SharedMut
             let _ = stdin().read_line(&mut buffer);
 
             Ok(Value::Empty)
-        }))
+        })),
     );
 
     (name_sym, SharedMut::new(class_def))

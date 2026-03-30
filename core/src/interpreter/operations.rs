@@ -52,7 +52,6 @@ impl ValueOperations for Interpreter {
         }
     }
 
-
     fn subtract_values(
         &self,
         left: Value,

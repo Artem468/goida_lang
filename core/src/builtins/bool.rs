@@ -1,6 +1,6 @@
-use std::sync::Arc;
 use crate::ast::prelude::ErrorData;
 use crate::interpreter::prelude::{BuiltinFn, Interpreter, RuntimeError, SharedInterner, Value};
+use std::sync::Arc;
 
 pub fn setup_bool_func(interpreter: &mut Interpreter, interner: &SharedInterner) {
     interpreter.builtins.insert(

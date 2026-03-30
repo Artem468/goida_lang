@@ -26,7 +26,7 @@ impl Span {
             file_id,
         }
     }
-    
+
     pub fn set_file_id(&mut self, file_id: DefaultSymbol) -> Self {
         self.file_id = file_id;
         *self

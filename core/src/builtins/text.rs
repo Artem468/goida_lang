@@ -1,5 +1,7 @@
 use crate::ast::prelude::{ClassDefinition, ErrorData, Span, Visibility};
-use crate::interpreter::prelude::{BuiltinFn, CallArgListExt, Interpreter, RuntimeError, SharedInterner, Value};
+use crate::interpreter::prelude::{
+    BuiltinFn, CallArgListExt, Interpreter, RuntimeError, SharedInterner, Value,
+};
 use crate::shared::SharedMut;
 use std::sync::Arc;
 use string_interner::DefaultSymbol as Symbol;
@@ -48,7 +50,10 @@ pub fn setup_text_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassDe
         Visibility::Public,
         false,
         BuiltinFn(Arc::new(|_interp, args, span| {
-            if let (Some(Value::Text(s)), Some(Value::Text(sep))) = (CallArgListExt::first_value(&args), CallArgListExt::get_value(&args, 1)) {
+            if let (Some(Value::Text(s)), Some(Value::Text(sep))) = (
+                CallArgListExt::first_value(&args),
+                CallArgListExt::get_value(&args, 1),
+            ) {
                 let parts: Vec<Value> = s
                     .split(sep)
                     .map(|part| Value::Text(part.to_string()))
@@ -103,7 +108,10 @@ pub fn setup_text_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassDe
         Visibility::Public,
         false,
         BuiltinFn(Arc::new(|_interp, args, span| {
-            if let (Some(Value::Text(s)), Some(Value::Text(sub))) = (CallArgListExt::first_value(&args), CallArgListExt::get_value(&args, 1)) {
+            if let (Some(Value::Text(s)), Some(Value::Text(sub))) = (
+                CallArgListExt::first_value(&args),
+                CallArgListExt::get_value(&args, 1),
+            ) {
                 Ok(Value::Boolean(s.contains(sub)))
             } else {
                 Err(RuntimeError::TypeError(ErrorData::new(
@@ -120,9 +128,11 @@ pub fn setup_text_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassDe
         Visibility::Public,
         false,
         BuiltinFn(Arc::new(|_interp, args, span| {
-            if let (Some(Value::Text(s)), Some(Value::Text(old)), Some(Value::Text(new))) =
-                (CallArgListExt::first_value(&args), CallArgListExt::get_value(&args, 1), CallArgListExt::get_value(&args, 2))
-            {
+            if let (Some(Value::Text(s)), Some(Value::Text(old)), Some(Value::Text(new))) = (
+                CallArgListExt::first_value(&args),
+                CallArgListExt::get_value(&args, 1),
+                CallArgListExt::get_value(&args, 2),
+            ) {
                 Ok(Value::Text(s.replace(old, new)))
             } else {
                 Err(RuntimeError::TypeError(ErrorData::new(
@@ -135,7 +145,6 @@ pub fn setup_text_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassDe
 
     (name, SharedMut::new(class_def))
 }
-
 
 pub fn setup_text_func(interpreter: &mut Interpreter, interner: &SharedInterner) {
     interpreter.builtins.insert(

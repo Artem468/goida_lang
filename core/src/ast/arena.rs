@@ -90,8 +90,14 @@ impl AstArena {
         let node = &self.expressions[id as usize];
 
         if let ExpressionKind::Binary { op, left, right } = node.kind {
-            let left_lit = self.get_expression(left).and_then(|e| e.kind.as_literal()).cloned();
-            let right_lit = self.get_expression(right).and_then(|e| e.kind.as_literal()).cloned();
+            let left_lit = self
+                .get_expression(left)
+                .and_then(|e| e.kind.as_literal())
+                .cloned();
+            let right_lit = self
+                .get_expression(right)
+                .and_then(|e| e.kind.as_literal())
+                .cloned();
 
             if let (Some(l), Some(r)) = (left_lit, right_lit) {
                 if let Some(folded) = self.fold_binary_constants(interner, op, &l, &r) {
@@ -123,7 +129,7 @@ impl AstArena {
                 let new_sym = self.intern_string(interner, &combined);
 
                 Some(LiteralValue::Text(new_sym))
-            },
+            }
             (LiteralValue::Boolean(l), LiteralValue::Boolean(r)) => match op {
                 BinaryOperator::And => Some(LiteralValue::Boolean(*l && *r)),
                 BinaryOperator::Or => Some(LiteralValue::Boolean(*l || *r)),
@@ -141,19 +147,48 @@ impl AstArena {
             ("дробь", DataType::Primitive(PrimitiveType::Float)),
             ("список", DataType::List(Box::new(DataType::Any))),
             ("массив", DataType::Array(Box::new(DataType::Any))),
-            ("словарь", DataType::Dict { key: Box::new(DataType::Any), value: Box::new(DataType::Any) }),
+            (
+                "словарь",
+                DataType::Dict {
+                    key: Box::new(DataType::Any),
+                    value: Box::new(DataType::Any),
+                },
+            ),
             ("пустота", DataType::Unit),
             ("неизвестно", DataType::Any),
-            ("функция", DataType::Function { params: vec![], return_type: Box::new(DataType::Any) }),
-            
+            (
+                "функция",
+                DataType::Function {
+                    params: vec![],
+                    return_type: Box::new(DataType::Any),
+                },
+            ),
             ("Строка", DataType::Primitive(PrimitiveType::Text)),
             ("Список", DataType::List(Box::new(DataType::Any))),
             ("Массив", DataType::Array(Box::new(DataType::Any))),
-            ("Словарь", DataType::Dict { key: Box::new(DataType::Any), value: Box::new(DataType::Any) }),
-            ("Файл", DataType::Object(self.intern_string(interner, "Файл"))),
-            ("Терминал", DataType::Object(self.intern_string(interner, "Терминал"))),
-            ("Система", DataType::Object(self.intern_string(interner, "Система"))),
-            ("ДатаВремя", DataType::Object(self.intern_string(interner, "ДатаВремя"))),
+            (
+                "Словарь",
+                DataType::Dict {
+                    key: Box::new(DataType::Any),
+                    value: Box::new(DataType::Any),
+                },
+            ),
+            (
+                "Файл",
+                DataType::Object(self.intern_string(interner, "Файл")),
+            ),
+            (
+                "Терминал",
+                DataType::Object(self.intern_string(interner, "Терминал")),
+            ),
+            (
+                "Система",
+                DataType::Object(self.intern_string(interner, "Система")),
+            ),
+            (
+                "ДатаВремя",
+                DataType::Object(self.intern_string(interner, "ДатаВремя")),
+            ),
         ];
 
         for (name, dt) in builtins {

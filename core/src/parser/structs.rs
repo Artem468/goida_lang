@@ -10,7 +10,6 @@ pub struct Parser {
 
 #[derive(Debug)]
 pub enum ParseError {
-    UnexpectedToken(ErrorData),
     TypeError(ErrorData),
-    InvalidSyntax(ErrorData)
+    InvalidSyntax(ErrorData),
 }

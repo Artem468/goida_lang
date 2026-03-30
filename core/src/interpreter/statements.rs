@@ -1,9 +1,9 @@
-use std::sync::Arc;
 use crate::ast::prelude::{ErrorData, ExpressionKind, Span, StatementKind, StmtId};
 use crate::interpreter::prelude::{Environment, Interpreter, RuntimeError, Value};
-use crate::traits::prelude::{CoreOperations, ExpressionEvaluator, StatementExecutor};
-use string_interner::DefaultSymbol;
 use crate::shared::SharedMut;
+use crate::traits::prelude::{CoreOperations, ExpressionEvaluator, StatementExecutor};
+use std::sync::Arc;
+use string_interner::DefaultSymbol;
 
 impl StatementExecutor for Interpreter {
     fn execute_statement(
@@ -92,7 +92,8 @@ impl StatementExecutor for Interpreter {
                         self.execute_statement(body, current_module_id)?;
 
                         let update_val = self.evaluate_expression(update, current_module_id)?;
-                        self.environment.write(|env| env.define(variable, update_val));
+                        self.environment
+                            .write(|env| env.define(variable, update_val));
                     }
                     Ok(())
                 })();
@@ -188,23 +189,19 @@ impl StatementExecutor for Interpreter {
                 let val_to_set = self.evaluate_expression(value, current_module_id)?;
 
                 match target_obj {
-                    Value::List(list) => {
-                        list.write(|vec| {
-                            let i = idx_val.resolve_index(vec.len(), stmt_kind.span)?;
-                            vec[i] = val_to_set;
-                            Ok(())
-                        })
-                    }
+                    Value::List(list) => list.write(|vec| {
+                        let i = idx_val.resolve_index(vec.len(), stmt_kind.span)?;
+                        vec[i] = val_to_set;
+                        Ok(())
+                    }),
                     Value::Dict(dict) => dict.write(|d| {
                         d.insert(idx_val.to_string(), val_to_set);
                         Ok(())
                     }),
-                    _ => {
-                        Err(RuntimeError::TypeError(ErrorData::new(
-                            stmt_kind.span,
-                            "Нельзя присвоить по индексу для этого типа".into(),
-                        )))
-                    }
+                    _ => Err(RuntimeError::TypeError(ErrorData::new(
+                        stmt_kind.span,
+                        "Нельзя присвоить по индексу для этого типа".into(),
+                    ))),
                 }
             }
 

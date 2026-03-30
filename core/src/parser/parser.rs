@@ -1,6 +1,8 @@
 use crate::ast::prelude::*;
 use crate::interpreter::prelude::{Module, SharedInterner};
-use crate::parser::prelude::{ParseError, Parser as ParserTrait};
+use crate::parser::prelude::{
+    extract_last_token, translate_rule, ParseError, Parser as ParserTrait,
+};
 use crate::shared::SharedMut;
 use pest::error::ErrorVariant;
 use pest::Parser;
@@ -22,16 +24,56 @@ impl ParserTrait {
 
     pub fn parse(mut self, code: &str) -> Result<Module, ParseError> {
         let pairs = ProgramParser::parse(Rule::program, code).map_err(|e| {
-            let message = match e.variant {
-                ErrorVariant::ParsingError { .. } => "Проверьте правильность выражения".into(),
-                ErrorVariant::CustomError { message } => message,
-            };
-
             let (start, end) = match e.location {
-                pest::error::InputLocation::Pos(pos) => (pos, pos),
+                pest::error::InputLocation::Pos(pos) => extract_last_token(code, pos),
                 pest::error::InputLocation::Span((start, end)) => (start, end),
             };
-            ParseError::UnexpectedToken(ErrorData::new(
+
+            let message = match &e.variant {
+                ErrorVariant::ParsingError {
+                    positives,
+                    negatives,
+                } => {
+                    let mut parts = Vec::new();
+
+                    if !positives.is_empty() {
+                        let found = &code[start..end];
+
+                        let found = if found.is_empty() {
+                            code[start..]
+                                .chars()
+                                .next()
+                                .map(|c| c.to_string())
+                                .unwrap_or_else(|| "конец файла".into())
+                        } else {
+                            found.to_string()
+                        };
+
+                        let expected: Vec<String> =
+                            positives.iter().map(|r| translate_rule(r)).collect();
+                        parts.push(format!(
+                            "ожидалось: \n{} получено {}",
+                            expected.join("\n"),
+                            found
+                        ));
+                    }
+
+                    if !negatives.is_empty() {
+                        let unexpected: Vec<String> =
+                            negatives.iter().map(|r| translate_rule(r)).collect();
+                        parts.push(format!("неожиданный токен: \n{}", unexpected.join("\n")));
+                    }
+
+                    if parts.is_empty() {
+                        "неизвестная ошибка синтаксиса".to_string()
+                    } else {
+                        parts.join("; ")
+                    }
+                }
+                ErrorVariant::CustomError { message } => message.clone(),
+            };
+
+            ParseError::InvalidSyntax(ErrorData::new(
                 Span::new(start, end, self.module.name),
                 message,
             ))
@@ -670,7 +712,7 @@ impl ParserTrait {
             .arena
             .get_expression(postfix_expr)
             .ok_or_else(|| {
-                ParseError::UnexpectedToken(ErrorData::new(
+                ParseError::InvalidSyntax(ErrorData::new(
                     property_span,
                     "Не найдена нода для выражения".into(),
                 ))

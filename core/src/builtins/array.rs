@@ -1,5 +1,7 @@
 use crate::ast::prelude::{ClassDefinition, ErrorData, Span, Visibility};
-use crate::interpreter::prelude::{BuiltinFn, CallArgListExt, Interpreter, RuntimeError, SharedInterner, Value};
+use crate::interpreter::prelude::{
+    BuiltinFn, CallArgListExt, Interpreter, RuntimeError, SharedInterner, Value,
+};
 use crate::shared::SharedMut;
 use std::sync::Arc;
 use string_interner::DefaultSymbol as Symbol;
@@ -11,10 +13,7 @@ pub fn setup_array_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassD
 
     class_def.set_constructor(BuiltinFn(Arc::new(|_interp, args, _span| {
         if let Some(Value::Object(instance)) = CallArgListExt::first_value(&args) {
-            let items = args[1..]
-                .iter()
-                .map(|arg| arg.value.clone())
-                .collect();
+            let items = args[1..].iter().map(|arg| arg.value.clone()).collect();
             let internal_array = Value::Array(Arc::new(items));
 
             let data_sym = _interp.interner.write(|i| i.get_or_intern("__data"));
@@ -47,7 +46,10 @@ pub fn setup_array_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassD
         Visibility::Public,
         false,
         BuiltinFn(Arc::new(|_interp, args, span| {
-            if let (Some(Value::Array(arr)), Some(Value::Text(sep))) = (CallArgListExt::first_value(&args), CallArgListExt::get_value(&args, 1)) {
+            if let (Some(Value::Array(arr)), Some(Value::Text(sep))) = (
+                CallArgListExt::first_value(&args),
+                CallArgListExt::get_value(&args, 1),
+            ) {
                 let res = arr
                     .as_ref()
                     .iter()
@@ -71,7 +73,10 @@ pub fn setup_array_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassD
         Visibility::Public,
         false,
         BuiltinFn(Arc::new(|_interp, args, span| {
-            if let (Some(Value::Array(arr)), Some(idx)) = (CallArgListExt::first_value(&args), CallArgListExt::get_value(&args, 1)) {
+            if let (Some(Value::Array(arr)), Some(idx)) = (
+                CallArgListExt::first_value(&args),
+                CallArgListExt::get_value(&args, 1),
+            ) {
                 let i = idx.resolve_index(arr.len(), span)?;
                 Ok(arr[i].clone())
             } else {

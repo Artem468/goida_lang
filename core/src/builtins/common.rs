@@ -42,12 +42,9 @@ pub fn setup_type_func(interpreter: &mut Interpreter, interner: &SharedInterner)
                 ))),
                 Value::Function(obj) => Ok(Value::Text(format!(
                     "функция \"{}\"",
-                    interpreter
-                        .resolve_symbol(obj.name)
-                        .ok_or_else(|| RuntimeError::InvalidOperation(ErrorData::new(
-                            span,
-                            "Тип не найден".into()
-                        )))?
+                    interpreter.resolve_symbol(obj.name).ok_or_else(|| {
+                        RuntimeError::InvalidOperation(ErrorData::new(span, "Тип не найден".into()))
+                    })?
                 ))),
                 Value::Builtin(_) => Ok(Value::Text("встроенная функция".to_string())),
                 Value::Module(sym) => Ok(Value::Text(format!(
@@ -99,7 +96,7 @@ pub fn setup_is_instance_func(interpreter: &mut Interpreter, interner: &SharedIn
                         Ok(Value::Boolean(false))
                     }
                 }
-                _ => {Ok(Value::Boolean(false))}
+                _ => Ok(Value::Boolean(false)),
             }
         })),
     );

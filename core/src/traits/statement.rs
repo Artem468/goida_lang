@@ -1,4 +1,4 @@
-use crate::ast::prelude::{StmtId};
+use crate::ast::prelude::StmtId;
 use crate::interpreter::prelude::RuntimeError;
 use string_interner::DefaultSymbol;
 

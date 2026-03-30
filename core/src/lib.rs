@@ -13,5 +13,6 @@ use string_interner::StringInterner;
 
 lazy_static! {
     pub static ref INTERNER: SharedInterner = SharedInterner::new(StringInterner::new());
-    pub static ref INTERPRETER: RwLock<Interpreter> = RwLock::new(Interpreter::new(INTERNER.clone()));
+    pub static ref INTERPRETER: RwLock<Interpreter> =
+        RwLock::new(Interpreter::new(INTERNER.clone()));
 }

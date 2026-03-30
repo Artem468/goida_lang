@@ -1,9 +1,9 @@
-pub mod environment;
-pub mod prelude;
-pub mod structs;
-pub mod core;
-pub mod operations;
-pub mod functions;
 pub mod classes;
+pub mod core;
+pub mod environment;
 pub mod expressions;
+pub mod functions;
+pub mod operations;
+pub mod prelude;
 pub mod statements;
+pub mod structs;

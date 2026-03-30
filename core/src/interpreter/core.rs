@@ -11,7 +11,7 @@ use crate::traits::prelude::{
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
-use string_interner::{DefaultSymbol as Symbol};
+use string_interner::DefaultSymbol as Symbol;
 
 impl CoreOperations for Interpreter {
     fn new(interner: SharedInterner) -> Self {
@@ -111,7 +111,10 @@ impl CoreOperations for Interpreter {
                 .resolve_symbol(&self.interner, item.path)
                 .unwrap();
             let relative_path = Path::new(&path);
-            let module_dir = module.path.parent().unwrap_or_else(|| Path::new("../../../../.."));
+            let module_dir = module
+                .path
+                .parent()
+                .unwrap_or_else(|| Path::new("../../../../.."));
             let full_path = module_dir.join(relative_path).with_extension("goida");
             let file_stem = full_path
                 .file_stem()

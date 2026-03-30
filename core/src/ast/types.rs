@@ -57,7 +57,6 @@ pub enum BinaryOperator {
     Or,
 }
 
-
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum UnaryOperator {
     Negative,

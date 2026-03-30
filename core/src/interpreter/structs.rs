@@ -1,8 +1,11 @@
 use std::any::Any;
 use std::collections::HashMap;
 
-use crate::ast::prelude::{AstArena, ClassDefinition, ErrorData, FunctionDefinition, Import, Span, StmtId};
+use crate::ast::prelude::{
+    AstArena, ClassDefinition, ErrorData, FunctionDefinition, Import, Span, StmtId,
+};
 pub(crate) use crate::ast::program::ClassInstance;
+use crate::ast::source::SourceManager;
 use crate::parser::structs::ParseError;
 use crate::shared::SharedMut;
 use std::fmt::Debug;
@@ -10,7 +13,6 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use string_interner::backend::StringBackend;
 use string_interner::{DefaultSymbol as Symbol, StringInterner};
-use crate::ast::source::SourceManager;
 
 #[derive(Clone, Debug)]
 pub enum Value {
@@ -63,7 +65,9 @@ impl CallArgListExt for Vec<CallArgValue> {
 
 #[derive(Clone)]
 pub struct BuiltinFn(
-    pub Arc<dyn Fn(&Interpreter, Vec<CallArgValue>, Span) -> Result<Value, RuntimeError> + Send + Sync>,
+    pub  Arc<
+        dyn Fn(&Interpreter, Vec<CallArgValue>, Span) -> Result<Value, RuntimeError> + Send + Sync,
+    >,
 );
 
 #[derive(Debug)]

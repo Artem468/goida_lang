@@ -1,11 +1,11 @@
-use serde_json::Value as JsonValue;
 use crate::interpreter::prelude::Value;
 use crate::shared::SharedMut;
+use serde_json::Value as JsonValue;
 use std::collections::HashMap;
 
 pub trait JsonParsable {
     fn from_json(json: JsonValue) -> Value;
-    fn to_json(&self) -> Result<JsonValue, String>; // На будущее, если захочешь Сеть.отправить(Dict)
+    fn to_json(&self) -> Result<JsonValue, String>;
 }
 
 impl JsonParsable for Value {
@@ -36,8 +36,39 @@ impl JsonParsable for Value {
     }
 
     fn to_json(&self) -> Result<JsonValue, String> {
-        // Тут логика обратной конвертации Value -> JsonValue
-        // пригодится для метода Запрос.тело(словарь)
-        todo!()
+        match self {
+            Value::Empty => Ok(JsonValue::Null),
+            Value::Boolean(value) => Ok(JsonValue::Bool(*value)),
+            Value::Number(value) => Ok(JsonValue::Number((*value).into())),
+            Value::Float(value) => serde_json::Number::from_f64(*value)
+                .map(JsonValue::Number)
+                .ok_or_else(|| format!("Нельзя сериализовать число '{}' в JSON", value)),
+            Value::Text(value) => Ok(JsonValue::String(value.clone())),
+            Value::List(items) => items.read(|items| {
+                items
+                    .iter()
+                    .map(Value::to_json)
+                    .collect::<Result<Vec<_>, _>>()
+                    .map(JsonValue::Array)
+            }),
+            Value::Array(items) => items
+                .iter()
+                .map(Value::to_json)
+                .collect::<Result<Vec<_>, _>>()
+                .map(JsonValue::Array),
+            Value::Dict(items) => items.read(|items| {
+                let mut map = serde_json::Map::with_capacity(items.len());
+                for (key, value) in items {
+                    map.insert(key.clone(), value.to_json()?);
+                }
+                Ok(JsonValue::Object(map))
+            }),
+            Value::Object(_) => Err("Нельзя сериализовать объект класса в JSON".into()),
+            Value::Class(_) => Err("Нельзя сериализовать класс в JSON".into()),
+            Value::Function(_) => Err("Нельзя сериализовать функцию в JSON".into()),
+            Value::Builtin(_) => Err("Нельзя сериализовать встроенную функцию в JSON".into()),
+            Value::Module(_) => Err("Нельзя сериализовать модуль в JSON".into()),
+            Value::NativeResource(_) => Err("Нельзя сериализовать нативный ресурс в JSON".into()),
+        }
     }
 }

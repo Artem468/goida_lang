@@ -1,5 +1,5 @@
-use string_interner::{DefaultSymbol as Symbol};
 use crate::ast::prelude::{ExprId, Parameter, Span, StmtId, TypeId};
+use string_interner::DefaultSymbol as Symbol;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Visibility {

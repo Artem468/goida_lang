@@ -3,7 +3,8 @@ import {ExtensionContext, workspace} from 'vscode';
 import { LanguageClient, LanguageClientOptions, ServerOptions } from 'vscode-languageclient/node';
 
 export function activate(context: ExtensionContext) {
-    const serverPath = context.asAbsolutePath(path.join('..', '..', 'target', 'debug', 'lsp.exe'));
+    const binaryName = process.platform === 'win32' ? 'lsp.exe' : 'lsp';
+    const serverPath = context.asAbsolutePath(path.join('..', '..', 'target', 'debug', binaryName));
 
     const serverOptions: ServerOptions = {
         run: { command: serverPath },
@@ -13,7 +14,7 @@ export function activate(context: ExtensionContext) {
     const clientOptions: LanguageClientOptions = {
         documentSelector: [{ scheme: 'file', language: 'goida' }],
         synchronize: {
-            fileEvents: workspace.createFileSystemWatcher('**/.goida')
+            fileEvents: workspace.createFileSystemWatcher('**/*.goida')
         }
     };
 

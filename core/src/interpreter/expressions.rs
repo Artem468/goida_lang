@@ -65,7 +65,8 @@ impl ExpressionEvaluator for Interpreter {
                     let mod_sym = self.interner.write(|i| i.get_or_intern(mod_name));
                     let var_sym = self.interner.write(|i| i.get_or_intern(var_name));
 
-                    let target_module_symbol = self.resolve_import_alias_symbol(current_module, mod_sym);
+                    let target_module_symbol =
+                        self.resolve_import_alias_symbol(current_module, mod_sym);
 
                     return if let Some(target_module) =
                         target_module_symbol.and_then(|sym| self.modules.get(&sym))
@@ -84,7 +85,9 @@ impl ExpressionEvaluator for Interpreter {
                     };
                 }
 
-                if let Some(module_symbol) = self.resolve_import_alias_symbol(current_module, symbol) {
+                if let Some(module_symbol) =
+                    self.resolve_import_alias_symbol(current_module, symbol)
+                {
                     return Ok(Value::Module(module_symbol));
                 }
 
@@ -215,7 +218,7 @@ impl ExpressionEvaluator for Interpreter {
                                 format!("Индекс {} вне границ списка (длина {})", idx, arr.len()),
                             ))
                         })
-                    },
+                    }
 
                     Value::Dict(dict) => dict.read(|d| {
                         let key = idx_val.to_string();
@@ -232,7 +235,7 @@ impl ExpressionEvaluator for Interpreter {
                         "Операция [] доступна только для итерируемых коллекций".into(),
                     ))),
                 }
-            },
+            }
 
             ExpressionKind::PropertyAccess { object, property } => {
                 let obj_expr = {
@@ -295,7 +298,8 @@ impl ExpressionEvaluator for Interpreter {
                         let (field_data, is_accessible) = instance_ref.read(|instance| {
                             let is_external = !matches!(obj_expr.kind, ExpressionKind::This);
                             let this_sym = self.intern_string("this");
-                            let is_inside_method = self.environment.read(|env| env.get(&this_sym).is_some());
+                            let is_inside_method =
+                                self.environment.read(|env| env.get(&this_sym).is_some());
                             let final_is_external = is_external && !is_inside_method;
 
                             let accessible =
@@ -304,10 +308,7 @@ impl ExpressionEvaluator for Interpreter {
                             let data = if let Some(val) = instance.field_values.get(&property) {
                                 Some(Ok(val.clone()))
                             } else {
-                                instance
-                                    .get_field(&property)
-                                    .cloned()
-                                    .map(Err)
+                                instance.get_field(&property).cloned().map(Err)
                             };
 
                             (data, accessible)
@@ -470,7 +471,11 @@ impl ExpressionEvaluator for Interpreter {
                                 )));
                             }
 
-                            let this_val = if is_static { Value::Empty } else { target_value };
+                            let this_val = if is_static {
+                                Value::Empty
+                            } else {
+                                target_value
+                            };
                             let is_external = !matches!(obj_expr.kind, ExpressionKind::This);
 
                             if is_external && matches!(visibility, Visibility::Private) {
@@ -481,7 +486,8 @@ impl ExpressionEvaluator for Interpreter {
                                 )));
                             }
 
-                            let method_module = method_type.get_module().unwrap_or(current_module_id);
+                            let method_module =
+                                method_type.get_module().unwrap_or(current_module_id);
 
                             return self.call_method(
                                 method_type,
@@ -496,7 +502,8 @@ impl ExpressionEvaluator for Interpreter {
                     match target_value {
                         Value::Module(mod_symbol) => {
                             if let Some(target_module) = self.modules.get(&mod_symbol) {
-                                return if let Some(function) = target_module.functions.get(&method) {
+                                return if let Some(function) = target_module.functions.get(&method)
+                                {
                                     self.call_function(
                                         function.clone(),
                                         arguments,
@@ -508,9 +515,12 @@ impl ExpressionEvaluator for Interpreter {
                                     let mod_name = self.resolve_symbol(mod_symbol).unwrap();
                                     Err(RuntimeError::UndefinedFunction(ErrorData::new(
                                         expr_kind.span,
-                                        format!("Функция '{}' не найдена в модуле '{}'", m_name, mod_name),
+                                        format!(
+                                            "Функция '{}' не найдена в модуле '{}'",
+                                            m_name, mod_name
+                                        ),
                                     )))
-                                }
+                                };
                             }
                         }
                         _ => {
@@ -532,14 +542,16 @@ impl ExpressionEvaluator for Interpreter {
                     let m_name = self.resolve_symbol(method).unwrap();
                     Err(RuntimeError::UndefinedMethod(ErrorData::new(
                         expr_kind.span,
-                        format!("Не удалось вызвать '{}': цель не является объектом или модулем", m_name),
+                        format!(
+                            "Не удалось вызвать '{}': цель не является объектом или модулем",
+                            m_name
+                        ),
                     )))
                 })();
                 self.environment = previous_env_at_start;
 
                 result
             }
-
 
             ExpressionKind::ObjectCreation { class_name, args } => {
                 let mut arguments = Vec::new();
@@ -550,60 +562,65 @@ impl ExpressionEvaluator for Interpreter {
                         value,
                     });
                 }
-                let (class_rc, definition_module) =
-                    if let Some(Value::Class(cls)) = self.environment.read(|env| env.get(&class_name)) {
-                        (cls.clone(), current_module_id)
-                    } else {
-                        let name_str = self.resolve_symbol(class_name).unwrap();
+                let (class_rc, definition_module) = if let Some(Value::Class(cls)) =
+                    self.environment.read(|env| env.get(&class_name))
+                {
+                    (cls.clone(), current_module_id)
+                } else {
+                    let name_str = self.resolve_symbol(class_name).unwrap();
 
-                        if let Some(dot_pos) = name_str.find('.') {
-                            let mod_name = &name_str[..dot_pos];
-                            let class_simple_name = &name_str[dot_pos + 1..];
-                            let mod_sym = self.intern_string(mod_name);
-                            let class_sym = self.intern_string(class_simple_name);
+                    if let Some(dot_pos) = name_str.find('.') {
+                        let mod_name = &name_str[..dot_pos];
+                        let class_simple_name = &name_str[dot_pos + 1..];
+                        let mod_sym = self.intern_string(mod_name);
+                        let class_sym = self.intern_string(class_simple_name);
 
-                            let current_mod = self.modules.get(&current_module_id).unwrap();
-                            let target_module_symbol = self.resolve_import_alias_symbol(current_mod, mod_sym);
+                        let current_mod = self.modules.get(&current_module_id).unwrap();
+                        let target_module_symbol =
+                            self.resolve_import_alias_symbol(current_mod, mod_sym);
 
-                            let target_module = target_module_symbol
-                                .and_then(|sym| self.modules.get(&sym))
-                                .ok_or_else(|| {
-                                    RuntimeError::InvalidOperation(ErrorData::new(
-                                        expr_kind.span,
-                                        format!("Модуль '{}' не найден", mod_name),
-                                    ))
-                                })?;
-
-                            let class = target_module.classes.get(&class_sym).ok_or_else(|| {
-                                RuntimeError::UndefinedVariable(ErrorData::new(
+                        let target_module = target_module_symbol
+                            .and_then(|sym| self.modules.get(&sym))
+                            .ok_or_else(|| {
+                                RuntimeError::InvalidOperation(ErrorData::new(
                                     expr_kind.span,
-                                    format!(
-                                        "Класс '{}' не найден в модуле '{}'",
-                                        class_simple_name, mod_name
-                                    ),
+                                    format!("Модуль '{}' не найден", mod_name),
                                 ))
                             })?;
 
-                            (class.clone(), mod_sym)
-                        } else {
-                            let current_mod = self.modules.get(&current_module_id).unwrap();
+                        let class = target_module.classes.get(&class_sym).ok_or_else(|| {
+                            RuntimeError::UndefinedVariable(ErrorData::new(
+                                expr_kind.span,
+                                format!(
+                                    "Класс '{}' не найден в модуле '{}'",
+                                    class_simple_name, mod_name
+                                ),
+                            ))
+                        })?;
 
-                            let found = current_mod.classes.get(&class_name).map(|class| (class.clone(), current_module_id));
+                        (class.clone(), mod_sym)
+                    } else {
+                        let current_mod = self.modules.get(&current_module_id).unwrap();
 
-                            let final_found = found.or_else(|| {
-                                self.std_classes
-                                    .get(&class_name)
-                                    .map(|c| (c.clone(), current_module_id))
-                            });
+                        let found = current_mod
+                            .classes
+                            .get(&class_name)
+                            .map(|class| (class.clone(), current_module_id));
 
-                            final_found.ok_or_else(|| {
-                                RuntimeError::UndefinedVariable(ErrorData::new(
-                                    expr_kind.span,
-                                    format!("Класс '{}' не найден", name_str),
-                                ))
-                            })?
-                        }
-                    };
+                        let final_found = found.or_else(|| {
+                            self.std_classes
+                                .get(&class_name)
+                                .map(|c| (c.clone(), current_module_id))
+                        });
+
+                        final_found.ok_or_else(|| {
+                            RuntimeError::UndefinedVariable(ErrorData::new(
+                                expr_kind.span,
+                                format!("Класс '{}' не найден", name_str),
+                            ))
+                        })?
+                    }
+                };
 
                 let instance = ClassDefinition::create_instance(class_rc.clone());
                 let instance_ref = SharedMut::new(instance);
@@ -634,12 +651,14 @@ impl ExpressionEvaluator for Interpreter {
             ExpressionKind::This => {
                 let this_sym = self.interner.write(|i| i.get_or_intern("this"));
 
-                self.environment.read(|env| env.get(&this_sym)).ok_or_else(|| {
-                    RuntimeError::InvalidOperation(ErrorData::new(
-                        expr_kind.span,
-                        "'это' можно использовать только внутри методов класса".to_string(),
-                    ))
-                })
+                self.environment
+                    .read(|env| env.get(&this_sym))
+                    .ok_or_else(|| {
+                        RuntimeError::InvalidOperation(ErrorData::new(
+                            expr_kind.span,
+                            "'это' можно использовать только внутри методов класса".to_string(),
+                        ))
+                    })
             }
         };
         result

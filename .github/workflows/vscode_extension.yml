@@ -1,0 +1,45 @@
+name: VS Code Extension CI
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - ".github/workflows/vscode_extension.yml"
+      - "editors/vscode/**"
+  pull_request:
+    branches:
+      - master
+    paths:
+      - ".github/workflows/vscode_extension.yml"
+      - "editors/vscode/**"
+  workflow_dispatch:
+
+jobs:
+  build-extension:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: editors/vscode
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: editors/vscode/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Compile extension
+        run: npm run compile
+
+      - name: Upload extension bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: vscode-extension-out
+          path: editors/vscode/out

@@ -1,5 +1,7 @@
 use crate::ast::prelude::{ClassDefinition, ErrorData, Span, Visibility};
-use crate::interpreter::prelude::{BuiltinFn, CallArgListExt, Interpreter, RuntimeError, SharedInterner, Value};
+use crate::interpreter::prelude::{
+    BuiltinFn, CallArgListExt, Interpreter, RuntimeError, SharedInterner, Value,
+};
 use crate::shared::SharedMut;
 use crate::traits::prelude::CoreOperations;
 use std::sync::Arc;
@@ -14,10 +16,7 @@ pub fn setup_list_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassDe
         // args[0] - это временный ClassInstance (this)
         // args[1..] - это элементы: новый Список(1, 2, 3)
         if let Some(Value::Object(instance)) = CallArgListExt::first_value(&args) {
-            let items = args[1..]
-                .iter()
-                .map(|arg| arg.value.clone())
-                .collect();
+            let items = args[1..].iter().map(|arg| arg.value.clone()).collect();
             let internal_list = Value::List(SharedMut::new(items));
 
             let data_sym = _interp.intern_string("__data");
@@ -32,7 +31,10 @@ pub fn setup_list_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassDe
         Visibility::Public,
         false,
         BuiltinFn(Arc::new(|_interp, args, span| {
-            if let (Some(Value::List(list)), Some(val)) = (CallArgListExt::first_value(&args), CallArgListExt::get_value(&args, 1)) {
+            if let (Some(Value::List(list)), Some(val)) = (
+                CallArgListExt::first_value(&args),
+                CallArgListExt::get_value(&args, 1),
+            ) {
                 list.write(|i| i.push(val.clone()));
                 Ok(Value::Empty)
             } else {
@@ -50,9 +52,11 @@ pub fn setup_list_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassDe
         Visibility::Public,
         false,
         BuiltinFn(Arc::new(|_interp, args, span| {
-            if let (Some(Value::List(list)), Some(raw_idx), Some(new_val)) =
-                (CallArgListExt::first_value(&args), CallArgListExt::get_value(&args, 1), CallArgListExt::get_value(&args, 2))
-            {
+            if let (Some(Value::List(list)), Some(raw_idx), Some(new_val)) = (
+                CallArgListExt::first_value(&args),
+                CallArgListExt::get_value(&args, 1),
+                CallArgListExt::get_value(&args, 2),
+            ) {
                 list.write(|vec| {
                     let idx = raw_idx.resolve_index(vec.len(), span)?;
                     vec[idx] = new_val.clone();
@@ -141,7 +145,10 @@ pub fn setup_list_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassDe
         Visibility::Public,
         false,
         BuiltinFn(Arc::new(|_interp, args, span| {
-            if let (Some(Value::List(list)), Some(Value::Text(sep))) = (CallArgListExt::first_value(&args), CallArgListExt::get_value(&args, 1)) {
+            if let (Some(Value::List(list)), Some(Value::Text(sep))) = (
+                CallArgListExt::first_value(&args),
+                CallArgListExt::get_value(&args, 1),
+            ) {
                 let vec = list.read(|i| {
                     i.iter()
                         .map(|v| v.to_string())
@@ -164,8 +171,10 @@ pub fn setup_list_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassDe
         Visibility::Public,
         false,
         BuiltinFn(Arc::new(|_interp, args, span| {
-            if let (Some(Value::List(list)), Some(idx)) = (CallArgListExt::first_value(&args), CallArgListExt::get_value(&args, 1))
-            {
+            if let (Some(Value::List(list)), Some(idx)) = (
+                CallArgListExt::first_value(&args),
+                CallArgListExt::get_value(&args, 1),
+            ) {
                 list.read(|vec| {
                     let i = idx.resolve_index(vec.len(), span)?;
                     Ok(vec[i].clone())

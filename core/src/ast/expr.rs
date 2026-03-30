@@ -1,5 +1,5 @@
-use string_interner::{DefaultSymbol as Symbol};
 use crate::ast::prelude::{BinaryOperator, Span, TypeId, UnaryOperator};
+use string_interner::DefaultSymbol as Symbol;
 
 pub type ExprId = u32;
 

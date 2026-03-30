@@ -1,6 +1,8 @@
 use crate::ast::prelude::{ClassDefinition, ErrorData, Span, Visibility};
 use crate::ast::program::MethodType;
-use crate::interpreter::prelude::{BuiltinFn, CallArgListExt, CallArgValue, RuntimeError, SharedInterner, Value};
+use crate::interpreter::prelude::{
+    BuiltinFn, CallArgListExt, CallArgValue, RuntimeError, SharedInterner, Value,
+};
 use crate::shared::SharedMut;
 use std::fs;
 use std::io::Write;
@@ -14,8 +16,10 @@ pub fn setup_file_class(interner_ref: &SharedInterner) -> (Symbol, SharedMut<Cla
     let mut class_def = ClassDefinition::new(name, Span::default());
 
     class_def.set_constructor(BuiltinFn(Arc::new(|interp, args, span| {
-        if let (Some(Value::Object(instance)), Some(Value::Text(path))) = (CallArgListExt::first_value(&args), CallArgListExt::get_value(&args, 1))
-        {
+        if let (Some(Value::Object(instance)), Some(Value::Text(path))) = (
+            CallArgListExt::first_value(&args),
+            CallArgListExt::get_value(&args, 1),
+        ) {
             let path_sym = interp.interner.write(|i| i.get_or_intern("путь"));
             instance.write(|i| i.field_values.insert(path_sym, Value::Text(path.clone())));
             Ok(Value::Empty)

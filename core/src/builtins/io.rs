@@ -1,9 +1,9 @@
 use crate::ast::prelude::ErrorData;
+use crate::ast::span::Span;
 use crate::interpreter::prelude::{BuiltinFn, Interpreter, RuntimeError, SharedInterner, Value};
 use std::io;
 use std::io::Write;
 use std::sync::Arc;
-use crate::ast::span::Span;
 
 pub fn setup_io_func(interpreter: &mut Interpreter, interner: &SharedInterner) {
     let separator = interner.write(|i| i.get_or_intern("разделитель"));
@@ -32,8 +32,12 @@ pub fn setup_io_func(interpreter: &mut Interpreter, interner: &SharedInterner) {
                 Some("ошибка") => Box::new(io::stderr()),
                 Some("вывод") | None => Box::new(io::stdout()),
                 Some(path) => {
-                    let file = std::fs::File::create(path)
-                        .map_err(|e| RuntimeError::IOError(ErrorData::new(Span::default(), format!("Ошибка вывода {}", e))))?;
+                    let file = std::fs::File::create(path).map_err(|e| {
+                        RuntimeError::IOError(ErrorData::new(
+                            Span::default(),
+                            format!("Ошибка вывода {}", e),
+                        ))
+                    })?;
                     Box::new(file)
                 }
             };
@@ -44,8 +48,18 @@ pub fn setup_io_func(interpreter: &mut Interpreter, interner: &SharedInterner) {
                 .collect::<Vec<String>>()
                 .join(&_sep);
 
-            write!(writer, "{}{}", output, _end).map_err(|e| RuntimeError::IOError(ErrorData::new(Span::default(), format!("Ошибка вывода {}", e))))?;
-            writer.flush().map_err(|e| RuntimeError::IOError(ErrorData::new(Span::default(), format!("Ошибка вывода {}", e))))?;
+            write!(writer, "{}{}", output, _end).map_err(|e| {
+                RuntimeError::IOError(ErrorData::new(
+                    Span::default(),
+                    format!("Ошибка вывода {}", e),
+                ))
+            })?;
+            writer.flush().map_err(|e| {
+                RuntimeError::IOError(ErrorData::new(
+                    Span::default(),
+                    format!("Ошибка вывода {}", e),
+                ))
+            })?;
             Ok(Value::Empty)
         })),
     );
