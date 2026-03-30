@@ -1,2 +1,4 @@
 /target
 .idea/
+editors/vscode/node_modules
+editors/vscode/out

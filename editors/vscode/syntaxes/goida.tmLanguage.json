@@ -1,0 +1,141 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "goida",
+  "scopeName": "source.goida",
+  "patterns": [
+    {
+      "include": "#comments"
+    },
+    {
+      "include": "#import"
+    },
+    {
+      "include": "#strings"
+    },
+    {
+      "include": "#numbers"
+    },
+    {
+      "include": "#keywords"
+    },
+    {
+      "include": "#classes"
+    },
+    {
+      "include": "#namespaces"
+    },
+    {
+      "include": "#operators"
+    },
+    {
+      "include": "#variable-declaration"
+    },
+    {
+      "include": "#variables"
+    }
+  ],
+  "repository": {
+    "comments": {
+      "name": "comment.line.double-slash.goida",
+      "match": "//.*$"
+    },
+    "namespaces": {
+      "patterns": [
+        {
+          "name": "entity.name.namespace.goida",
+          "match": "\\b[а-яА-Я_][а-яА-Я0-9_]*(?=\\.)"
+        }
+      ]
+    },
+    "strings": {
+      "name": "string.quoted.double.goida",
+      "begin": "\"",
+      "end": "\"",
+      "patterns": [
+        {
+          "name": "constant.character.escape.goida",
+          "match": "\\\\."
+        }
+      ]
+    },
+    "numbers": {
+      "name": "constant.numeric.goida",
+      "match": "\\b\\d+(\\.\\d+)?([eE][+-]?\\d+)?\\b"
+    },
+    "keywords": {
+      "patterns": [
+        {
+          "name": "keyword.control.goida",
+          "match": "\\b(если|иначе|пока|для|вернуть|печать|ввод|подключить|тип|в|новый|функция)\\b"
+        },
+        {
+          "name": "storage.type.goida",
+          "match": "\\b(текст|число|логический|дробь|список|массив|словарь|Текст|Список|Массив|Словарь|Файл|Терминал|ДатаВремя|Система)\\b"
+        },
+        {
+          "name": "constant.language.goida",
+          "match": "\\b(истина|ложь|это|пустота)\\b"
+        },
+        {
+          "name": "entity.name.function.goida",
+          "match": "\\b[а-яА-Я_][а-яА-Я0-9_]*(?=\\()"
+        },
+        {
+          "name": "variable.other.object.goida",
+          "match": "([а-яА-Я_][а-яА-Я0-9_]*)(?=\\.)"
+        },
+        {
+          "name": "variable.other.property.goida",
+          "match": "(?<=\\.)[а-яА-Я_][а-яА-Я0-9_]*\\b"
+        },
+        {
+          "name": "punctuation.goida",
+          "match": "[{}()\\[\\];,.]"
+        }
+      ]
+    },
+    "import": {
+      "begin": "(\\bподключить\\b)\\s*(\")",
+      "beginCaptures": {
+        "1": {
+          "name": "keyword.control.import.goida"
+        },
+        "2": {
+          "name": "string.quoted.double.goida"
+        }
+      },
+      "end": "\"",
+      "endCaptures": {
+        "0": {
+          "name": "string.quoted.double.goida"
+        }
+      },
+      "patterns": [
+        {
+          "name": "entity.name.namespace.goida",
+          "match": "[а-яА-Я_][а-яА-Я0-9_]*"
+        },
+        {
+          "name": "punctuation.separator.path.goida",
+          "match": "/"
+        }
+      ]
+    },
+    "classes": {
+      "name": "entity.name.class.goida",
+      "match": "\\b(класс|публичный|приватный|конструктор)\\b"
+    },
+    "operators": {
+      "name": "keyword.operator.goida",
+      "match": "[=+\\-*/%]"
+    },
+    "variable-declaration": {
+      "name": "variable.other.definition.goida",
+      "match": "\\b[а-яА-Я_][а-яА-Я0-9_]*(?=\\s*=)"
+    },
+    "variables": {
+      "name": "variable.name.goida",
+      "match": "\\b[а-яА-Я_][а-яА-Я0-9_]*\\b"
+    }
+  }
+}

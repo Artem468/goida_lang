@@ -1,56 +1,71 @@
 name: Linux CI/CD
 
 on:
-    push:
-        branches:
-            - master
-        paths:
-            - '**/*.rs'
-            - 'Cargo.toml'
-            - 'Cargo.lock'
-    pull_request:
-        branches:
-            - master
-        paths:
-            - '**/*.rs'
-            - 'Cargo.toml'
-            - 'Cargo.lock'
-    workflow_dispatch:
+  push:
+    branches:
+      - master
+    paths:
+      - ".github/workflows/linux_build.yml"
+      - ".github/workflows/windows_build.yml"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "cli/**"
+      - "core/**"
+      - "lsp/**"
+      - "tests/**"
+      - "examples/**"
+      - "editors/vscode/**"
+  pull_request:
+    branches:
+      - master
+    paths:
+      - ".github/workflows/linux_build.yml"
+      - ".github/workflows/windows_build.yml"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "cli/**"
+      - "core/**"
+      - "lsp/**"
+      - "tests/**"
+      - "examples/**"
+      - "editors/vscode/**"
+  workflow_dispatch:
 
 env:
-    CARGO_TERM_COLOR: always
+  CARGO_TERM_COLOR: always
 
 jobs:
-    build-linux:
-        runs-on: ubuntu-latest
-        steps:
-            - name: Checkout repository
-              uses: actions/checkout@v4
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-            - name: Setup Git authentication for Cargo
-              run: |
-                  git config --global url."https://x-access-token:${{ secrets.GH_TOKEN }}@github.com/".insteadOf "https://github.com/"
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
 
-            - name: Install Rust
-              uses: dtolnay/rust-toolchain@stable
+      - name: Cache cargo dependencies
+        uses: Swatinem/rust-cache@v2
 
-            - name: Cache cargo dependencies
-              uses: actions/cache@v3
-              with:
-                  path: ~/.cargo/registry
-                  key: cargo-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
-                  restore-keys: |
-                      cargo-${{ runner.os }}-
+      - name: Check formatting
+        run: cargo fmt --all --check
 
-            - name: Build release binary
-              run: |
-                  cargo build --release
+      - name: Run tests
+        run: cargo test --workspace --all-targets
 
-            - name: Upload Linux artifact
-              uses: actions/upload-artifact@v4
-              with:
-                  name: linux-binary
-                  path: |
-                      target/release/goida_lang
-                      target/release/*.rlib
-                      target/release/*.d
+      - name: Build release binaries
+        run: cargo build --release -p cli -p lsp
+
+      - name: Upload CLI artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-cli
+          path: target/release/cli
+
+      - name: Upload LSP artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-lsp
+          path: target/release/lsp

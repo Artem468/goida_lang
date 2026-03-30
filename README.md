@@ -22,13 +22,16 @@ git clone <url>
 cd goida_lang
 
 # Компиляция
-cargo build --release
+cargo build --release -p cli -p lsp
 
 # Запуск файла
-cargo run -- run examples/bubble_sort.goida
+cargo run -p cli -- run examples/bubble_sort.goida
 
 # Интерактивный режим (REPL)
-cargo run -- repl
+cargo run -p cli -- repl
+
+# JSON
+cargo run -p cli -- run examples/json_test.goida
 ```
 
 ## Синтаксис
