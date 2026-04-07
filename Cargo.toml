@@ -10,5 +10,6 @@ members = [
     "core",
     "cli",
     "lsp",
+    "tests/native_ffi_test_lib",
 ]
 resolver = "2"

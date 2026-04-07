@@ -36,6 +36,29 @@ pub struct Import {
     pub span: Span,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct NativeFunctionDefinition {
+    pub name: Symbol,
+    pub params: Vec<Parameter>,
+    pub return_type: Option<TypeId>,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct NativeGlobalDefinition {
+    pub name: Symbol,
+    pub value_type: TypeId,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct NativeLibraryDefinition {
+    pub path: Symbol,
+    pub functions: Vec<NativeFunctionDefinition>,
+    pub globals: Vec<NativeGlobalDefinition>,
+    pub span: Span,
+}
+
 #[derive(Clone, Debug)]
 pub enum MethodType {
     User(Arc<FunctionDefinition>),

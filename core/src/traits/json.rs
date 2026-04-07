@@ -69,6 +69,7 @@ impl JsonParsable for Value {
             Value::Builtin(_) => Err("Нельзя сериализовать встроенную функцию в JSON".into()),
             Value::Module(_) => Err("Нельзя сериализовать модуль в JSON".into()),
             Value::NativeResource(_) => Err("Нельзя сериализовать нативный ресурс в JSON".into()),
+            Value::NativeGlobal(_) => Err("Нельзя сериализовать нативную переменную в JSON".into()),
         }
     }
 }

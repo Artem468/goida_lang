@@ -17,8 +17,16 @@ pub enum DataType {
         return_type: Box<DataType>,
     },
     Object(Symbol),
+    Runtime(RuntimeType),
     Any,
     Unit,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum RuntimeType {
+    Class,
+    Module,
+    Resource,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]

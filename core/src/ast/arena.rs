@@ -3,7 +3,7 @@ use string_interner::DefaultSymbol as Symbol;
 
 use crate::ast::prelude::{
     BinaryOperator, DataType, ExprId, ExpressionKind, ExpressionNode, LiteralValue, PrimitiveType,
-    Span, StatementKind, StatementNode, StmtId, TypeId,
+    RuntimeType, Span, StatementKind, StatementNode, StmtId, TypeId,
 };
 use crate::interpreter::prelude::SharedInterner;
 
@@ -189,6 +189,9 @@ impl AstArena {
                 "ДатаВремя",
                 DataType::Object(self.intern_string(interner, "ДатаВремя")),
             ),
+            ("модуль", DataType::Runtime(RuntimeType::Module)),
+            ("ресурс", DataType::Runtime(RuntimeType::Resource)),
+            ("класс", DataType::Runtime(RuntimeType::Class)),
         ];
 
         for (name, dt) in builtins {

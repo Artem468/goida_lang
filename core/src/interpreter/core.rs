@@ -19,6 +19,7 @@ impl CoreOperations for Interpreter {
             std_classes: HashMap::new(),
             builtins: HashMap::new(),
             modules: HashMap::new(),
+            native_libraries: HashMap::new(),
             interner,
             environment: SharedMut::new(Environment::new()),
             source_manager: SourceManager::new(),

@@ -79,6 +79,9 @@ impl InterpreterFunctions for Interpreter {
                         span,
                     );
                 }
+                if let Some(Value::Builtin(builtin)) = target_module.globals.get(&func_sym) {
+                    return builtin(self, arguments, span);
+                }
             }
             return Err(RuntimeError::UndefinedFunction(ErrorData::new(
                 span, name_str,
@@ -93,6 +96,9 @@ impl InterpreterFunctions for Interpreter {
         if let Some(Value::Function(func)) = current_module.globals.get(&name) {
             let func_clone = (**func).clone();
             return self.call_function(func_clone, arguments, current_module_id, span);
+        }
+        if let Some(Value::Builtin(builtin)) = current_module.globals.get(&name) {
+            return builtin(self, arguments, span);
         }
 
         if let Some(builtin_fn) = self.builtins.get(&name) {

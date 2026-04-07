@@ -91,6 +91,10 @@ impl ParserTrait {
                             let stmt_id = self.parse_class(inner)?;
                             self.module.body.push(stmt_id);
                         }
+                        Rule::library_stmt => {
+                            let stmt_id = self.parse_library_stmt(inner)?;
+                            self.module.body.push(stmt_id);
+                        }
                         Rule::assignment => {
                             let stmt_id = self.parse_assignment(inner)?;
                             self.module.body.push(stmt_id);
@@ -209,6 +213,175 @@ impl ParserTrait {
             func_span,
             "Ожидалась функция".into(),
         )))
+    }
+
+    fn parse_library_stmt(
+        &mut self,
+        pair: pest::iterators::Pair<Rule>,
+    ) -> Result<StmtId, ParseError> {
+        let library_span: Span = (pair.as_span(), self.module.name).into();
+        let mut inner = pair.into_inner();
+
+        let path_token = inner.next().ok_or_else(|| {
+            ParseError::InvalidSyntax(ErrorData::new(
+                library_span,
+                "Ожидался путь к библиотеке".into(),
+            ))
+        })?;
+        let raw_path = path_token.as_str();
+        let clean_path = if raw_path.len() >= 2 {
+            &raw_path[1..raw_path.len() - 1]
+        } else {
+            raw_path
+        };
+
+        let path = self.module.arena.intern_string(&self.interner, clean_path);
+        let mut functions = Vec::new();
+        let mut globals = Vec::new();
+
+        for token in inner {
+            match token.as_rule() {
+                Rule::library_function => functions.push(self.parse_library_function(token)?),
+                Rule::library_global => globals.push(self.parse_library_global(token)?),
+                _ => {}
+            }
+        }
+
+        Ok(self.module.arena.add_statement(
+            StatementKind::NativeLibraryDefinition(NativeLibraryDefinition {
+                path,
+                functions,
+                globals,
+                span: library_span,
+            }),
+            library_span,
+        ))
+    }
+
+    fn parse_library_function(
+        &mut self,
+        pair: pest::iterators::Pair<Rule>,
+    ) -> Result<NativeFunctionDefinition, ParseError> {
+        let function_span: Span = (pair.as_span(), self.module.name).into();
+        let mut inner = pair.into_inner();
+
+        let name_token = inner.next().ok_or_else(|| {
+            ParseError::InvalidSyntax(ErrorData::new(
+                function_span,
+                "Ожидалось имя функции библиотеки".into(),
+            ))
+        })?;
+        let name = self
+            .module
+            .arena
+            .intern_string(&self.interner, name_token.as_str());
+
+        let mut params = Vec::new();
+        let mut return_type = None;
+
+        for token in inner {
+            match token.as_rule() {
+                Rule::library_param_list => params = self.parse_library_param_list(token)?,
+                Rule::return_type => {
+                    if let Some(type_token) = token.into_inner().next() {
+                        return_type = Some(self.parse_type_name(type_token)?);
+                    }
+                }
+                Rule::empty_block => {}
+                _ => {}
+            }
+        }
+
+        Ok(NativeFunctionDefinition {
+            name,
+            params,
+            return_type,
+            span: function_span,
+        })
+    }
+
+    fn parse_library_global(
+        &mut self,
+        pair: pest::iterators::Pair<Rule>,
+    ) -> Result<NativeGlobalDefinition, ParseError> {
+        let global_span: Span = (pair.as_span(), self.module.name).into();
+        let mut inner = pair.into_inner();
+
+        let name_token = inner.next().ok_or_else(|| {
+            ParseError::InvalidSyntax(ErrorData::new(
+                global_span,
+                "Ожидалось имя глобальной переменной библиотеки".into(),
+            ))
+        })?;
+        let type_token = inner.next().ok_or_else(|| {
+            ParseError::InvalidSyntax(ErrorData::new(
+                global_span,
+                "Ожидался тип глобальной переменной библиотеки".into(),
+            ))
+        })?;
+
+        Ok(NativeGlobalDefinition {
+            name: self
+                .module
+                .arena
+                .intern_string(&self.interner, name_token.as_str()),
+            value_type: self.parse_type_name(type_token)?,
+            span: global_span,
+        })
+    }
+
+    fn parse_library_param_list(
+        &mut self,
+        pair: pest::iterators::Pair<Rule>,
+    ) -> Result<Vec<Parameter>, ParseError> {
+        let mut params = Vec::new();
+
+        for token in pair.into_inner() {
+            if token.as_rule() != Rule::library_param {
+                continue;
+            }
+
+            let token_span: Span = (token.as_span(), self.module.name).into();
+            let mut inner = token.into_inner();
+            let name_token = inner.next().ok_or_else(|| {
+                ParseError::InvalidSyntax(ErrorData::new(
+                    token_span,
+                    "Ожидалось имя параметра".into(),
+                ))
+            })?;
+            let type_token = inner.next().ok_or_else(|| {
+                ParseError::InvalidSyntax(ErrorData::new(
+                    token_span,
+                    "Ожидался тип параметра".into(),
+                ))
+            })?;
+
+            params.push(Parameter {
+                name: self
+                    .module
+                    .arena
+                    .intern_string(&self.interner, name_token.as_str()),
+                param_type: self.parse_type_name(type_token)?,
+                default_value: None,
+                span: token_span,
+            });
+        }
+
+        Ok(params)
+    }
+
+    fn parse_type_name(&self, token: pest::iterators::Pair<Rule>) -> Result<TypeId, ParseError> {
+        let type_span: Span = (token.as_span(), self.module.name).into();
+        let type_str = token.as_str();
+        self.module
+            .arena
+            .find_type_by_name(&self.interner, type_str)
+            .ok_or_else(|| {
+                ParseError::TypeError(ErrorData::new(
+                    type_span,
+                    format!("Неизвестный тип: {}", type_str),
+                ))
+            })
     }
 
     fn parse_class(&mut self, pair: pest::iterators::Pair<Rule>) -> Result<StmtId, ParseError> {
@@ -590,6 +763,10 @@ impl ParserTrait {
                 }
                 Rule::class => {
                     let stmt_id = self.parse_class(inner)?;
+                    statements.push(stmt_id);
+                }
+                Rule::library_stmt => {
+                    let stmt_id = self.parse_library_stmt(inner)?;
                     statements.push(stmt_id);
                 }
                 Rule::assignment => {

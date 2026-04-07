@@ -60,6 +60,7 @@ pub fn setup_type_func(interpreter: &mut Interpreter, interner: &SharedInterner)
                 Value::Array(_) => Ok(Value::Text("массив".to_string())),
                 Value::Dict(_) => Ok(Value::Text("словарь".to_string())),
                 Value::NativeResource(_) => Ok(Value::Text("ресурс".to_string())),
+                Value::NativeGlobal(_) => Ok(Value::Text("нативная переменная".to_string())),
                 Value::Empty => Ok(Value::Text("пустота".to_string())),
             }
         })),

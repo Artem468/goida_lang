@@ -31,6 +31,15 @@ impl StatementExecutor for Interpreter {
                 let target_env = self.environment.clone();
                 let val = self.evaluate_expression(value, current_module_id)?;
 
+                if self.try_assign_native_identifier(
+                    name,
+                    val.clone(),
+                    current_module_id,
+                    stmt_kind.span,
+                )? {
+                    return Ok(());
+                }
+
                 self.environment = target_env;
                 self.environment.write(|env| {
                     if env.set(name, val.clone(), stmt_kind.span).is_err() {
@@ -210,6 +219,10 @@ impl StatementExecutor for Interpreter {
                 let value = Value::Function(Arc::from(def.clone()));
                 self.environment.write(|env| env.define(name, value));
                 Ok(())
+            }
+
+            StatementKind::NativeLibraryDefinition(definition) => {
+                self.load_native_library_definition(definition, current_module_id)
             }
 
             StatementKind::ClassDefinition(cls) => {

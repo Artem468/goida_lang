@@ -1,4 +1,6 @@
-use crate::ast::prelude::{ClassDefinition, ExprId, FunctionDefinition, Span, TypeId};
+use crate::ast::prelude::{
+    ClassDefinition, ExprId, FunctionDefinition, NativeLibraryDefinition, Span, TypeId,
+};
 use string_interner::DefaultSymbol as Symbol;
 
 pub type StmtId = u32;
@@ -41,6 +43,7 @@ pub enum StatementKind {
     Block(Vec<StmtId>),
     Return(Option<ExprId>),
     FunctionDefinition(FunctionDefinition),
+    NativeLibraryDefinition(NativeLibraryDefinition),
     ClassDefinition(ClassDefinition),
     PropertyAssign {
         object: ExprId,
