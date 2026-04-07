@@ -35,6 +35,7 @@ pub enum PrimitiveType {
     Float,
     Text,
     Boolean,
+    Pointer,
 }
 
 impl fmt::Display for PrimitiveType {
@@ -44,6 +45,7 @@ impl fmt::Display for PrimitiveType {
             PrimitiveType::Boolean => write!(f, "логическое"),
             PrimitiveType::Text => write!(f, "строка"),
             PrimitiveType::Float => write!(f, "дробь"),
+            PrimitiveType::Pointer => write!(f, "указатель"),
         }
     }
 }

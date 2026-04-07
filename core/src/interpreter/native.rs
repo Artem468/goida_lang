@@ -1,7 +1,6 @@
 use crate::ast::prelude::{
     DataType, ErrorData, NativeLibraryDefinition, PrimitiveType, RuntimeType, Span,
 };
-use crate::ffi::GoidaFfiValue;
 use crate::interpreter::prelude::{
     BuiltinFn, CallArgValue, Interpreter, LoadedNativeLibrary, NativeFunctionBinding,
     NativeGlobalBinding, RuntimeError, Value,
@@ -10,6 +9,7 @@ use crate::shared::SharedMut;
 use crate::traits::prelude::CoreOperations;
 use libffi::middle::{Arg, Cif, CodePtr, Type};
 use libloading::Library;
+use std::ffi::c_void;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use string_interner::DefaultSymbol as Symbol;
@@ -104,15 +104,28 @@ impl Interpreter {
         span: Span,
     ) -> Result<Value, RuntimeError> {
         let bound_arguments = self.bind_native_arguments(binding, arguments, span)?;
-        let mut ffi_values: Vec<GoidaFfiValue> = bound_arguments
-            .iter()
-            .cloned()
-            .map(GoidaFfiValue::from_value)
-            .collect();
-        let raw_ptrs: Vec<*const GoidaFfiValue> =
-            ffi_values.iter().map(|value| value as *const _).collect();
-        let ffi_args: Vec<Arg> = raw_ptrs.iter().map(Arg::new).collect();
-        let cif = Cif::new(vec![Type::pointer(); ffi_args.len()], Type::pointer());
+
+        let mut ffi_values = Vec::with_capacity(bound_arguments.len());
+        let mut ffi_param_types = Vec::with_capacity(bound_arguments.len());
+        for (param, value) in binding.params.iter().zip(bound_arguments.iter()) {
+            let kind = self.native_kind_from_type_id(param.param_type, binding.module_id, span)?;
+            if kind == NativeFfiKind::Void {
+                return Err(RuntimeError::TypeError(ErrorData::new(
+                    span,
+                    format!(
+                        "Native parameter '{}' cannot be void",
+                        self.resolve_symbol(param.name).unwrap_or_default()
+                    ),
+                )));
+            }
+            ffi_param_types.push(kind.libffi_type());
+            ffi_values.push(Self::value_to_ffi_arg(value.clone(), kind, span)?);
+        }
+
+        let ffi_args: Vec<Arg> = ffi_values.iter().map(NativeFfiArgValue::as_arg).collect();
+        let return_kind =
+            self.native_kind_from_optional_type_id(binding.return_type, binding.module_id, span)?;
+        let cif = Cif::new(ffi_param_types, return_kind.libffi_type());
 
         let library = self.get_loaded_native_library(&binding.library_path, span)?;
         let symbol_name = binding.symbol_name.as_bytes();
@@ -124,33 +137,46 @@ impl Interpreter {
                 .map_err(|err| {
                     RuntimeError::InvalidOperation(ErrorData::new(
                         span,
-                        format!("Не удалось найти символ '{}': {}", binding.symbol_name, err),
+                        format!("Failed to find symbol '{}': {}", binding.symbol_name, err),
                     ))
                 })
         })?;
 
-        let result_ptr = unsafe {
-            cif.call::<*mut GoidaFfiValue>(CodePtr::from_ptr(function_ptr as *mut _), &ffi_args)
-        };
-
-        for value in &mut ffi_values {
-            unsafe { value.release_boxed() };
-        }
-
-        if result_ptr.is_null() {
-            return Ok(Value::Empty);
-        }
-
         let result = unsafe {
-            let ffi_value = *Box::from_raw(result_ptr);
-            ffi_value.into_value()
+            match return_kind {
+                NativeFfiKind::Void => {
+                    cif.call::<()>(CodePtr::from_ptr(function_ptr as *mut _), &ffi_args);
+                    Value::Empty
+                }
+                NativeFfiKind::I64 => Value::Number(
+                    cif.call::<i64>(CodePtr::from_ptr(function_ptr as *mut _), &ffi_args),
+                ),
+                NativeFfiKind::F64 => Value::Float(
+                    cif.call::<f64>(CodePtr::from_ptr(function_ptr as *mut _), &ffi_args),
+                ),
+                NativeFfiKind::Pointer => {
+                    let ptr =
+                        cif.call::<*mut c_void>(CodePtr::from_ptr(function_ptr as *mut _), &ffi_args);
+                    if ptr.is_null() {
+                        Value::Empty
+                    } else if let Some(value) = ffi_values
+                        .iter()
+                        .find_map(|arg| arg.roundtrip_value_for_pointer(ptr))
+                    {
+                        value
+                    } else {
+                        Value::Number(ptr as isize as i64)
+                    }
+                }
+            }
         };
+
         self.ensure_value_matches_type(
             &result,
             binding.return_type,
             binding.module_id,
             span,
-            "возвращаемое значение",
+            "return value",
         )?;
         Ok(result)
     }
@@ -177,7 +203,7 @@ impl Interpreter {
                             RuntimeError::InvalidOperation(ErrorData::new(
                                 span,
                                 format!(
-                                    "Неизвестный именованный аргумент '{}'",
+                                    "Unknown named argument '{}'",
                                     self.resolve_symbol(name).unwrap_or_default()
                                 ),
                             ))
@@ -187,7 +213,7 @@ impl Interpreter {
                         return Err(RuntimeError::InvalidOperation(ErrorData::new(
                             span,
                             format!(
-                                "Аргумент '{}' передан несколько раз",
+                                "Argument '{}' passed more than once",
                                 self.resolve_symbol(name).unwrap_or_default()
                             ),
                         )));
@@ -198,14 +224,14 @@ impl Interpreter {
                     if saw_named {
                         return Err(RuntimeError::InvalidOperation(ErrorData::new(
                             span,
-                            "Именованные аргументы должны идти после позиционных".into(),
+                            "Named arguments must come after positional arguments".into(),
                         )));
                     }
                     if positional_index >= binding.params.len() {
                         return Err(RuntimeError::InvalidOperation(ErrorData::new(
                             span,
                             format!(
-                                "Ожидалось {} аргументов, получено {}",
+                                "Expected {} arguments, got {}",
                                 binding.params.len(),
                                 positional_index + 1
                             ),
@@ -223,7 +249,7 @@ impl Interpreter {
                 RuntimeError::InvalidOperation(ErrorData::new(
                     span,
                     format!(
-                        "Аргумент '{}' не передан",
+                        "Argument '{}' is missing",
                         self.resolve_symbol(param.name).unwrap_or_default()
                     ),
                 ))
@@ -233,7 +259,7 @@ impl Interpreter {
                 Some(param.param_type),
                 binding.module_id,
                 span,
-                "аргумент",
+                "argument",
             )?;
             values.push(value);
         }
@@ -248,7 +274,7 @@ impl Interpreter {
         span: Span,
     ) -> Result<PathBuf, RuntimeError> {
         let module = self.modules.get(&current_module_id).ok_or_else(|| {
-            RuntimeError::InvalidOperation(ErrorData::new(span, "Текущий модуль не найден".into()))
+            RuntimeError::InvalidOperation(ErrorData::new(span, "Current module is missing".into()))
         })?;
         let path = module
             .arena
@@ -256,7 +282,7 @@ impl Interpreter {
             .ok_or_else(|| {
                 RuntimeError::InvalidOperation(ErrorData::new(
                     span,
-                    "Путь библиотеки не найден".into(),
+                    "Native library path is missing".into(),
                 ))
             })?;
 
@@ -277,7 +303,7 @@ impl Interpreter {
 
         Err(RuntimeError::IOError(ErrorData::new(
             span,
-            format!("Библиотека не найдена: {}", full_path.display()),
+            format!("Native library not found: {}", full_path.display()),
         )))
     }
 
@@ -293,11 +319,7 @@ impl Interpreter {
         let library = unsafe { Library::new(path) }.map_err(|err| {
             RuntimeError::IOError(ErrorData::new(
                 span,
-                format!(
-                    "Не удалось загрузить библиотеку '{}': {}",
-                    path.display(),
-                    err
-                ),
+                format!("Failed to load native library '{}': {}", path.display(), err),
             ))
         })?;
 
@@ -316,7 +338,7 @@ impl Interpreter {
         self.native_libraries.get(path).cloned().ok_or_else(|| {
             RuntimeError::InvalidOperation(ErrorData::new(
                 span,
-                format!("Библиотека '{}' не загружена", path.display()),
+                format!("Native library '{}' is not loaded", path.display()),
             ))
         })
     }
@@ -326,29 +348,71 @@ impl Interpreter {
         binding: &NativeGlobalBinding,
         span: Span,
     ) -> Result<Value, RuntimeError> {
+        let kind = self.native_kind_from_type_id(binding.value_type, binding.module_id, span)?;
+        if kind == NativeFfiKind::Void {
+            return Err(RuntimeError::TypeError(ErrorData::new(
+                span,
+                format!("Global '{}' cannot have void type", binding.symbol_name),
+            )));
+        }
+
         let library = self.get_loaded_native_library(&binding.library_path, span)?;
         let symbol_name = binding.symbol_name.as_bytes();
         let value = library.read(|library| unsafe {
-            let symbol = library
-                .handle
-                .get::<*mut GoidaFfiValue>(symbol_name)
-                .map_err(|err| {
-                    RuntimeError::InvalidOperation(ErrorData::new(
-                        span,
-                        format!("Не удалось найти символ '{}': {}", binding.symbol_name, err),
-                    ))
-                })?;
-            let ptr = *symbol;
-            if ptr.is_null() {
-                return Err(RuntimeError::InvalidOperation(ErrorData::new(
-                    span,
-                    format!(
-                        "Глобальная переменная '{}' не инициализирована",
-                        binding.symbol_name
-                    ),
-                )));
+            match kind {
+                NativeFfiKind::I64 => {
+                    let symbol = library.handle.get::<*mut i64>(symbol_name).map_err(|err| {
+                        RuntimeError::InvalidOperation(ErrorData::new(
+                            span,
+                            format!("Failed to find symbol '{}': {}", binding.symbol_name, err),
+                        ))
+                    })?;
+                    let ptr = *symbol;
+                    if ptr.is_null() {
+                        return Err(RuntimeError::InvalidOperation(ErrorData::new(
+                            span,
+                            format!("Global '{}' is not initialized", binding.symbol_name),
+                        )));
+                    }
+                    Ok(Value::Number(*ptr))
+                }
+                NativeFfiKind::F64 => {
+                    let symbol = library.handle.get::<*mut f64>(symbol_name).map_err(|err| {
+                        RuntimeError::InvalidOperation(ErrorData::new(
+                            span,
+                            format!("Failed to find symbol '{}': {}", binding.symbol_name, err),
+                        ))
+                    })?;
+                    let ptr = *symbol;
+                    if ptr.is_null() {
+                        return Err(RuntimeError::InvalidOperation(ErrorData::new(
+                            span,
+                            format!("Global '{}' is not initialized", binding.symbol_name),
+                        )));
+                    }
+                    Ok(Value::Float(*ptr))
+                }
+                NativeFfiKind::Pointer => {
+                    let symbol = library
+                        .handle
+                        .get::<*mut *mut c_void>(symbol_name)
+                        .map_err(|err| {
+                            RuntimeError::InvalidOperation(ErrorData::new(
+                                span,
+                                format!("Failed to find symbol '{}': {}", binding.symbol_name, err),
+                            ))
+                        })?;
+                    let ptr = *symbol;
+                    if ptr.is_null() {
+                        return Err(RuntimeError::InvalidOperation(ErrorData::new(
+                            span,
+                            format!("Global '{}' is not initialized", binding.symbol_name),
+                        )));
+                    }
+                    Ok(Value::Number((*ptr) as isize as i64))
+                }
+                NativeFfiKind::Void => unreachable!(),
             }
-            Ok((*ptr).clone_value())
         })?;
 
         self.ensure_value_matches_type(
@@ -356,7 +420,7 @@ impl Interpreter {
             Some(binding.value_type),
             binding.module_id,
             span,
-            "глобальная переменная",
+            "global",
         )?;
         Ok(value)
     }
@@ -367,38 +431,197 @@ impl Interpreter {
         value: Value,
         span: Span,
     ) -> Result<(), RuntimeError> {
+        let kind = self.native_kind_from_type_id(binding.value_type, binding.module_id, span)?;
+        if kind == NativeFfiKind::Void {
+            return Err(RuntimeError::TypeError(ErrorData::new(
+                span,
+                format!("Global '{}' cannot have void type", binding.symbol_name),
+            )));
+        }
+
         self.ensure_value_matches_type(
             &value,
             Some(binding.value_type),
             binding.module_id,
             span,
-            "глобальная переменная",
+            "global",
         )?;
         let library = self.get_loaded_native_library(&binding.library_path, span)?;
         let symbol_name = binding.symbol_name.as_bytes();
         library.read(|library| unsafe {
-            let symbol = library
-                .handle
-                .get::<*mut GoidaFfiValue>(symbol_name)
-                .map_err(|err| {
-                    RuntimeError::InvalidOperation(ErrorData::new(
-                        span,
-                        format!("Не удалось найти символ '{}': {}", binding.symbol_name, err),
-                    ))
-                })?;
-            let ptr = *symbol;
-            if ptr.is_null() {
-                return Err(RuntimeError::InvalidOperation(ErrorData::new(
-                    span,
-                    format!(
-                        "Глобальная переменная '{}' не инициализирована",
-                        binding.symbol_name
-                    ),
-                )));
+            match kind {
+                NativeFfiKind::I64 => {
+                    let symbol = library.handle.get::<*mut i64>(symbol_name).map_err(|err| {
+                        RuntimeError::InvalidOperation(ErrorData::new(
+                            span,
+                            format!("Failed to find symbol '{}': {}", binding.symbol_name, err),
+                        ))
+                    })?;
+                    let ptr = *symbol;
+                    if ptr.is_null() {
+                        return Err(RuntimeError::InvalidOperation(ErrorData::new(
+                            span,
+                            format!("Global '{}' is not initialized", binding.symbol_name),
+                        )));
+                    }
+                    let Value::Number(number) = value else {
+                        return Err(RuntimeError::TypeError(ErrorData::new(
+                            span,
+                            format!("Global '{}' expects i64 value", binding.symbol_name),
+                        )));
+                    };
+                    *ptr = number;
+                    Ok(())
+                }
+                NativeFfiKind::F64 => {
+                    let symbol = library.handle.get::<*mut f64>(symbol_name).map_err(|err| {
+                        RuntimeError::InvalidOperation(ErrorData::new(
+                            span,
+                            format!("Failed to find symbol '{}': {}", binding.symbol_name, err),
+                        ))
+                    })?;
+                    let ptr = *symbol;
+                    if ptr.is_null() {
+                        return Err(RuntimeError::InvalidOperation(ErrorData::new(
+                            span,
+                            format!("Global '{}' is not initialized", binding.symbol_name),
+                        )));
+                    }
+                    let Value::Float(float) = value else {
+                        return Err(RuntimeError::TypeError(ErrorData::new(
+                            span,
+                            format!("Global '{}' expects f64 value", binding.symbol_name),
+                        )));
+                    };
+                    *ptr = float;
+                    Ok(())
+                }
+                NativeFfiKind::Pointer => {
+                    let symbol = library
+                        .handle
+                        .get::<*mut *mut c_void>(symbol_name)
+                        .map_err(|err| {
+                            RuntimeError::InvalidOperation(ErrorData::new(
+                                span,
+                                format!("Failed to find symbol '{}': {}", binding.symbol_name, err),
+                            ))
+                        })?;
+                    let ptr = *symbol;
+                    if ptr.is_null() {
+                        return Err(RuntimeError::InvalidOperation(ErrorData::new(
+                            span,
+                            format!("Global '{}' is not initialized", binding.symbol_name),
+                        )));
+                    }
+                    let number = match value {
+                        Value::Number(number) => number,
+                        Value::Empty => 0,
+                        _ => {
+                            return Err(RuntimeError::TypeError(ErrorData::new(
+                                span,
+                                format!("Global '{}' expects pointer value", binding.symbol_name),
+                            )))
+                        }
+                    };
+                    *ptr = number as isize as usize as *mut c_void;
+                    Ok(())
+                }
+                NativeFfiKind::Void => unreachable!(),
             }
-            (*ptr).write_value(value);
-            Ok(())
         })
+    }
+
+    fn native_kind_from_optional_type_id(
+        &self,
+        type_id: Option<u32>,
+        module_id: Symbol,
+        span: Span,
+    ) -> Result<NativeFfiKind, RuntimeError> {
+        let Some(type_id) = type_id else {
+            return Ok(NativeFfiKind::Void);
+        };
+        self.native_kind_from_type_id(type_id, module_id, span)
+    }
+
+    fn native_kind_from_type_id(
+        &self,
+        type_id: u32,
+        module_id: Symbol,
+        span: Span,
+    ) -> Result<NativeFfiKind, RuntimeError> {
+        let module = self.modules.get(&module_id).ok_or_else(|| {
+            RuntimeError::InvalidOperation(ErrorData::new(span, "Module not found".into()))
+        })?;
+        let data_type = module.arena.types.get(type_id as usize).ok_or_else(|| {
+            RuntimeError::TypeError(ErrorData::new(
+                span,
+                format!("Unknown native type id {}", type_id),
+            ))
+        })?;
+
+        match data_type {
+            DataType::Unit => Ok(NativeFfiKind::Void),
+            DataType::Primitive(PrimitiveType::Number) => Ok(NativeFfiKind::I64),
+            DataType::Primitive(PrimitiveType::Float) => Ok(NativeFfiKind::F64),
+            DataType::Primitive(PrimitiveType::Pointer) => Ok(NativeFfiKind::Pointer),
+            DataType::Any => Ok(NativeFfiKind::Pointer),
+            other => Err(RuntimeError::TypeError(ErrorData::new(
+                span,
+                format!(
+                    "Неподдерживаемый тип для native ABI: {}. Используйте число/дробь/указатель/пустота",
+                    Self::describe_type(other)
+                ),
+            ))),
+        }
+    }
+
+    fn value_to_ffi_arg(
+        value: Value,
+        kind: NativeFfiKind,
+        span: Span,
+    ) -> Result<NativeFfiArgValue, RuntimeError> {
+        match kind {
+            NativeFfiKind::I64 => match value {
+                Value::Number(number) => Ok(NativeFfiArgValue::I64(number)),
+                _ => Err(RuntimeError::TypeError(ErrorData::new(
+                    span,
+                    "Аргумент native-функции должен быть типа 'число'".into(),
+                ))),
+            },
+            NativeFfiKind::F64 => match value {
+                Value::Float(float) => Ok(NativeFfiArgValue::F64(float)),
+                _ => Err(RuntimeError::TypeError(ErrorData::new(
+                    span,
+                    "Аргумент native-функции должен быть типа 'дробь'".into(),
+                ))),
+            },
+            NativeFfiKind::Pointer => match value {
+                Value::Number(number) => {
+                    Ok(NativeFfiArgValue::Pointer(number as isize as usize as *mut c_void))
+                }
+                Value::Empty => Ok(NativeFfiArgValue::Pointer(std::ptr::null_mut())),
+                value if Self::is_managed_pointer_value(&value) => {
+                    let mut boxed = Box::new(value);
+                    let ptr = boxed.as_mut() as *mut Value as *mut c_void;
+                    Ok(NativeFfiArgValue::ManagedPointer(boxed, ptr))
+                }
+                _ => Err(RuntimeError::TypeError(ErrorData::new(
+                    span,
+                    "Аргумент типа 'указатель' должен быть адресом, пустотой или значением строка/список/массив/словарь".into(),
+                ))),
+            },
+            NativeFfiKind::Void => Err(RuntimeError::TypeError(ErrorData::new(
+                span,
+                "Тип 'пустота' нельзя использовать для аргумента native-функции".into(),
+            ))),
+        }
+    }
+
+    fn is_managed_pointer_value(value: &Value) -> bool {
+        matches!(
+            value,
+            Value::Text(_) | Value::List(_) | Value::Array(_) | Value::Dict(_)
+        )
     }
 
     fn ensure_value_matches_type(
@@ -435,10 +658,7 @@ impl Interpreter {
         module_id: Symbol,
     ) -> Result<bool, RuntimeError> {
         let module = self.modules.get(&module_id).ok_or_else(|| {
-            RuntimeError::InvalidOperation(ErrorData::new(
-                Span::default(),
-                "Модуль не найден".into(),
-            ))
+            RuntimeError::InvalidOperation(ErrorData::new(Span::default(), "Module not found".into()))
         })?;
         let Some(data_type) = module.arena.types.get(expected as usize) else {
             return Ok(true);
@@ -452,6 +672,10 @@ impl Interpreter {
                 PrimitiveType::Float => matches!(value, Value::Float(_)),
                 PrimitiveType::Text => matches!(value, Value::Text(_)),
                 PrimitiveType::Boolean => matches!(value, Value::Boolean(_)),
+                PrimitiveType::Pointer => {
+                    matches!(value, Value::Number(_) | Value::Empty)
+                        || Self::is_managed_pointer_value(value)
+                }
             },
             DataType::List(_) => matches!(value, Value::List(_)),
             DataType::Array(_) => matches!(value, Value::Array(_)),
@@ -486,3 +710,49 @@ impl Interpreter {
         }
     }
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum NativeFfiKind {
+    Void,
+    I64,
+    F64,
+    Pointer,
+}
+
+impl NativeFfiKind {
+    fn libffi_type(self) -> Type {
+        match self {
+            NativeFfiKind::Void => Type::void(),
+            NativeFfiKind::I64 => Type::i64(),
+            NativeFfiKind::F64 => Type::f64(),
+            NativeFfiKind::Pointer => Type::pointer(),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+enum NativeFfiArgValue {
+    I64(i64),
+    F64(f64),
+    Pointer(*mut c_void),
+    ManagedPointer(Box<Value>, *mut c_void),
+}
+
+impl NativeFfiArgValue {
+    fn as_arg(&self) -> Arg<'_> {
+        match self {
+            NativeFfiArgValue::I64(value) => Arg::new(value),
+            NativeFfiArgValue::F64(value) => Arg::new(value),
+            NativeFfiArgValue::Pointer(value) => Arg::new(value),
+            NativeFfiArgValue::ManagedPointer(_, ptr) => Arg::new(ptr),
+        }
+    }
+
+    fn roundtrip_value_for_pointer(&self, pointer: *mut c_void) -> Option<Value> {
+        match self {
+            NativeFfiArgValue::ManagedPointer(value, ptr) if *ptr == pointer => Some((**value).clone()),
+            _ => None,
+        }
+    }
+}
+
