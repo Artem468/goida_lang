@@ -33,4 +33,3 @@ pub extern "C" fn identity_ptr(value: *mut c_void) -> *mut c_void {
 pub extern "C" fn make_ptr() -> *mut c_void {
     0x1234usize as *mut c_void
 }
-

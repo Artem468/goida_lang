@@ -155,8 +155,8 @@ impl Interpreter {
                     cif.call::<f64>(CodePtr::from_ptr(function_ptr as *mut _), &ffi_args),
                 ),
                 NativeFfiKind::Pointer => {
-                    let ptr =
-                        cif.call::<*mut c_void>(CodePtr::from_ptr(function_ptr as *mut _), &ffi_args);
+                    let ptr = cif
+                        .call::<*mut c_void>(CodePtr::from_ptr(function_ptr as *mut _), &ffi_args);
                     if ptr.is_null() {
                         Value::Empty
                     } else if let Some(value) = ffi_values
@@ -319,7 +319,11 @@ impl Interpreter {
         let library = unsafe { Library::new(path) }.map_err(|err| {
             RuntimeError::IOError(ErrorData::new(
                 span,
-                format!("Failed to load native library '{}': {}", path.display(), err),
+                format!(
+                    "Failed to load native library '{}': {}",
+                    path.display(),
+                    err
+                ),
             ))
         })?;
 
@@ -658,7 +662,10 @@ impl Interpreter {
         module_id: Symbol,
     ) -> Result<bool, RuntimeError> {
         let module = self.modules.get(&module_id).ok_or_else(|| {
-            RuntimeError::InvalidOperation(ErrorData::new(Span::default(), "Module not found".into()))
+            RuntimeError::InvalidOperation(ErrorData::new(
+                Span::default(),
+                "Module not found".into(),
+            ))
         })?;
         let Some(data_type) = module.arena.types.get(expected as usize) else {
             return Ok(true);
@@ -750,9 +757,10 @@ impl NativeFfiArgValue {
 
     fn roundtrip_value_for_pointer(&self, pointer: *mut c_void) -> Option<Value> {
         match self {
-            NativeFfiArgValue::ManagedPointer(value, ptr) if *ptr == pointer => Some((**value).clone()),
+            NativeFfiArgValue::ManagedPointer(value, ptr) if *ptr == pointer => {
+                Some((**value).clone())
+            }
             _ => None,
         }
     }
 }
-
