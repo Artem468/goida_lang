@@ -145,6 +145,7 @@ impl AstArena {
             ("строка", DataType::Primitive(PrimitiveType::Text)),
             ("логический", DataType::Primitive(PrimitiveType::Boolean)),
             ("дробь", DataType::Primitive(PrimitiveType::Float)),
+            ("указатель", DataType::Primitive(PrimitiveType::Pointer)),
             ("список", DataType::List(Box::new(DataType::Any))),
             ("массив", DataType::Array(Box::new(DataType::Any))),
             (

@@ -1,6 +1,5 @@
 pub mod ast;
 pub mod builtins;
-pub mod ffi;
 pub mod interpreter;
 pub mod parser;
 pub mod shared;

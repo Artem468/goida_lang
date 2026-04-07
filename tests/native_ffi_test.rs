@@ -32,14 +32,27 @@ fn native_library_block_loads_relative_dylib_and_exposes_exports() {
         r#"
 библиотека "../debug/{}" {{
     функция add(a: число, b: число) -> число {{}}
-    функция identity(value: неизвестно) -> неизвестно {{}}
+    функция add_f64(a: дробь, b: дробь) -> дробь {{}}
+    функция identity_ptr(value: указатель) -> указатель {{}}
+    функция make_ptr() -> указатель {{}}
     переменная counter: число;
+    переменная ratio: дробь;
+    переменная handle: указатель;
 }}
 
 печать(add(2, 5));
-печать(identity(список(1, 2, 3))[1]);
+печать(add_f64(1.25, 2.5));
+печать(identity_ptr(make_ptr()));
+печать(identity_ptr("строка"));
+печать(identity_ptr(список(1, 2, 3))[1]);
+печать(identity_ptr(массив(10, 20, 30))[1]);
+печать(identity_ptr(словарь("ключ", 42))["ключ"]);
 counter = 9;
+ratio = 2.25;
+handle = make_ptr();
 печать(counter);
+печать(ratio);
+печать(handle);
 "#,
         dylib_name()
     );
@@ -61,18 +74,15 @@ counter = 9;
     );
 
     let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(
-        stdout.contains("7"),
-        "stdout did not contain add result: {stdout}"
-    );
-    assert!(
-        stdout.contains("2"),
-        "stdout did not contain identity result: {stdout}"
-    );
-    assert!(
-        stdout.contains("9"),
-        "stdout did not contain updated counter: {stdout}"
-    );
+    assert!(stdout.contains("7"), "stdout missing number result: {stdout}");
+    assert!(stdout.contains("3.75"), "stdout missing float result: {stdout}");
+    assert!(stdout.contains("4660"), "stdout missing pointer result: {stdout}");
+    assert!(stdout.contains("строка"), "stdout missing text roundtrip: {stdout}");
+    assert!(stdout.contains("2"), "stdout missing list roundtrip: {stdout}");
+    assert!(stdout.contains("20"), "stdout missing array roundtrip: {stdout}");
+    assert!(stdout.contains("42"), "stdout missing dict roundtrip: {stdout}");
+    assert!(stdout.contains("9"), "stdout missing counter result: {stdout}");
+    assert!(stdout.contains("2.25"), "stdout missing ratio result: {stdout}");
 }
 
 fn path_to_arg(path: &Path) -> String {

@@ -1,42 +1,36 @@
-use goida_core::ffi::GoidaFfiValue;
-use goida_core::interpreter::prelude::Value;
+use std::ffi::c_void;
 
 #[no_mangle]
-pub static mut counter: GoidaFfiValue = GoidaFfiValue::number(3);
+pub static mut COUNTER: i64 = 3;
 
 #[no_mangle]
-pub extern "C" fn add(a: *const GoidaFfiValue, b: *const GoidaFfiValue) -> *mut GoidaFfiValue {
-    let left = unsafe { (*a).clone_value() };
-    let right = unsafe { (*b).clone_value() };
+pub static mut RATIO: f64 = 1.5;
 
-    let Value::Number(left) = left else {
-        panic!("left argument must be a number");
-    };
-    let Value::Number(right) = right else {
-        panic!("right argument must be a number");
-    };
+#[no_mangle]
+pub static mut HANDLE: *mut c_void = std::ptr::null_mut();
 
-    GoidaFfiValue::boxed_result(Value::Number(left + right))
+#[no_mangle]
+pub extern "C" fn add(a: i64, b: i64) -> i64 {
+    a + b
 }
 
 #[no_mangle]
-pub extern "C" fn identity(value: *const GoidaFfiValue) -> *mut GoidaFfiValue {
-    let value = unsafe { (*value).clone_value() };
-    GoidaFfiValue::boxed_result(value)
+pub extern "C" fn minus(a: i64, b: i64) -> i64 {
+    a - b
 }
-
 
 #[no_mangle]
-pub extern "C" fn minus(a: *const GoidaFfiValue, b: *const GoidaFfiValue) -> *mut GoidaFfiValue {
-    let left = unsafe { (*a).clone_value() };
-    let right = unsafe { (*b).clone_value() };
-
-    let Value::Number(left) = left else {
-        panic!("left argument must be a number");
-    };
-    let Value::Number(right) = right else {
-        panic!("right argument must be a number");
-    };
-
-    GoidaFfiValue::boxed_result(Value::Number(left - right))
+pub extern "C" fn add_f64(a: f64, b: f64) -> f64 {
+    a + b
 }
+
+#[no_mangle]
+pub extern "C" fn identity_ptr(value: *mut c_void) -> *mut c_void {
+    value
+}
+
+#[no_mangle]
+pub extern "C" fn make_ptr() -> *mut c_void {
+    0x1234usize as *mut c_void
+}
+
