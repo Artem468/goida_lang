@@ -167,7 +167,10 @@ pub unsafe extern "C" fn ffi_array_free(ptr: *mut c_void) {
 pub extern "C" fn ffi_create_demo_dict() -> *mut c_void {
     let mut map = HashMap::new();
     map.insert("ключ".to_string(), NativeDictValue::I64(42));
-    map.insert("текст".to_string(), NativeDictValue::Text("значение".to_string()));
+    map.insert(
+        "текст".to_string(),
+        NativeDictValue::Text("значение".to_string()),
+    );
     Box::into_raw(Box::new(NativeDict { map })) as *mut c_void
 }
 

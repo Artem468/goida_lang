@@ -1,7 +1,3 @@
-// Перед запуском соберите тестовую native-библиотеку:
-// cargo build -p native_ffi_test_lib
-//
-// Путь без расширения: интерпретатор сам подставит .dll/.so/.dylib.
 библиотека "../target/debug/native_ffi_test_lib" {
     функция ffi_create_demo_text() -> указатель {}
     функция ffi_text_len(ptr: указатель) -> число {}
@@ -27,10 +23,10 @@
 
 печать("=== чистое чтение коллекций внутри DLL ===");
 
-текст = ffi_create_demo_text();
-печать("text.len = " + ffi_text_len(текст));
-печать("text.byte[0] = " + ffi_text_byte_at(текст, 0));
-ffi_text_free(текст);
+текст1 = ffi_create_demo_text();
+печать("text.len = " + ffi_text_len(текст1));
+печать("text.byte[0] = " + ffi_text_byte_at(текст1, 0));
+ffi_text_free(текст1);
 
 список_ptr = ffi_create_list3(1, 2, 3);
 печать("list.len = " + ffi_list_len(список_ptr));
