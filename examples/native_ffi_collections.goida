@@ -3,18 +3,47 @@
 //
 // Путь без расширения: интерпретатор сам подставит .dll/.so/.dylib.
 библиотека "../target/debug/native_ffi_test_lib" {
-    функция identity_ptr(value: указатель) -> указатель {}
+    функция ffi_create_demo_text() -> указатель {}
+    функция ffi_text_len(ptr: указатель) -> число {}
+    функция ffi_text_byte_at(ptr: указатель, index: число) -> число {}
+    функция ffi_text_free(ptr: указатель) {}
+
+    функция ffi_create_list3(a: число, b: число, c: число) -> указатель {}
+    функция ffi_list_len(ptr: указатель) -> число {}
+    функция ffi_list_i64_at(ptr: указатель, index: число) -> число {}
+    функция ffi_list_free(ptr: указатель) {}
+
+    функция ffi_create_array3(a: число, b: число, c: число) -> указатель {}
+    функция ffi_array_len(ptr: указатель) -> число {}
+    функция ffi_array_i64_at(ptr: указатель, index: число) -> число {}
+    функция ffi_array_free(ptr: указатель) {}
+
+    функция ffi_create_demo_dict() -> указатель {}
+    функция ffi_dict_len(ptr: указатель) -> число {}
+    функция ffi_dict_get_i64_known_key(ptr: указатель, key_id: число) -> число {}
+    функция ffi_dict_get_text_len_known_key(ptr: указатель, key_id: число) -> число {}
+    функция ffi_dict_free(ptr: указатель) {}
 }
 
-печать("=== roundtrip через указатель ===");
+печать("=== чистое чтение коллекций внутри DLL ===");
 
-стр = "привет из строки";
-сп = список(1, 2, 3);
-масс = массив(10, 20, 30);
-слв = словарь("ключ", 42, "текст", "значение");
+текст = ffi_create_demo_text();
+печать("text.len = " + ffi_text_len(текст));
+печать("text.byte[0] = " + ffi_text_byte_at(текст, 0));
+ffi_text_free(текст);
 
-печать(identity_ptr(стр));
-печать(identity_ptr(сп)[1]);
-печать(identity_ptr(масс)[1]);
-печать(identity_ptr(слв)["ключ"]);
-печать(identity_ptr(слв)["текст"]);
+список_ptr = ffi_create_list3(1, 2, 3);
+печать("list.len = " + ffi_list_len(список_ptr));
+печать("list[1] = " + ffi_list_i64_at(список_ptr, 1));
+ffi_list_free(список_ptr);
+
+массив_ptr = ffi_create_array3(10, 20, 30);
+печать("array.len = " + ffi_array_len(массив_ptr));
+печать("array[1] = " + ffi_array_i64_at(массив_ptr, 1));
+ffi_array_free(массив_ptr);
+
+словарь_ptr = ffi_create_demo_dict();
+печать("dict.len = " + ffi_dict_len(словарь_ptr));
+печать("dict['ключ'] = " + ffi_dict_get_i64_known_key(словарь_ptr, 1));
+печать("len(dict['текст']) = " + ffi_dict_get_text_len_known_key(словарь_ptr, 2));
+ffi_dict_free(словарь_ptr);
