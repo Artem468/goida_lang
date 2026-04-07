@@ -2,12 +2,13 @@ use std::any::Any;
 use std::collections::HashMap;
 
 use crate::ast::prelude::{
-    AstArena, ClassDefinition, ErrorData, FunctionDefinition, Import, Span, StmtId,
+    AstArena, ClassDefinition, ErrorData, FunctionDefinition, Import, Parameter, Span, StmtId,
 };
 pub(crate) use crate::ast::program::ClassInstance;
 use crate::ast::source::SourceManager;
 use crate::parser::structs::ParseError;
 use crate::shared::SharedMut;
+use libloading::Library;
 use std::fmt::Debug;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -29,7 +30,30 @@ pub enum Value {
     Array(Arc<Vec<Value>>),
     Dict(SharedMut<HashMap<String, Value>>),
     NativeResource(SharedMut<Box<dyn Any + Send + Sync>>),
+    NativeGlobal(Arc<NativeGlobalBinding>),
     Empty,
+}
+
+#[derive(Clone, Debug)]
+pub struct NativeFunctionBinding {
+    pub module_id: Symbol,
+    pub library_path: Arc<PathBuf>,
+    pub symbol_name: String,
+    pub params: Vec<Parameter>,
+    pub return_type: Option<u32>,
+}
+
+#[derive(Clone, Debug)]
+pub struct NativeGlobalBinding {
+    pub module_id: Symbol,
+    pub library_path: Arc<PathBuf>,
+    pub symbol_name: String,
+    pub value_type: u32,
+}
+
+#[derive(Debug)]
+pub struct LoadedNativeLibrary {
+    pub handle: Library,
 }
 
 #[derive(Clone, Debug)]
@@ -98,6 +122,7 @@ pub struct Interpreter {
     pub(crate) std_classes: HashMap<Symbol, SharedMut<ClassDefinition>>,
     pub(crate) builtins: HashMap<Symbol, BuiltinFn>,
     pub modules: HashMap<Symbol, Module>,
+    pub(crate) native_libraries: HashMap<PathBuf, SharedMut<LoadedNativeLibrary>>,
     pub interner: SharedInterner,
     pub(crate) environment: SharedMut<Environment>,
     pub source_manager: SourceManager,

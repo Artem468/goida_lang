@@ -48,6 +48,7 @@ impl Value {
             Value::Array(array) => !array.is_empty(),
             Value::Dict(dict) => !dict.read(|d| d.is_empty()),
             Value::NativeResource(_) => true,
+            Value::NativeGlobal(_) => true,
             Value::Empty => false,
         }
     }
@@ -182,6 +183,9 @@ impl fmt::Display for Value {
                 write!(f, "}}")
             }),
             Value::NativeResource(resource) => write!(f, "<Ресурс {:p}>", resource),
+            Value::NativeGlobal(binding) => {
+                write!(f, "<Нативная переменная {}>", binding.symbol_name)
+            }
             Value::Empty => write!(f, "пустота"),
         }
     }
@@ -245,7 +249,8 @@ impl TryFrom<Value> for bool {
             | Value::Function(_)
             | Value::Builtin(_)
             | Value::Module(_)
-            | Value::NativeResource(_) => Ok(true),
+            | Value::NativeResource(_)
+            | Value::NativeGlobal(_) => Ok(true),
         }
     }
 }
@@ -263,6 +268,7 @@ impl PartialEq for Value {
             (Value::List(a), Value::List(b)) => a.ptr_eq(b),
             (Value::Array(a), Value::Array(b)) => Arc::ptr_eq(a, b),
             (Value::Dict(a), Value::Dict(b)) => a.ptr_eq(b),
+            (Value::NativeGlobal(a), Value::NativeGlobal(b)) => Arc::ptr_eq(a, b),
             (Value::Empty, Value::Empty) => true,
             _ => false,
         }

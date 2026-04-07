@@ -3,6 +3,7 @@ pub mod core;
 pub mod environment;
 pub mod expressions;
 pub mod functions;
+pub mod native;
 pub mod operations;
 pub mod prelude;
 pub mod statements;

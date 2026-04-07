@@ -39,7 +39,7 @@ impl ExpressionEvaluator for Interpreter {
 
             ExpressionKind::Identifier(symbol) => {
                 if let Some(val) = self.environment.read(|env| env.get(&symbol)) {
-                    return Ok(val);
+                    return self.resolve_runtime_value(val, expr_kind.span);
                 }
 
                 let current_module = self.modules.get(&current_module_id).ok_or_else(|| {
@@ -50,7 +50,7 @@ impl ExpressionEvaluator for Interpreter {
                 })?;
 
                 if let Some(val) = current_module.globals.get(&symbol) {
-                    return Ok(val.clone());
+                    return self.resolve_runtime_value(val.clone(), expr_kind.span);
                 }
 
                 if let Some(builtin) = self.builtins.get(&symbol) {
@@ -71,12 +71,18 @@ impl ExpressionEvaluator for Interpreter {
                     return if let Some(target_module) =
                         target_module_symbol.and_then(|sym| self.modules.get(&sym))
                     {
-                        target_module.globals.get(&var_sym).cloned().ok_or_else(|| {
-                            RuntimeError::UndefinedVariable(ErrorData::new(
-                                expr_kind.span,
-                                name_str.clone(),
-                            ))
-                        })
+                        let value =
+                            target_module
+                                .globals
+                                .get(&var_sym)
+                                .cloned()
+                                .ok_or_else(|| {
+                                    RuntimeError::UndefinedVariable(ErrorData::new(
+                                        expr_kind.span,
+                                        name_str.clone(),
+                                    ))
+                                })?;
+                        self.resolve_runtime_value(value, expr_kind.span)
                     } else {
                         Err(RuntimeError::InvalidOperation(ErrorData::new(
                             expr_kind.span,
@@ -249,10 +255,25 @@ impl ExpressionEvaluator for Interpreter {
                 };
                 if let ExpressionKind::Identifier(module_symbol) = obj_expr.kind {
                     if let Some(module_env) = self.modules.get(&module_symbol) {
-                        return module_env
-                            .globals
-                            .get(&property)
-                            .ok_or_else(|| {
+                        let value = module_env.globals.get(&property).ok_or_else(|| {
+                            RuntimeError::UndefinedVariable(ErrorData::new(
+                                expr_kind.span,
+                                format!(
+                                    "{}.{}",
+                                    self.resolve_symbol(module_symbol).unwrap(),
+                                    self.resolve_symbol(property).unwrap()
+                                ),
+                            ))
+                        })?;
+                        return self.resolve_runtime_value(value.clone(), expr_kind.span);
+                    }
+                }
+
+                let obj_result = self.evaluate_expression(object, current_module_id);
+                match obj_result {
+                    Ok(Value::Module(module_symbol)) => {
+                        if let Some(module_env) = self.modules.get(&module_symbol) {
+                            let value = module_env.globals.get(&property).ok_or_else(|| {
                                 RuntimeError::UndefinedVariable(ErrorData::new(
                                     expr_kind.span,
                                     format!(
@@ -261,29 +282,8 @@ impl ExpressionEvaluator for Interpreter {
                                         self.resolve_symbol(property).unwrap()
                                     ),
                                 ))
-                            })
-                            .cloned();
-                    }
-                }
-
-                let obj_result = self.evaluate_expression(object, current_module_id);
-                match obj_result {
-                    Ok(Value::Module(module_symbol)) => {
-                        if let Some(module_env) = self.modules.get(&module_symbol) {
-                            module_env
-                                .globals
-                                .get(&property)
-                                .ok_or_else(|| {
-                                    RuntimeError::UndefinedVariable(ErrorData::new(
-                                        expr_kind.span,
-                                        format!(
-                                            "{}.{}",
-                                            self.resolve_symbol(module_symbol).unwrap(),
-                                            self.resolve_symbol(property).unwrap()
-                                        ),
-                                    ))
-                                })
-                                .cloned()
+                            })?;
+                            self.resolve_runtime_value(value.clone(), expr_kind.span)
                         } else {
                             Err(RuntimeError::InvalidOperation(ErrorData::new(
                                 expr_kind.span,
@@ -510,6 +510,10 @@ impl ExpressionEvaluator for Interpreter {
                                         mod_symbol,
                                         obj_expr.span,
                                     )
+                                } else if let Some(Value::Builtin(builtin)) =
+                                    target_module.globals.get(&method)
+                                {
+                                    builtin(self, arguments, obj_expr.span)
                                 } else {
                                     let m_name = self.resolve_symbol(method).unwrap();
                                     let mod_name = self.resolve_symbol(mod_symbol).unwrap();
@@ -533,6 +537,11 @@ impl ExpressionEvaluator for Interpreter {
                                             mod_symbol,
                                             obj_expr.span,
                                         );
+                                    }
+                                    if let Some(Value::Builtin(builtin)) =
+                                        target_module.globals.get(&method)
+                                    {
+                                        return builtin(self, arguments, obj_expr.span);
                                     }
                                 }
                             }

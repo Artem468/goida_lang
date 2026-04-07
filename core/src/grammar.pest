@@ -3,9 +3,9 @@ COMMENT = _{ "//" ~ (!"\n" ~ ANY)* ~ NEWLINE? }
 
 // === Program structure ===
 program = { SOI ~ (NEWLINE | COMMENT)* ~ item* ~ (NEWLINE | COMMENT)* ~ EOI }
-item = _{ 
+item = _{
     (NEWLINE | COMMENT)* ~
-    (import_stmt | function | class | statement) ~
+    (import_stmt | function | class | library_stmt | statement) ~
     (NEWLINE | COMMENT)*
 }
 
@@ -17,6 +17,31 @@ import_stmt = {
 // === Functions ===
 function = {
     "функция" ~ identifier ~ "(" ~ param_list? ~ ")" ~ return_type? ~ block
+}
+
+library_stmt = {
+    "библиотека" ~ string_literal ~ "{" ~ (NEWLINE | COMMENT)* ~ (library_item ~ (NEWLINE | COMMENT)*)* ~ "}"
+}
+
+library_item = _{
+    library_function |
+    library_global
+}
+
+library_function = {
+    "функция" ~ identifier ~ "(" ~ library_param_list? ~ ")" ~ return_type? ~ empty_block
+}
+
+library_global = {
+    "переменная" ~ identifier ~ ":" ~ type_name ~ ";"
+}
+
+library_param_list = {
+    (NEWLINE | COMMENT)* ~ library_param ~ ((NEWLINE | COMMENT)* ~ "," ~ (NEWLINE | COMMENT)* ~ library_param)* ~ (NEWLINE | COMMENT)*
+}
+
+library_param = {
+    identifier ~ ":" ~ type_name
 }
 
 // === Classes ===
@@ -211,6 +236,10 @@ bool_literal = @{
 // === Terminals ===
 block = {
     "{" ~ (NEWLINE | COMMENT)* ~ (item ~ (NEWLINE | COMMENT)*)* ~ "}"
+}
+
+empty_block = {
+    "{" ~ (NEWLINE | COMMENT)* ~ "}"
 }
 
 param_list = {
