@@ -74,15 +74,42 @@ handle = make_ptr();
     );
 
     let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.contains("7"), "stdout missing number result: {stdout}");
-    assert!(stdout.contains("3.75"), "stdout missing float result: {stdout}");
-    assert!(stdout.contains("4660"), "stdout missing pointer result: {stdout}");
-    assert!(stdout.contains("строка"), "stdout missing text roundtrip: {stdout}");
-    assert!(stdout.contains("2"), "stdout missing list roundtrip: {stdout}");
-    assert!(stdout.contains("20"), "stdout missing array roundtrip: {stdout}");
-    assert!(stdout.contains("42"), "stdout missing dict roundtrip: {stdout}");
-    assert!(stdout.contains("9"), "stdout missing counter result: {stdout}");
-    assert!(stdout.contains("2.25"), "stdout missing ratio result: {stdout}");
+    assert!(
+        stdout.contains("7"),
+        "stdout missing number result: {stdout}"
+    );
+    assert!(
+        stdout.contains("3.75"),
+        "stdout missing float result: {stdout}"
+    );
+    assert!(
+        stdout.contains("4660"),
+        "stdout missing pointer result: {stdout}"
+    );
+    assert!(
+        stdout.contains("строка"),
+        "stdout missing text roundtrip: {stdout}"
+    );
+    assert!(
+        stdout.contains("2"),
+        "stdout missing list roundtrip: {stdout}"
+    );
+    assert!(
+        stdout.contains("20"),
+        "stdout missing array roundtrip: {stdout}"
+    );
+    assert!(
+        stdout.contains("42"),
+        "stdout missing dict roundtrip: {stdout}"
+    );
+    assert!(
+        stdout.contains("9"),
+        "stdout missing counter result: {stdout}"
+    );
+    assert!(
+        stdout.contains("2.25"),
+        "stdout missing ratio result: {stdout}"
+    );
 }
 
 fn path_to_arg(path: &Path) -> String {
