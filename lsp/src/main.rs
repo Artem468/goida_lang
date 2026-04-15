@@ -1035,7 +1035,7 @@ async fn main() {
     let stdin = tokio::io::stdin();
     let stdout = tokio::io::stdout();
 
-    let interner = goida_core::interpreter::prelude::SharedInterner::new(StringInterner::new());
+    let interner = SharedInterner::new(StringInterner::new());
     let interpreter = Arc::new(RwLock::new(Interpreter::new(interner)));
     let state = Arc::new(RwLock::new(ServerState::default()));
 
