@@ -9,6 +9,11 @@ use crate::shared::SharedMut;
 use crate::traits::prelude::CoreOperations;
 use libffi::middle::{Arg, Cif, CodePtr, Type};
 use libloading::Library;
+#[cfg(windows)]
+use libloading::os::windows::{
+    Library as WindowsLibrary, LOAD_WITH_ALTERED_SEARCH_PATH,
+};
+use std::error::Error as StdError;
 use std::ffi::c_void;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -287,17 +292,47 @@ impl Interpreter {
             })?;
 
         let relative_path = Path::new(&path);
-        let module_dir = module.path.parent().unwrap_or_else(|| Path::new("."));
+        let module_path = if module.path.is_absolute() {
+            module.path.clone()
+        } else {
+            std::env::current_dir()
+                .map_err(|err| {
+                    RuntimeError::IOError(ErrorData::new(
+                        span,
+                        format!("Failed to resolve current directory: {err}"),
+                    ))
+                })?
+                .join(&module.path)
+        };
+        let module_dir = module_path.parent().unwrap_or_else(|| Path::new("."));
         let full_path = module_dir.join(relative_path);
 
         if full_path.exists() {
-            return Ok(full_path);
+            return full_path.canonicalize().map_err(|err| {
+                RuntimeError::IOError(ErrorData::new(
+                    span,
+                    format!(
+                        "Failed to normalize native library path '{}': {}",
+                        full_path.display(),
+                        err
+                    ),
+                ))
+            });
         }
 
         if full_path.extension().is_none() {
             let candidate = full_path.with_extension(std::env::consts::DLL_EXTENSION);
             if candidate.exists() {
-                return Ok(candidate);
+                return candidate.canonicalize().map_err(|err| {
+                    RuntimeError::IOError(ErrorData::new(
+                        span,
+                        format!(
+                            "Failed to normalize native library path '{}': {}",
+                            candidate.display(),
+                            err
+                        ),
+                    ))
+                });
             }
         }
 
@@ -316,13 +351,17 @@ impl Interpreter {
             return Ok(());
         }
 
-        let library = unsafe { Library::new(path) }.map_err(|err| {
+        let library = load_native_library(path).map_err(|err| {
+            let detail = err
+                .source()
+                .map(|source| format!("{err}: {source}"))
+                .unwrap_or_else(|| err.to_string());
             RuntimeError::IOError(ErrorData::new(
                 span,
                 format!(
                     "Failed to load native library '{}': {}",
                     path.display(),
-                    err
+                    detail
                 ),
             ))
         })?;
@@ -716,6 +755,17 @@ impl Interpreter {
             DataType::Unit => "пустота".into(),
         }
     }
+}
+
+#[cfg(windows)]
+fn load_native_library(path: &Path) -> Result<Library, libloading::Error> {
+    unsafe { WindowsLibrary::load_with_flags(path, LOAD_WITH_ALTERED_SEARCH_PATH) }
+        .map(Into::into)
+}
+
+#[cfg(not(windows))]
+fn load_native_library(path: &Path) -> Result<Library, libloading::Error> {
+    unsafe { Library::new(path) }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

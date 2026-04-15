@@ -159,7 +159,7 @@ impl ExpressionEvaluator for Interpreter {
                             "Модуль не найден".into(),
                         ))
                     })?;
-                    module.arena.get_expression(expr_id).unwrap().clone()
+                    module.arena.get_expression(function).unwrap().clone()
                 };
 
                 let mut arguments = Vec::new();

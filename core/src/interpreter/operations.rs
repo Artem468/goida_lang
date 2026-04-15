@@ -8,7 +8,7 @@ impl ValueOperations for Interpreter {
     fn add_values(&self, left: Value, right: Value, span: Span) -> Result<Value, RuntimeError> {
         match (&left, &right) {
             (Value::Number(a), Value::Number(b)) => Ok(Value::Number(a + b)),
-            (Value::Float(a), Value::Float(b)) => Ok(Value::Float(a + b)), // Не забудь про дробь!
+            (Value::Float(a), Value::Float(b)) => Ok(Value::Float(a + b)),
 
             (Value::Text(a), Value::Text(b)) => Ok(Value::Text(format!("{}{}", a, b))),
             (Value::Text(a), any) => Ok(Value::Text(format!("{}{}", a, any))),

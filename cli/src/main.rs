@@ -32,11 +32,13 @@ enum Commands {
 fn main() {
     let cli = Cli::parse();
     match &cli.command {
-        Some(Commands::Run { file, .. }) => {
-            if run_file(file).is_err() {
+        Some(Commands::Run { file, .. }) => match run_file(file) {
+            Err((err, _)) => {
+                println!("{}", err);
                 std::process::exit(1);
             }
-        }
+            _ => {}
+        },
         Some(Commands::Repl) => run_repl(),
         None => {
             println!("Добро пожаловать в Гойда! Используйте --help для справки.");
@@ -46,7 +48,7 @@ fn main() {
 
 fn run_file(filename: &str) -> Result<(), (String, ErrorData)> {
     let content = fs::read_to_string(filename).map_err(|e| {
-        let msg = format!("Не удалось прочитать файл '{}': {}", filename, e);
+        let msg = format!("{}: '{}'", e, filename);
         (msg.clone(), ErrorData::new(Span::default(), msg))
     })?;
     execute_code(&content, filename)
@@ -71,7 +73,12 @@ fn execute_code(code: &str, filename: &str) -> Result<(), (String, ErrorData)> {
                 intp.define_builtins();
             }
 
-            INTERPRETER.write().unwrap().interpret(name).map_err(|e| {
+            let interpret_result = {
+                let mut interpreter = INTERPRETER.write().unwrap();
+                interpreter.interpret(name)
+            };
+
+            interpret_result.map_err(|e| {
                 let (msg, error_data) = match e {
                     RuntimeError::UndefinedVariable(err) => {
                         (format!("Неопределенная переменная: {}", err.message), err)

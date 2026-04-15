@@ -36,7 +36,17 @@
                 "scopeName": "source.goida",
                 "path": "./syntaxes/goida.tmLanguage.json"
             }
-        ]
+        ],
+        "configuration": {
+            "title": "Goida",
+            "properties": {
+                "goida.languageServer.path": {
+                    "type": "string",
+                    "default": "",
+                    "description": "Absolute path to goida LSP binary. If empty, extension tries bundled and workspace binaries."
+                }
+            }
+        }
     },
     "devDependencies": {
         "@types/node": "^25.5.0",
