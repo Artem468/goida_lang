@@ -3,6 +3,7 @@ use crate::interpreter::prelude::{
     BuiltinFn, CallArgListExt, CallArgValue, RuntimeError, SharedInterner, Value,
 };
 use crate::shared::SharedMut;
+use crate::{define_constructor, define_method};
 use chrono::{Datelike, Local, TimeZone, Timelike};
 use std::sync::Arc;
 use string_interner::DefaultSymbol as Symbol;
@@ -13,7 +14,7 @@ pub fn setup_datetime_class(interner_ref: &SharedInterner) -> (Symbol, SharedMut
 
     let ms_sym = interner_ref.write(|i| i.get_or_intern("_мс"));
 
-    class_def.set_constructor(BuiltinFn(Arc::new(move |_interpreter, args, span| {
+    define_constructor!(class_def, (_, args, span) {
         let instance = match CallArgListExt::first_value(&args) {
             Some(Value::Object(inst)) => inst,
             _ => {
@@ -35,7 +36,7 @@ pub fn setup_datetime_class(interner_ref: &SharedInterner) -> (Symbol, SharedMut
         instance.write(|i| i.field_values.insert(ms_sym, Value::Number(ms)));
 
         Ok(Value::Empty)
-    })));
+    });
 
     // --- Вспомогательная функция: извлечь мс из self ---
     let get_ms = move |args: &Vec<CallArgValue>| -> Result<i64, RuntimeError> {
@@ -43,7 +44,7 @@ pub fn setup_datetime_class(interner_ref: &SharedInterner) -> (Symbol, SharedMut
             inst.read(|i| {
                 i.field_values
                     .get(&ms_sym)
-                    .and_then(|v| v.as_i64()) // Твой новый хелпер
+                    .and_then(|v| v.as_i64())
                     .ok_or_else(|| {
                         RuntimeError::InvalidOperation(ErrorData::new(
                             Span::default(),
@@ -139,38 +140,29 @@ pub fn setup_datetime_class(interner_ref: &SharedInterner) -> (Symbol, SharedMut
     }
 
     // --- Метод: .сейчас() (стандартный вывод) ---
-    class_def.add_method(
-        interner_ref.write(|i| i.get_or_intern("сейчас")),
-        Visibility::Public,
-        false, // Вызывается у инстанса
-        BuiltinFn(Arc::new(move |_, args, _| {
-            let now = Local::now();
+    define_method!(class_def, interner_ref, "сейчас" => (_, args, _) {
+        let now = Local::now();
 
-            let pattern = match CallArgListExt::get_value(&args, 1) {
-                Some(Value::Text(t)) => t.as_str(),
-                _ => "%d.%m.%Y %H:%M:%S",
-            };
+        let pattern = match CallArgListExt::get_value(&args, 1) {
+            Some(Value::Text(t)) => t.as_str(),
+            _ => "%d.%m.%Y %H:%M:%S",
+        };
 
-            let formatted = now.format(pattern).to_string();
-            Ok(Value::Text(formatted))
-        })),
-    );
+        let formatted = now.format(pattern).to_string();
+        Ok(Value::Text(formatted))
+    });
 
     // --- Метод: .формат(шаблон) ---
-    class_def.add_method(
-        interner_ref.write(|i| i.get_or_intern("формат")),
-        Visibility::Public,
-        false,
-        BuiltinFn(Arc::new(move |_, args, _| {
-            let ms = get_ms(&args)?;
-            let dt = Local.timestamp_millis_opt(ms).unwrap();
-            let pattern = CallArgListExt::get_value(&args, 1)
-                .and_then(|v| v.as_str())
-                .map(|s| s.as_str())
-                .unwrap_or("%d.%m.%Y %H:%M:%S");
-            Ok(Value::Text(dt.format(pattern).to_string()))
-        })),
-    );
+    define_method!(class_def, interner_ref, "формат" => (_, args, _) {
+        let ms = get_ms(&args)?;
+        let dt = Local.timestamp_millis_opt(ms).unwrap();
+        let pattern = CallArgListExt::get_value(&args, 1)
+            .and_then(|v| v.as_str())
+            .map(|s| s.as_str())
+            .unwrap_or("%d.%m.%Y %H:%M:%S");
+
+        Ok(Value::Text(dt.format(&pattern).to_string()))
+    });
 
     (name_sym, SharedMut::new(class_def))
 }

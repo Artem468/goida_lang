@@ -1,10 +1,10 @@
-use crate::ast::prelude::{ClassDefinition, ErrorData, Span, Visibility};
+use crate::ast::prelude::{ClassDefinition, ErrorData, Span};
 use crate::interpreter::prelude::{
-    BuiltinFn, CallArgListExt, Interpreter, RuntimeError, SharedInterner, Value,
+    CallArgListExt, Interpreter, RuntimeError, SharedInterner, Value,
 };
 use crate::shared::SharedMut;
 use crate::traits::prelude::CoreOperations;
-use std::sync::Arc;
+use crate::{define_builtin, define_constructor, define_method};
 use string_interner::DefaultSymbol as Symbol;
 
 pub fn setup_list_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassDefinition>) {
@@ -12,192 +12,153 @@ pub fn setup_list_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassDe
 
     let mut class_def = ClassDefinition::new(name, Span::default());
 
-    class_def.set_constructor(BuiltinFn(Arc::new(|_interp, args, _span| {
-        // args[0] - это временный ClassInstance (this)
-        // args[1..] - это элементы: новый Список(1, 2, 3)
+    define_constructor!(class_def, (interp, args, _) {
         if let Some(Value::Object(instance)) = CallArgListExt::first_value(&args) {
             let items = args[1..].iter().map(|arg| arg.value.clone()).collect();
             let internal_list = Value::List(SharedMut::new(items));
 
-            let data_sym = _interp.intern_string("__data");
+            let data_sym = interp.intern_string("__data");
             instance.write(|i| i.field_values.insert(data_sym, internal_list));
         }
         Ok(Value::Empty)
-    })));
+    });
 
     // append(value) - Добавить в конец
-    class_def.add_method(
-        interner.write(|i| i.get_or_intern("добавить")),
-        Visibility::Public,
-        false,
-        BuiltinFn(Arc::new(|_interp, args, span| {
-            if let (Some(Value::List(list)), Some(val)) = (
-                CallArgListExt::first_value(&args),
-                CallArgListExt::get_value(&args, 1),
-            ) {
-                list.write(|i| i.push(val.clone()));
-                Ok(Value::Empty)
-            } else {
-                Err(RuntimeError::TypeError(ErrorData::new(
-                    span,
-                    "Использование: list.append(value)".into(),
-                )))
-            }
-        })),
-    );
+    define_method!(class_def, interner, "добавить" => (_, args, span) {
+        if let (Some(Value::List(list)), Some(val)) = (
+            CallArgListExt::first_value(&args),
+            CallArgListExt::get_value(&args, 1),
+        ) {
+            list.write(|i| i.push(val.clone()));
+            Ok(Value::Empty)
+        } else {
+            Err(RuntimeError::TypeError(ErrorData::new(
+                span,
+                "Использование: list.append(value)".into(),
+            )))
+        }
+    });
 
     // set(index: Number, value: Any) -> Empty
-    class_def.add_method(
-        interner.write(|i| i.get_or_intern("задать")),
-        Visibility::Public,
-        false,
-        BuiltinFn(Arc::new(|_interp, args, span| {
-            if let (Some(Value::List(list)), Some(raw_idx), Some(new_val)) = (
-                CallArgListExt::first_value(&args),
-                CallArgListExt::get_value(&args, 1),
-                CallArgListExt::get_value(&args, 2),
-            ) {
-                list.write(|vec| {
-                    let idx = raw_idx.resolve_index(vec.len(), span)?;
-                    vec[idx] = new_val.clone();
-                    Ok(Value::Empty)
-                })
-            } else {
-                Err(RuntimeError::TypeError(ErrorData::new(
-                    span,
-                    "Использование: list.set(number, value)".into(),
-                )))
-            }
-        })),
-    );
+    define_method!(class_def, interner, "задать" => (_, args, span) {
+        if let (Some(Value::List(list)), Some(raw_idx), Some(new_val)) = (
+            CallArgListExt::first_value(&args),
+            CallArgListExt::get_value(&args, 1),
+            CallArgListExt::get_value(&args, 2),
+        ) {
+            list.write(|vec| {
+                let idx = raw_idx.resolve_index(vec.len(), span)?;
+                vec[idx] = new_val.clone();
+                Ok(Value::Empty)
+            })
+        } else {
+            Err(RuntimeError::TypeError(ErrorData::new(
+                span,
+                "Использование: list.set(number, value)".into(),
+            )))
+        }
+    });
 
     // len() - Получить длину
-    class_def.add_method(
-        interner.write(|i| i.get_or_intern("длина")),
-        Visibility::Public,
-        false,
-        BuiltinFn(Arc::new(|_interp, args, span| {
-            if let Some(Value::List(list)) = CallArgListExt::first_value(&args) {
-                let length = list.read(|i| i.len());
-                Ok(Value::Number(length as i64))
-            } else {
-                Err(RuntimeError::TypeError(ErrorData::new(
-                    span,
-                    "Ожидался List".into(),
-                )))
-            }
-        })),
-    );
+    define_method!(class_def, interner, "длина" => (_, args, span) {
+        if let Some(Value::List(list)) = CallArgListExt::first_value(&args) {
+            let length = list.read(|i| i.len());
+            Ok(Value::Number(length as i64))
+        } else {
+            Err(RuntimeError::TypeError(ErrorData::new(
+                span,
+                "Ожидался список".into(),
+            )))
+        }
+    });
 
     // pop(index?) - Удалить и вернуть элемент (последний или по индексу)
-    class_def.add_method(
-        interner.write(|i| i.get_or_intern("удалить")),
-        Visibility::Public,
-        false,
-        BuiltinFn(Arc::new(|_interp, args, span| {
-            if let Some(Value::List(list)) = CallArgListExt::first_value(&args) {
-                list.write(|vec| {
-                    if vec.is_empty() {
-                        return Err(RuntimeError::InvalidOperation(ErrorData::new(
-                            span,
-                            "pop у пустого списка".into(),
-                        )));
-                    }
+    define_method!(class_def, interner, "удалить" => (_, args, span) {
+        if let Some(Value::List(list)) = CallArgListExt::first_value(&args) {
+            list.write(|vec| {
+                if vec.is_empty() {
+                    return Err(RuntimeError::InvalidOperation(ErrorData::new(
+                        span,
+                        "удаление у пустого списка".into(),
+                    )));
+                }
 
-                    let val = if let Some(raw_idx) = CallArgListExt::get_value(&args, 1) {
-                        let idx = raw_idx.resolve_index(vec.len(), span)?;
-                        vec.remove(idx)
-                    } else {
-                        vec.pop().unwrap()
-                    };
+                let val = if let Some(raw_idx) = CallArgListExt::get_value(&args, 1) {
+                    let idx = raw_idx.resolve_index(vec.len(), span)?;
+                    vec.remove(idx)
+                } else {
+                    vec.pop().unwrap()
+                };
 
-                    Ok(val)
-                })
-            } else {
-                Err(RuntimeError::TypeError(ErrorData::new(
-                    span,
-                    "Ожидался List".into(),
-                )))
-            }
-        })),
-    );
+                Ok(val)
+            })
+        } else {
+            Err(RuntimeError::TypeError(ErrorData::new(
+                span,
+                "Ожидался список".into(),
+            )))
+        }
+    });
+
     // clear() - Очистить список
-    class_def.add_method(
-        interner.write(|i| i.get_or_intern("отчистить")),
-        Visibility::Public,
-        false,
-        BuiltinFn(Arc::new(|_interp, args, span| {
-            if let Some(Value::List(list)) = CallArgListExt::first_value(&args) {
-                list.write(|i| i.clear());
-                Ok(Value::Empty)
-            } else {
-                Err(RuntimeError::TypeError(ErrorData::new(
-                    span,
-                    "Ожидался List".into(),
-                )))
-            }
-        })),
-    );
+    define_method!(class_def, interner, "отчистить" => (_, args, span) {
+        if let Some(Value::List(list)) = CallArgListExt::first_value(&args) {
+            list.write(|i| i.clear());
+            Ok(Value::Empty)
+        } else {
+            Err(RuntimeError::TypeError(ErrorData::new(
+                span,
+                "Ожидался список".into(),
+            )))
+        }
+    });
 
     // join(separator) - Склеить в строку
-    class_def.add_method(
-        interner.write(|i| i.get_or_intern("объединить")),
-        Visibility::Public,
-        false,
-        BuiltinFn(Arc::new(|_interp, args, span| {
-            if let (Some(Value::List(list)), Some(Value::Text(sep))) = (
-                CallArgListExt::first_value(&args),
-                CallArgListExt::get_value(&args, 1),
-            ) {
-                let vec = list.read(|i| {
-                    i.iter()
-                        .map(|v| v.to_string())
-                        .collect::<Vec<_>>()
-                        .join(sep)
-                });
-                Ok(Value::Text(vec))
-            } else {
-                Err(RuntimeError::TypeError(ErrorData::new(
-                    span,
-                    "Использование: list.join(string)".into(),
-                )))
-            }
-        })),
-    );
+    define_method!(class_def, interner, "объединить" => (_, args, span) {
+        if let (Some(Value::List(list)), Some(Value::Text(sep))) = (
+            CallArgListExt::first_value(&args),
+            CallArgListExt::get_value(&args, 1),
+        ) {
+            let joined = list.read(|i| {
+                i.iter()
+                    .map(|v| v.to_string())
+                    .collect::<Vec<_>>()
+                    .join(sep)
+            });
+            Ok(Value::Text(joined))
+        } else {
+            Err(RuntimeError::TypeError(ErrorData::new(
+                span,
+                "Использование: list.join(string)".into(),
+            )))
+        }
+    });
 
     // get(index) - Безопасное получение (аналог list[i])
-    class_def.add_method(
-        interner.write(|i| i.get_or_intern("получить")),
-        Visibility::Public,
-        false,
-        BuiltinFn(Arc::new(|_interp, args, span| {
-            if let (Some(Value::List(list)), Some(idx)) = (
-                CallArgListExt::first_value(&args),
-                CallArgListExt::get_value(&args, 1),
-            ) {
-                list.read(|vec| {
-                    let i = idx.resolve_index(vec.len(), span)?;
-                    Ok(vec[i].clone())
-                })
-            } else {
-                Err(RuntimeError::TypeError(ErrorData::new(
-                    span,
-                    "Использование: list.get(number)".into(),
-                )))
-            }
-        })),
-    );
+    define_method!(class_def, interner, "получить" => (_, args, span) {
+        if let (Some(Value::List(list)), Some(idx)) = (
+            CallArgListExt::first_value(&args),
+            CallArgListExt::get_value(&args, 1),
+        ) {
+            list.read(|vec| {
+                let i = idx.resolve_index(vec.len(), span)?;
+                Ok(vec[i].clone())
+            })
+        } else {
+            Err(RuntimeError::TypeError(ErrorData::new(
+                span,
+                "Использование: list.get(number)".into(),
+            )))
+        }
+    });
 
     (name, SharedMut::new(class_def))
 }
 
 pub fn setup_list_func(interpreter: &mut Interpreter, interner: &SharedInterner) {
-    interpreter.builtins.insert(
-        interner.write(|i| i.get_or_intern("список")),
-        BuiltinFn(Arc::new(move |_interpreter, arguments, _span| {
-            Ok(Value::List(SharedMut::new(
-                arguments.into_iter().map(|arg| arg.value).collect(),
-            )))
-        })),
-    );
+    define_builtin!(interpreter, interner, "список" => (_, arguments, _) {
+        Ok(Value::List(SharedMut::new(
+            arguments.into_iter().map(|arg| arg.value).collect(),
+        )))
+    });
 }

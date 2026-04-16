@@ -8,11 +8,9 @@ use crate::interpreter::prelude::{
 use crate::shared::SharedMut;
 use crate::traits::prelude::CoreOperations;
 use libffi::middle::{Arg, Cif, CodePtr, Type};
-use libloading::Library;
 #[cfg(windows)]
-use libloading::os::windows::{
-    Library as WindowsLibrary, LOAD_WITH_ALTERED_SEARCH_PATH,
-};
+use libloading::os::windows::{Library as WindowsLibrary, LOAD_WITH_ALTERED_SEARCH_PATH};
+use libloading::Library;
 use std::error::Error as StdError;
 use std::ffi::c_void;
 use std::path::{Path, PathBuf};
@@ -759,8 +757,7 @@ impl Interpreter {
 
 #[cfg(windows)]
 fn load_native_library(path: &Path) -> Result<Library, libloading::Error> {
-    unsafe { WindowsLibrary::load_with_flags(path, LOAD_WITH_ALTERED_SEARCH_PATH) }
-        .map(Into::into)
+    unsafe { WindowsLibrary::load_with_flags(path, LOAD_WITH_ALTERED_SEARCH_PATH) }.map(Into::into)
 }
 
 #[cfg(not(windows))]
