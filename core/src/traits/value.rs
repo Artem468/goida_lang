@@ -184,7 +184,10 @@ impl fmt::Display for Value {
             }),
             Value::NativeResource(resource) => write!(f, "<Ресурс {:p}>", resource),
             Value::NativeGlobal(binding) => {
-                write!(f, "<Нативная переменная {}>", binding.symbol_name)
+                INTERNER.read(|i| {
+                    let binding_name = i.resolve(binding.symbol_name).unwrap_or("неизвестно");
+                    write!(f, "<Нативная переменная {}>", binding_name)
+                })
             }
             Value::Empty => write!(f, "пустота"),
         }

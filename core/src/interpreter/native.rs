@@ -33,7 +33,7 @@ impl Interpreter {
             let binding = NativeFunctionBinding {
                 module_id: current_module_id,
                 library_path: path.clone(),
-                symbol_name: self.resolve_symbol(function.name).unwrap_or_default(),
+                symbol_name: function.name,
                 params: function.params.clone(),
                 return_type: function.return_type,
             };
@@ -53,7 +53,7 @@ impl Interpreter {
             let value = Value::NativeGlobal(Arc::new(NativeGlobalBinding {
                 module_id: current_module_id,
                 library_path: path.clone(),
-                symbol_name: self.resolve_symbol(global.name).unwrap_or_default(),
+                symbol_name: global.name,
                 value_type: global.value_type,
             }));
 
@@ -131,16 +131,16 @@ impl Interpreter {
         let cif = Cif::new(ffi_param_types, return_kind.libffi_type());
 
         let library = self.get_loaded_native_library(&binding.library_path, span)?;
-        let symbol_name = binding.symbol_name.as_bytes();
+        let symbol_name = self.resolve_symbol(binding.symbol_name).unwrap_or_default();
         let function_ptr = library.read(|library| unsafe {
             library
                 .handle
-                .get::<*const ()>(symbol_name)
+                .get::<*const ()>(symbol_name.as_bytes())
                 .map(|symbol| *symbol)
                 .map_err(|err| {
                     RuntimeError::InvalidOperation(ErrorData::new(
                         span,
-                        format!("Failed to find symbol '{}': {}", binding.symbol_name, err),
+                        format!("Failed to find symbol '{}': {}", symbol_name, err),
                     ))
                 })
         })?;
@@ -390,29 +390,30 @@ impl Interpreter {
         span: Span,
     ) -> Result<Value, RuntimeError> {
         let kind = self.native_kind_from_type_id(binding.value_type, binding.module_id, span)?;
+        let global_name = self.resolve_symbol(binding.symbol_name).unwrap_or_default();
         if kind == NativeFfiKind::Void {
             return Err(RuntimeError::TypeError(ErrorData::new(
                 span,
-                format!("Global '{}' cannot have void type", binding.symbol_name),
+                format!("Global '{}' cannot have void type", global_name),
             )));
         }
 
         let library = self.get_loaded_native_library(&binding.library_path, span)?;
-        let symbol_name = binding.symbol_name.as_bytes();
+        let symbol_name = global_name.as_bytes();
         let value = library.read(|library| unsafe {
             match kind {
                 NativeFfiKind::I64 => {
                     let symbol = library.handle.get::<*mut i64>(symbol_name).map_err(|err| {
                         RuntimeError::InvalidOperation(ErrorData::new(
                             span,
-                            format!("Failed to find symbol '{}': {}", binding.symbol_name, err),
+                            format!("Failed to find symbol '{}': {}", global_name, err),
                         ))
                     })?;
                     let ptr = *symbol;
                     if ptr.is_null() {
                         return Err(RuntimeError::InvalidOperation(ErrorData::new(
                             span,
-                            format!("Global '{}' is not initialized", binding.symbol_name),
+                            format!("Global '{}' is not initialized", global_name),
                         )));
                     }
                     Ok(Value::Number(*ptr))
@@ -421,14 +422,14 @@ impl Interpreter {
                     let symbol = library.handle.get::<*mut f64>(symbol_name).map_err(|err| {
                         RuntimeError::InvalidOperation(ErrorData::new(
                             span,
-                            format!("Failed to find symbol '{}': {}", binding.symbol_name, err),
+                            format!("Failed to find symbol '{}': {}", global_name, err),
                         ))
                     })?;
                     let ptr = *symbol;
                     if ptr.is_null() {
                         return Err(RuntimeError::InvalidOperation(ErrorData::new(
                             span,
-                            format!("Global '{}' is not initialized", binding.symbol_name),
+                            format!("Global '{}' is not initialized", global_name),
                         )));
                     }
                     Ok(Value::Float(*ptr))
@@ -440,14 +441,14 @@ impl Interpreter {
                         .map_err(|err| {
                             RuntimeError::InvalidOperation(ErrorData::new(
                                 span,
-                                format!("Failed to find symbol '{}': {}", binding.symbol_name, err),
+                                format!("Failed to find symbol '{}': {}", global_name, err),
                             ))
                         })?;
                     let ptr = *symbol;
                     if ptr.is_null() {
                         return Err(RuntimeError::InvalidOperation(ErrorData::new(
                             span,
-                            format!("Global '{}' is not initialized", binding.symbol_name),
+                            format!("Global '{}' is not initialized", global_name),
                         )));
                     }
                     Ok(Value::Number((*ptr) as isize as i64))
@@ -473,10 +474,11 @@ impl Interpreter {
         span: Span,
     ) -> Result<(), RuntimeError> {
         let kind = self.native_kind_from_type_id(binding.value_type, binding.module_id, span)?;
+        let global_name = self.resolve_symbol(binding.symbol_name).unwrap_or_default();
         if kind == NativeFfiKind::Void {
             return Err(RuntimeError::TypeError(ErrorData::new(
                 span,
-                format!("Global '{}' cannot have void type", binding.symbol_name),
+                format!("Global '{}' cannot have void type", global_name),
             )));
         }
 
@@ -488,27 +490,27 @@ impl Interpreter {
             "global",
         )?;
         let library = self.get_loaded_native_library(&binding.library_path, span)?;
-        let symbol_name = binding.symbol_name.as_bytes();
+        let symbol_name = global_name.as_bytes();
         library.read(|library| unsafe {
             match kind {
                 NativeFfiKind::I64 => {
                     let symbol = library.handle.get::<*mut i64>(symbol_name).map_err(|err| {
                         RuntimeError::InvalidOperation(ErrorData::new(
                             span,
-                            format!("Failed to find symbol '{}': {}", binding.symbol_name, err),
+                            format!("Failed to find symbol '{}': {}", global_name, err),
                         ))
                     })?;
                     let ptr = *symbol;
                     if ptr.is_null() {
                         return Err(RuntimeError::InvalidOperation(ErrorData::new(
                             span,
-                            format!("Global '{}' is not initialized", binding.symbol_name),
+                            format!("Global '{}' is not initialized", global_name),
                         )));
                     }
                     let Value::Number(number) = value else {
                         return Err(RuntimeError::TypeError(ErrorData::new(
                             span,
-                            format!("Global '{}' expects i64 value", binding.symbol_name),
+                            format!("Global '{}' expects i64 value", global_name),
                         )));
                     };
                     *ptr = number;
@@ -518,20 +520,20 @@ impl Interpreter {
                     let symbol = library.handle.get::<*mut f64>(symbol_name).map_err(|err| {
                         RuntimeError::InvalidOperation(ErrorData::new(
                             span,
-                            format!("Failed to find symbol '{}': {}", binding.symbol_name, err),
+                            format!("Failed to find symbol '{}': {}", global_name, err),
                         ))
                     })?;
                     let ptr = *symbol;
                     if ptr.is_null() {
                         return Err(RuntimeError::InvalidOperation(ErrorData::new(
                             span,
-                            format!("Global '{}' is not initialized", binding.symbol_name),
+                            format!("Global '{}' is not initialized", global_name),
                         )));
                     }
                     let Value::Float(float) = value else {
                         return Err(RuntimeError::TypeError(ErrorData::new(
                             span,
-                            format!("Global '{}' expects f64 value", binding.symbol_name),
+                            format!("Global '{}' expects f64 value", global_name),
                         )));
                     };
                     *ptr = float;
@@ -544,14 +546,14 @@ impl Interpreter {
                         .map_err(|err| {
                             RuntimeError::InvalidOperation(ErrorData::new(
                                 span,
-                                format!("Failed to find symbol '{}': {}", binding.symbol_name, err),
+                                format!("Failed to find symbol '{}': {}", global_name, err),
                             ))
                         })?;
                     let ptr = *symbol;
                     if ptr.is_null() {
                         return Err(RuntimeError::InvalidOperation(ErrorData::new(
                             span,
-                            format!("Global '{}' is not initialized", binding.symbol_name),
+                            format!("Global '{}' is not initialized", global_name),
                         )));
                     }
                     let number = match value {
@@ -560,7 +562,7 @@ impl Interpreter {
                         _ => {
                             return Err(RuntimeError::TypeError(ErrorData::new(
                                 span,
-                                format!("Global '{}' expects pointer value", binding.symbol_name),
+                                format!("Global '{}' expects pointer value", global_name),
                             )))
                         }
                     };
