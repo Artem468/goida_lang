@@ -4,6 +4,7 @@ use crate::interpreter::prelude::{
 };
 use crate::shared::SharedMut;
 use crate::{define_builtin, define_constructor, define_method};
+use std::ffi::{c_char, CStr};
 use string_interner::DefaultSymbol as Symbol;
 
 pub fn setup_text_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassDefinition>) {
@@ -130,4 +131,21 @@ pub fn setup_text_func(interpreter: &mut Interpreter, interner: &SharedInterner)
         let n: String = arguments[0].value.clone().try_into()?;
         Ok(Value::Text(n))
     });
+
+    define_builtin!(interpreter, interner, "строка_из_указателя" => (_, arguments, _){
+        let ptr = arguments[0].value.as_i64().unwrap();
+        let _v = unsafe { addr_to_string(ptr) };
+        Ok(Value::Text(_v))
+    });
+}
+
+pub unsafe fn addr_to_string(addr: i64) -> String {
+    let ptr = addr as *const c_char;
+
+    if ptr.is_null() {
+        return String::from("");
+    }
+
+    let c_str = CStr::from_ptr(ptr);
+    c_str.to_string_lossy().into_owned()
 }

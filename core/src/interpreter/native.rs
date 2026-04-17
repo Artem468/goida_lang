@@ -643,6 +643,21 @@ impl Interpreter {
                     Ok(NativeFfiArgValue::Pointer(number as isize as usize as *mut c_void))
                 }
                 Value::Empty => Ok(NativeFfiArgValue::Pointer(std::ptr::null_mut())),
+                Value::Text(s) => {
+                    let mut s_with_zero = s.clone();
+                    s_with_zero.push('\0');
+
+                    let managed_value = Value::Text(s_with_zero);
+                    let boxed = Box::new(managed_value);
+
+                    let ptr = if let Value::Text(ref inner_s) = *boxed {
+                        inner_s.as_ptr() as *mut c_void
+                    } else {
+                        std::ptr::null_mut()
+                    };
+
+                    Ok(NativeFfiArgValue::ManagedPointer(boxed, ptr))
+                }
                 value if Self::is_managed_pointer_value(&value) => {
                     let mut boxed = Box::new(value);
                     let ptr = boxed.as_mut() as *mut Value as *mut c_void;
