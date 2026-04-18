@@ -267,7 +267,7 @@ return_type = {
 }
 
 type_name = @{
-    identifier
+    identifier ~ ("." ~ identifier)*
 }
 
 static_mod = @{ "статичный" }

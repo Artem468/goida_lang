@@ -1,5 +1,5 @@
 use crate::ast::prelude::*;
-use crate::interpreter::prelude::{Module, SharedInterner};
+use crate::interpreter::prelude::{Module, SharedInterner, Value};
 use crate::parser::prelude::{
     extract_last_token, translate_rule, ParseError, Parser as ParserTrait,
 };
@@ -7,7 +7,8 @@ use crate::shared::SharedMut;
 use pest::error::ErrorVariant;
 use pest::Parser;
 use pest_derive::Parser;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use string_interner::DefaultSymbol as Symbol;
 
 #[derive(Parser)]
 #[grammar = "grammar.pest"]
@@ -20,6 +21,18 @@ impl ParserTrait {
             interner,
             nesting_level: 0,
         }
+    }
+
+    fn get_char_range(&self, s: &str, start: usize, end: usize) -> String {
+        let mut indices = s
+            .char_indices()
+            .map(|(idx, _)| idx)
+            .chain(std::iter::once(s.len()));
+        let byte_start = indices.nth(start).unwrap_or(s.len());
+        let byte_end = indices
+            .nth(end.saturating_sub(start + 1))
+            .unwrap_or(s.len());
+        s[byte_start..byte_end].to_string()
     }
 
     pub fn parse(mut self, code: &str) -> Result<Module, ParseError> {
@@ -37,12 +50,11 @@ impl ParserTrait {
                     let mut parts = Vec::new();
 
                     if !positives.is_empty() {
-                        let found = &code[start..end];
+                        let found = self.get_char_range(code, start, end);
 
                         let found = if found.is_empty() {
-                            code[start..]
-                                .chars()
-                                .next()
+                            code.chars()
+                                .nth(start)
                                 .map(|c| c.to_string())
                                 .unwrap_or_else(|| "конец файла".into())
                         } else {
@@ -1206,7 +1218,108 @@ impl ParserTrait {
             .arena
             .add_statement(StatementKind::Empty, import_span);
 
+        let module = self.parse_and_register_import(path_symbol, import_span)?;
+        self.register_imported_type_aliases(alias_symbol, module);
+        self.module.globals.insert(alias_symbol, Value::Module(module));
+
+
         Ok(stmt_id)
+    }
+
+    fn register_imported_type_aliases(&mut self, alias_symbol: Symbol, module_symbol: Symbol) {
+        let alias_name = self
+            .interner
+            .read(|i| i.resolve(alias_symbol).unwrap_or_default().to_string());
+
+        let qualified_type_names = self
+            .module
+            .modules
+            .get(&module_symbol)
+            .map(|module| {
+                module
+                    .classes
+                    .keys()
+                    .filter_map(|class_symbol| {
+                        self.interner.read(|i| {
+                            i.resolve(*class_symbol)
+                                .map(|class_name| format!("{alias_name}.{class_name}"))
+                        })
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+
+        for qualified_name in qualified_type_names {
+            self.module
+                .arena
+                .register_custom_type(&self.interner, qualified_name.as_str());
+        }
+    }
+
+    pub fn parse_and_register_import(
+        &mut self,
+        import_path_symbol: Symbol,
+        span: Span,
+    ) -> Result<Symbol, ParseError> {
+        let path_str = self.interner.read(|i| {
+            i.resolve(import_path_symbol)
+                .unwrap_or_default()
+                .to_string()
+        });
+        let relative_path = Path::new(&path_str);
+
+        let module_dir = self.module.path.parent().unwrap_or_else(|| Path::new("."));
+        let full_path = module_dir.join(relative_path).with_extension("goida");
+
+        let _file_stem = full_path
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .ok_or_else(|| {
+                ParseError::ImportError(ErrorData::new(
+                    span,
+                    format!("Неверный путь: {}", full_path.display()),
+                ))
+            })?;
+
+        let normalized_full_path = full_path
+            .canonicalize()
+            .unwrap_or(full_path.clone())
+            .to_string_lossy()
+            .to_string();
+        let module_symbol = self
+            .interner
+            .write(|i| i.get_or_intern(normalized_full_path.as_str()));
+
+        if self.module.modules.get(&module_symbol).is_some() {
+            return Ok(module_symbol);
+        }
+
+        let code = std::fs::read_to_string(&full_path).map_err(|e| {
+            ParseError::ImportError(ErrorData::new(
+                span,
+                format!("Не нашел файл {}: {}", full_path.display(), e),
+            ))
+        })?;
+
+        let sub_parser = ParserTrait::new(
+            self.interner.clone(),
+            normalized_full_path.as_str(),
+            full_path.clone(),
+        );
+        let new_module = sub_parser.parse(&code)?;
+
+        for (class_name_symbol, _) in &new_module.classes {
+            let class_name = self.interner.read(|i| {
+                i.resolve(*class_name_symbol)
+                    .unwrap_or_default()
+                    .to_string()
+            });
+            self.module.arena.register_custom_type(&self.interner, class_name.as_str());
+        }
+
+        self.module.modules.insert(module_symbol, new_module);
+
+        Ok(module_symbol)
     }
 
     fn parse_expr_stmt(&mut self, pair: pest::iterators::Pair<Rule>) -> Result<StmtId, ParseError> {

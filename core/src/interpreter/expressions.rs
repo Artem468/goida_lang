@@ -18,9 +18,10 @@ impl ExpressionEvaluator for Interpreter {
     ) -> Result<Value, RuntimeError> {
         let expr_kind = {
             let module = self.modules.get(&current_module_id).ok_or_else(|| {
+                let module_name = self.resolve_symbol(current_module_id).unwrap();
                 RuntimeError::InvalidOperation(ErrorData::new(
                     Span::default(),
-                    "Модуль не найден".into(),
+                    format!("Модуль {module_name} не найден"),
                 ))
             })?;
             module.arena.get_expression(expr_id).unwrap().clone()
@@ -154,9 +155,10 @@ impl ExpressionEvaluator for Interpreter {
             ExpressionKind::FunctionCall { function, args } => {
                 let func_expr = {
                     let module = self.modules.get(&current_module_id).ok_or_else(|| {
+                        let module_name = self.resolve_symbol(current_module_id).unwrap();
                         RuntimeError::InvalidOperation(ErrorData::new(
                             expr_kind.span,
-                            "Модуль не найден".into(),
+                            format!("Модуль {module_name} не найден"),
                         ))
                     })?;
                     module.arena.get_expression(function).unwrap().clone()
@@ -246,44 +248,35 @@ impl ExpressionEvaluator for Interpreter {
             ExpressionKind::PropertyAccess { object, property } => {
                 let obj_expr = {
                     let module = self.modules.get(&current_module_id).ok_or_else(|| {
+                        let module_name = self.resolve_symbol(current_module_id).unwrap();
                         RuntimeError::InvalidOperation(ErrorData::new(
                             expr_kind.span,
-                            "Модуль не найден".into(),
+                            format!("Модуль {module_name} не найден"),
                         ))
                     })?;
-                    module.arena.get_expression(expr_id).unwrap().clone()
+                    module.arena.get_expression(object).unwrap().clone()
                 };
-                if let ExpressionKind::Identifier(module_symbol) = obj_expr.kind {
-                    if let Some(module_env) = self.modules.get(&module_symbol) {
-                        let value = module_env.globals.get(&property).ok_or_else(|| {
-                            RuntimeError::UndefinedVariable(ErrorData::new(
-                                expr_kind.span,
-                                format!(
-                                    "{}.{}",
-                                    self.resolve_symbol(module_symbol).unwrap(),
-                                    self.resolve_symbol(property).unwrap()
-                                ),
-                            ))
-                        })?;
-                        return self.resolve_runtime_value(value.clone(), expr_kind.span);
+                if let ExpressionKind::Identifier(module_alias) = obj_expr.kind {
+                    if let Some(current_module) = self.modules.get(&current_module_id) {
+                        if let Some(module_symbol) =
+                            self.resolve_import_alias_symbol(current_module, module_alias)
+                        {
+                            if let Some((_, value)) =
+                                self.resolve_module_member_value(module_symbol, property)
+                            {
+                                return self.resolve_runtime_value(value, expr_kind.span);
+                            }
+                        }
                     }
                 }
 
                 let obj_result = self.evaluate_expression(object, current_module_id);
                 match obj_result {
                     Ok(Value::Module(module_symbol)) => {
-                        if let Some(module_env) = self.modules.get(&module_symbol) {
-                            let value = module_env.globals.get(&property).ok_or_else(|| {
-                                RuntimeError::UndefinedVariable(ErrorData::new(
-                                    expr_kind.span,
-                                    format!(
-                                        "{}.{}",
-                                        self.resolve_symbol(module_symbol).unwrap(),
-                                        self.resolve_symbol(property).unwrap()
-                                    ),
-                                ))
-                            })?;
-                            self.resolve_runtime_value(value.clone(), expr_kind.span)
+                        if let Some((_, value)) =
+                            self.resolve_module_member_value(module_symbol, property)
+                        {
+                            self.resolve_runtime_value(value, expr_kind.span)
                         } else {
                             Err(RuntimeError::InvalidOperation(ErrorData::new(
                                 expr_kind.span,
@@ -435,9 +428,10 @@ impl ExpressionEvaluator for Interpreter {
                 let result = (|| -> Result<Value, RuntimeError> {
                     let obj_expr = {
                         let module = self.modules.get(&current_module_id).ok_or_else(|| {
+                            let module_name = self.resolve_symbol(current_module_id).unwrap();
                             RuntimeError::InvalidOperation(ErrorData::new(
                                 expr_kind.span,
-                                "Модуль не найден".into(),
+                                format!("Модуль {module_name} не найден"),
                             ))
                         })?;
                         module.arena.get_expression(object).unwrap().clone()
@@ -501,51 +495,34 @@ impl ExpressionEvaluator for Interpreter {
 
                     match target_value {
                         Value::Module(mod_symbol) => {
-                            if let Some(target_module) = self.modules.get(&mod_symbol) {
-                                return if let Some(function) = target_module.functions.get(&method)
-                                {
-                                    self.call_function(
-                                        function.clone(),
+                            if let Some((definition_module_id, value)) =
+                                self.resolve_module_member_value(mod_symbol, method)
+                            {
+                                return match value {
+                                    Value::Function(function) => self.call_function(
+                                        (*function).clone(),
                                         arguments,
-                                        mod_symbol,
+                                        definition_module_id,
                                         obj_expr.span,
-                                    )
-                                } else if let Some(Value::Builtin(builtin)) =
-                                    target_module.globals.get(&method)
-                                {
-                                    builtin(self, arguments, obj_expr.span)
-                                } else {
-                                    let m_name = self.resolve_symbol(method).unwrap();
-                                    let mod_name = self.resolve_symbol(mod_symbol).unwrap();
-                                    Err(RuntimeError::UndefinedFunction(ErrorData::new(
-                                        expr_kind.span,
-                                        format!(
-                                            "Функция '{}' не найдена в модуле '{}'",
-                                            m_name, mod_name
-                                        ),
-                                    )))
+                                    ),
+                                    Value::Builtin(builtin) => {
+                                        builtin(self, arguments, obj_expr.span)
+                                    }
+                                    _ => {
+                                        let m_name = self.resolve_symbol(method).unwrap();
+                                        let mod_name = self.resolve_symbol(mod_symbol).unwrap();
+                                        Err(RuntimeError::UndefinedFunction(ErrorData::new(
+                                            expr_kind.span,
+                                            format!(
+                                                "Функция '{}' не найдена в модуле '{}'",
+                                                m_name, mod_name
+                                            ),
+                                        )))
+                                    }
                                 };
                             }
                         }
-                        _ => {
-                            if let ExpressionKind::Identifier(mod_symbol) = obj_expr.kind {
-                                if let Some(target_module) = self.modules.get(&mod_symbol) {
-                                    if let Some(function) = target_module.functions.get(&method) {
-                                        return self.call_function(
-                                            function.clone(),
-                                            arguments,
-                                            mod_symbol,
-                                            obj_expr.span,
-                                        );
-                                    }
-                                    if let Some(Value::Builtin(builtin)) =
-                                        target_module.globals.get(&method)
-                                    {
-                                        return builtin(self, arguments, obj_expr.span);
-                                    }
-                                }
-                            }
-                        }
+                        _ => {}
                     }
 
                     let m_name = self.resolve_symbol(method).unwrap();
@@ -607,7 +584,7 @@ impl ExpressionEvaluator for Interpreter {
                             ))
                         })?;
 
-                        (class.clone(), mod_sym)
+                        (class.clone(), target_module.name)
                     } else {
                         let current_mod = self.modules.get(&current_module_id).unwrap();
 
@@ -631,6 +608,7 @@ impl ExpressionEvaluator for Interpreter {
                     }
                 };
 
+                let class_rc = self.set_class_module(class_rc, definition_module);
                 let instance = ClassDefinition::create_instance(class_rc.clone());
                 let instance_ref = SharedMut::new(instance);
 

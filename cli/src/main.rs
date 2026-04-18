@@ -107,6 +107,7 @@ fn execute_code(code: &str, filename: &str) -> Result<(), (String, ErrorData)> {
                     RuntimeError::ImportError(err) => match err {
                         ParseError::TypeError(e) => ("Ошибка типов".to_string(), e),
                         ParseError::InvalidSyntax(e) => ("Ошибка синтаксиса".to_string(), e),
+                        ParseError::ImportError(e) => ("Ошибка импорта".to_string(), e),
                     },
                 };
                 render_error(&msg, &error_data);
@@ -122,6 +123,7 @@ fn execute_code(code: &str, filename: &str) -> Result<(), (String, ErrorData)> {
             let (msg, data): (&'static str, ErrorData) = match err {
                 ParseError::TypeError(e) => ("Ошибка типов", e),
                 ParseError::InvalidSyntax(e) => ("Ошибка синтаксиса", e),
+                ParseError::ImportError(e) => ("Ошибка импорта", e),
             };
             render_error(&msg, &data);
             return Err((msg.to_string(), data));

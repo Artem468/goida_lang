@@ -139,6 +139,7 @@ pub struct Module {
 
     pub body: Vec<StmtId>,
     pub imports: Vec<Import>,
+    pub modules: HashMap<Symbol, Module>,
 
     pub globals: HashMap<Symbol, Value>,
 }

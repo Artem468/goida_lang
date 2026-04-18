@@ -13,9 +13,10 @@ impl StatementExecutor for Interpreter {
     ) -> Result<(), RuntimeError> {
         let stmt_kind = {
             let module = self.modules.get(&current_module_id).ok_or_else(|| {
+                let module_name = self.resolve_symbol(current_module_id).unwrap();
                 RuntimeError::InvalidOperation(ErrorData::new(
                     Span::default(),
-                    "Модуль не найден".into(),
+                    format!("Модуль {module_name} не найден"),
                 ))
             })?;
             module.arena.get_statement(stmt_id).unwrap().clone()
@@ -43,9 +44,15 @@ impl StatementExecutor for Interpreter {
                 self.environment = target_env;
                 self.environment.write(|env| {
                     if env.set(name, val.clone(), stmt_kind.span).is_err() {
-                        env.define(name, val);
+                        env.define(name, val.clone());
                     }
                 });
+
+                if self.environment.read(|env| env.parent.is_none()) {
+                    if let Some(module) = self.modules.get_mut(&current_module_id) {
+                        module.globals.insert(name, val.clone());
+                    }
+                }
 
                 Ok(())
             }
@@ -151,9 +158,10 @@ impl StatementExecutor for Interpreter {
                 let property_name = self.resolve_symbol(property).unwrap();
                 let obj_expr = {
                     let module = self.modules.get(&current_module_id).ok_or_else(|| {
+                        let module_name = self.resolve_symbol(current_module_id).unwrap();
                         RuntimeError::InvalidOperation(ErrorData::new(
                             stmt_kind.span,
-                            "Модуль не найден".into(),
+                            format!("Модуль {module_name} не найден"),
                         ))
                     })?;
                     module.arena.get_expression(object).unwrap().clone()

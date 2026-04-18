@@ -69,19 +69,16 @@ impl InterpreterFunctions for Interpreter {
 
             let target_module_symbol = self.resolve_import_alias_symbol(current_module, mod_sym);
 
-            if let Some(target_module) = target_module_symbol.and_then(|sym| self.modules.get(&sym))
+            if let Some((definition_module_id, value)) = target_module_symbol
+                .and_then(|sym| self.resolve_module_member_value(sym, func_sym))
             {
-                if let Some(function) = target_module.functions.get(&func_sym) {
-                    return self.call_function(
-                        function.clone(),
-                        arguments,
-                        target_module.name,
-                        span,
-                    );
-                }
-                if let Some(Value::Builtin(builtin)) = target_module.globals.get(&func_sym) {
-                    return builtin(self, arguments, span);
-                }
+                return match value {
+                    Value::Function(func) => {
+                        self.call_function((*func).clone(), arguments, definition_module_id, span)
+                    }
+                    Value::Builtin(builtin) => builtin(self, arguments, span),
+                    _ => Err(RuntimeError::UndefinedFunction(ErrorData::new(span, name_str))),
+                };
             }
             return Err(RuntimeError::UndefinedFunction(ErrorData::new(
                 span, name_str,
