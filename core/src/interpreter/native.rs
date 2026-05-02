@@ -106,7 +106,32 @@ impl Interpreter {
         arguments: Vec<CallArgValue>,
         span: Span,
     ) -> Result<Value, RuntimeError> {
-        let bound_arguments = self.bind_native_arguments(binding, arguments, span)?;
+        let function_name = self.resolve_symbol(binding.symbol_name).unwrap_or_default();
+        let interner = self.interner.clone();
+        let resolve_symbol = move |symbol| {
+            interner
+                .read(|i| i.resolve(symbol).map(|s| s.to_string()))
+                .unwrap_or_default()
+        };
+        let mut missing = |param: &crate::ast::prelude::Parameter| {
+            let param_name = self.resolve_symbol(param.name).unwrap_or_default();
+            Err(RuntimeError::InvalidOperation(ErrorData::new(
+                span,
+                format!(
+                    "Аргумент '{}' для native {} не передан",
+                    param_name, function_name
+                ),
+            )))
+        };
+        let bound_arguments = Self::bind_arguments(
+            &binding.params,
+            arguments,
+            span,
+            "native",
+            &function_name,
+            resolve_symbol,
+            &mut missing,
+        )?;
 
         let mut ffi_values = Vec::with_capacity(bound_arguments.len());
         let mut ffi_param_types = Vec::with_capacity(bound_arguments.len());
@@ -182,92 +207,6 @@ impl Interpreter {
             "return value",
         )?;
         Ok(result)
-    }
-
-    fn bind_native_arguments(
-        &self,
-        binding: &NativeFunctionBinding,
-        arguments: Vec<CallArgValue>,
-        span: Span,
-    ) -> Result<Vec<Value>, RuntimeError> {
-        let mut final_args: Vec<Option<Value>> = vec![None; binding.params.len()];
-        let mut positional_index = 0usize;
-        let mut saw_named = false;
-
-        for argument in arguments {
-            match argument.name {
-                Some(name) => {
-                    saw_named = true;
-                    let index = binding
-                        .params
-                        .iter()
-                        .position(|param| param.name == name)
-                        .ok_or_else(|| {
-                            RuntimeError::InvalidOperation(ErrorData::new(
-                                span,
-                                format!(
-                                    "Unknown named argument '{}'",
-                                    self.resolve_symbol(name).unwrap_or_default()
-                                ),
-                            ))
-                        })?;
-
-                    if final_args[index].is_some() {
-                        return Err(RuntimeError::InvalidOperation(ErrorData::new(
-                            span,
-                            format!(
-                                "Argument '{}' passed more than once",
-                                self.resolve_symbol(name).unwrap_or_default()
-                            ),
-                        )));
-                    }
-                    final_args[index] = Some(argument.value);
-                }
-                None => {
-                    if saw_named {
-                        return Err(RuntimeError::InvalidOperation(ErrorData::new(
-                            span,
-                            "Named arguments must come after positional arguments".into(),
-                        )));
-                    }
-                    if positional_index >= binding.params.len() {
-                        return Err(RuntimeError::InvalidOperation(ErrorData::new(
-                            span,
-                            format!(
-                                "Expected {} arguments, got {}",
-                                binding.params.len(),
-                                positional_index + 1
-                            ),
-                        )));
-                    }
-                    final_args[positional_index] = Some(argument.value);
-                    positional_index += 1;
-                }
-            }
-        }
-
-        let mut values = Vec::with_capacity(binding.params.len());
-        for (index, param) in binding.params.iter().enumerate() {
-            let value = final_args[index].clone().ok_or_else(|| {
-                RuntimeError::InvalidOperation(ErrorData::new(
-                    span,
-                    format!(
-                        "Argument '{}' is missing",
-                        self.resolve_symbol(param.name).unwrap_or_default()
-                    ),
-                ))
-            })?;
-            self.ensure_value_matches_type(
-                &value,
-                Some(param.param_type),
-                binding.module_id,
-                span,
-                "argument",
-            )?;
-            values.push(value);
-        }
-
-        Ok(values)
     }
 
     fn resolve_native_library_path(

@@ -1,5 +1,5 @@
 use crate::ast::prelude::{ErrorData, ExpressionKind, Span, StatementKind, StmtId};
-use crate::interpreter::prelude::{Environment, Interpreter, RuntimeError, Value};
+use crate::interpreter::prelude::{Interpreter, RuntimeError, Value};
 use crate::shared::SharedMut;
 use crate::traits::prelude::{CoreOperations, ExpressionEvaluator, StatementExecutor};
 use std::sync::Arc;
@@ -89,54 +89,39 @@ impl StatementExecutor for Interpreter {
                 update,
                 body,
             } => {
-                let previous_env = self.environment.clone();
-
-                let mut local_env_inner = Environment::new();
-                local_env_inner.parent = Some(previous_env.clone());
-
                 let init_val = self.evaluate_expression(init, current_module_id)?;
-                local_env_inner.define(variable, init_val);
 
-                self.environment = SharedMut::new(local_env_inner);
+                self.scoped_child_environment(
+                    |local_env| local_env.define(variable, init_val),
+                    |interpreter| {
+                        loop {
+                            let cond_val =
+                                interpreter.evaluate_expression(condition, current_module_id)?;
+                            if !cond_val.is_truthy() {
+                                break;
+                            }
+                            interpreter.execute_statement(body, current_module_id)?;
 
-                let result = (|| -> Result<(), RuntimeError> {
-                    loop {
-                        let cond_val = self.evaluate_expression(condition, current_module_id)?;
-                        if !cond_val.is_truthy() {
-                            break;
+                            let update_val =
+                                interpreter.evaluate_expression(update, current_module_id)?;
+                            interpreter
+                                .environment
+                                .write(|env| env.define(variable, update_val));
                         }
-                        self.execute_statement(body, current_module_id)?;
-
-                        let update_val = self.evaluate_expression(update, current_module_id)?;
-                        self.environment
-                            .write(|env| env.define(variable, update_val));
-                    }
-                    Ok(())
-                })();
-                self.environment = previous_env;
-
-                result
+                        Ok(())
+                    },
+                )
             }
 
-            StatementKind::Block(statements) => {
-                let previous_env = self.environment.clone();
-
-                let mut local_env_inner = Environment::new();
-                local_env_inner.parent = Some(previous_env.clone());
-
-                self.environment = SharedMut::new(local_env_inner);
-
-                let result = (|| {
+            StatementKind::Block(statements) => self.scoped_child_environment(
+                |_| {},
+                |interpreter| {
                     for s_id in statements {
-                        self.execute_statement(s_id, current_module_id)?;
+                        interpreter.execute_statement(s_id, current_module_id)?;
                     }
                     Ok(())
-                })();
-
-                self.environment = previous_env;
-
-                result
-            }
+                },
+            ),
 
             StatementKind::Return(expr) => {
                 let value = if let Some(e) = expr {

@@ -1,8 +1,6 @@
 use crate::ast::prelude::{ClassDefinition, ExprId, Span, Visibility};
 use crate::ast::program::{FieldData, MethodType};
-use crate::interpreter::prelude::{
-    CallArgValue, ClassInstance, Environment, Interpreter, RuntimeError, Value,
-};
+use crate::interpreter::prelude::{CallArgValue, ClassInstance, Interpreter, RuntimeError, Value};
 use crate::shared::SharedMut;
 use crate::traits::prelude::{CoreOperations, InterpreterClasses, StatementExecutor};
 use std::collections::HashMap;
@@ -22,25 +20,21 @@ impl InterpreterClasses for Interpreter {
         match method {
             MethodType::User(func) => {
                 let method_module = func.module.unwrap_or(current_module_id);
-                let previous_env = self.environment.clone();
 
                 let final_arguments =
                     self.bind_call_arguments(&func, arguments, method_module, span, "Метод")?;
 
-                let mut local_env = Environment::with_parent(previous_env.clone());
-
                 let this_sym = self.intern_string("this");
-                local_env.define(this_sym, this_obj);
+                let execution_result = self.scoped_child_environment(
+                    |local_env| {
+                        local_env.define(this_sym, this_obj);
 
-                for (param, arg_value) in func.params.iter().zip(final_arguments.iter()) {
-                    local_env.define(param.name, arg_value.clone());
-                }
-
-                self.environment = SharedMut::new(local_env);
-
-                let execution_result = self.execute_statement(func.body, method_module);
-
-                self.environment = previous_env;
+                        for (param, arg_value) in func.params.iter().zip(final_arguments.iter()) {
+                            local_env.define(param.name, arg_value.clone());
+                        }
+                    },
+                    |interpreter| interpreter.execute_statement(func.body, method_module),
+                );
 
                 match execution_result {
                     Ok(()) => Ok(Value::Empty),
@@ -118,7 +112,7 @@ impl ClassInstance {
 
                 match data {
                     FieldData::Expression(opt_expr) => {
-                        fields.insert(*name, *opt_expr);
+                        fields.insert(*name, opt_expr.clone());
                     }
                     FieldData::Value(val_lock) => {
                         let value = val_lock.read(|v| v.clone());

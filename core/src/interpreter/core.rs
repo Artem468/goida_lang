@@ -81,13 +81,13 @@ impl CoreOperations for Interpreter {
 
     fn get_class_for_value(&self, value: &Value) -> Option<SharedMut<ClassDefinition>> {
         let class_name = match value {
-            Value::Text(_) => "РЎС‚СЂРѕРєР°",
-            Value::List(_) => "РЎРїРёСЃРѕРє",
-            Value::Array(_) => "РњР°СЃСЃРёРІ",
-            Value::Dict(_) => "РЎР»РѕРІР°СЂСЊ",
-            Value::Float(_) => "Р”СЂРѕР±СЊ",
-            Value::Number(_) => "Р§РёСЃР»Рѕ",
-            Value::Boolean(_) => "Р›РѕРіРёС‡РµСЃРєРёР№",
+            Value::Text(_) => "Строка",
+            Value::List(_) => "Список",
+            Value::Array(_) => "Массив",
+            Value::Dict(_) => "Словарь",
+            Value::Float(_) => "Дробь",
+            Value::Number(_) => "Число",
+            Value::Boolean(_) => "Логический",
             Value::Object(inst) => return Some(inst.read(|i| i.class_ref.clone())),
             Value::Class(class_def) => return Some(class_def.clone()),
             _ => return None,
