@@ -2,6 +2,7 @@ use crate::ast::prelude::{ErrorData, ExpressionKind, Span, StatementKind, StmtId
 use crate::interpreter::prelude::{Interpreter, RuntimeError, Value};
 use crate::shared::SharedMut;
 use crate::traits::prelude::{CoreOperations, ExpressionEvaluator, StatementExecutor};
+use crate::{bail_runtime, runtime_error};
 use std::sync::Arc;
 use string_interner::DefaultSymbol;
 
@@ -14,10 +15,11 @@ impl StatementExecutor for Interpreter {
         let stmt_kind = {
             let module = self.modules.get(&current_module_id).ok_or_else(|| {
                 let module_name = self.resolve_symbol(current_module_id).unwrap();
-                RuntimeError::InvalidOperation(ErrorData::new(
+                runtime_error!(
+                    InvalidOperation,
                     Span::default(),
-                    format!("Модуль {module_name} не найден"),
-                ))
+                    "Модуль {module_name} не найден"
+                )
             })?;
             module.arena.get_statement(stmt_id).unwrap().clone()
         };
@@ -129,10 +131,7 @@ impl StatementExecutor for Interpreter {
                 } else {
                     Value::Empty
                 };
-                Err(RuntimeError::Return(
-                    ErrorData::new(stmt_kind.span, value.to_string()),
-                    value,
-                ))
+                bail_runtime!(Return, stmt_kind.span, "{}", value.to_string() => value)
             }
 
             StatementKind::PropertyAssign {
@@ -144,10 +143,11 @@ impl StatementExecutor for Interpreter {
                 let obj_expr = {
                     let module = self.modules.get(&current_module_id).ok_or_else(|| {
                         let module_name = self.resolve_symbol(current_module_id).unwrap();
-                        RuntimeError::InvalidOperation(ErrorData::new(
+                        runtime_error!(
+                            InvalidOperation,
                             stmt_kind.span,
-                            format!("Модуль {module_name} не найден"),
-                        ))
+                            "Модуль {module_name} не найден"
+                        )
                     })?;
                     module.arena.get_expression(object).unwrap().clone()
                 };
@@ -163,20 +163,18 @@ impl StatementExecutor for Interpreter {
                 if let Value::Object(instance_ref) = obj_value {
                     instance_ref.write(|instance| {
                         if !instance.is_field_accessible(&property, is_external) {
-                            return Err(RuntimeError::InvalidOperation(ErrorData::new(
+                            return bail_runtime!(
+                                InvalidOperation,
                                 obj_expr.span,
-                                format!("Поле '{}' недоступно", property_name),
-                            )));
+                                "Поле '{}' недоступно",
+                                property_name
+                            );
                         }
-
                         instance.set_field_value(property, value_result);
                         Ok(())
                     })
                 } else {
-                    Err(RuntimeError::TypeMismatch(ErrorData::new(
-                        obj_expr.span,
-                        "Ожидался объект".into(),
-                    )))
+                    bail_runtime!(TypeMismatch, obj_expr.span, "Ожидался объект")
                 }
             }
 
@@ -200,10 +198,11 @@ impl StatementExecutor for Interpreter {
                         d.insert(idx_val.to_string(), val_to_set);
                         Ok(())
                     }),
-                    _ => Err(RuntimeError::TypeError(ErrorData::new(
+                    _ => bail_runtime!(
+                        TypeError,
                         stmt_kind.span,
-                        "Нельзя присвоить по индексу для этого типа".into(),
-                    ))),
+                        "Нельзя присвоить по индексу для этого типа"
+                    ),
                 }
             }
 

@@ -3,7 +3,7 @@ use crate::interpreter::prelude::{
     CallArgListExt, Interpreter, RuntimeError, SharedInterner, Value,
 };
 use crate::shared::SharedMut;
-use crate::{define_builtin, define_constructor, define_method};
+use crate::{bail_runtime, define_builtin, define_constructor, define_method, runtime_error};
 use std::collections::HashMap;
 use string_interner::DefaultSymbol as Symbol;
 
@@ -21,10 +21,11 @@ pub fn setup_dict_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassDe
 
             Ok(Value::Empty)
         } else {
-            Err(RuntimeError::TypeError(ErrorData::new(
+            bail_runtime!(
+                TypeError,
                 span,
-                "Ошибка конструктора словаря".into(),
-            )))
+                "Ошибка конструктора словаря"
+            )
         }
     });
 
@@ -38,10 +39,11 @@ pub fn setup_dict_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassDe
             dict.write(|i| i.insert(key.clone(), val.clone()));
             Ok(Value::Empty)
         } else {
-            Err(RuntimeError::TypeError(ErrorData::new(
+            bail_runtime!(
+                TypeError,
                 span,
-                "Использование: dict.set(string, value)".into(),
-            )))
+                "Использование: dict.set(string, value)"
+            )
         }
     });
 
@@ -63,10 +65,11 @@ pub fn setup_dict_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassDe
 
             Ok(result)
         } else {
-            Err(RuntimeError::TypeError(ErrorData::new(
+            bail_runtime!(
+                TypeError,
                 span,
-                "Использование: dict.get(string, default?)".into(),
-            )))
+                "Использование: dict.get(string, default?)"
+            )
         }
     });
 
@@ -78,10 +81,11 @@ pub fn setup_dict_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassDe
         ) {
             Ok(Value::Boolean(dict.read(|i| i.contains_key(key))))
         } else {
-            Err(RuntimeError::TypeError(ErrorData::new(
+            bail_runtime!(
+                TypeError,
                 span,
-                "Использование: dict.has(string)".into(),
-            )))
+                "Использование: dict.has(string)"
+            )
         }
     });
 
@@ -92,10 +96,11 @@ pub fn setup_dict_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassDe
                 dict.read(|i| i.keys().map(|k| Value::Text(k.clone())).collect());
             Ok(Value::List(SharedMut::new(keys)))
         } else {
-            Err(RuntimeError::TypeError(ErrorData::new(
+            bail_runtime!(
+                TypeError,
                 span,
-                "Ожидался словарь".into(),
-            )))
+                "Ожидался словарь"
+            )
         }
     });
 
@@ -105,10 +110,11 @@ pub fn setup_dict_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassDe
             let values: Vec<Value> = dict.read(|i| i.values().cloned().collect());
             Ok(Value::List(SharedMut::new(values)))
         } else {
-            Err(RuntimeError::TypeError(ErrorData::new(
+            bail_runtime!(
+                TypeError,
                 span,
-                "Ожидался словарь".into(),
-            )))
+                "Ожидался словарь"
+            )
         }
     });
 
@@ -120,10 +126,11 @@ pub fn setup_dict_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassDe
         ) {
             Ok(dict.write(|i| i.remove(key)).unwrap_or(Value::Empty))
         } else {
-            Err(RuntimeError::TypeError(ErrorData::new(
+            bail_runtime!(
+                TypeError,
                 span,
-                "Использование: dict.remove(string)".into(),
-            )))
+                "Использование: dict.remove(string)"
+            )
         }
     });
 
@@ -132,10 +139,11 @@ pub fn setup_dict_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassDe
         if let Some(Value::Dict(dict)) = CallArgListExt::first_value(&args) {
             Ok(Value::Number(dict.read(|i| i.len() as i64)))
         } else {
-            Err(RuntimeError::TypeError(ErrorData::new(
+            bail_runtime!(
+                TypeError,
                 span,
-                "Ожидался словарь".into(),
-            )))
+                "Ожидался словарь"
+            )
         }
     });
 
@@ -145,11 +153,11 @@ pub fn setup_dict_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassDe
 pub fn setup_dict_func(interpreter: &mut Interpreter, interner: &SharedInterner) {
     define_builtin!(interpreter, interner, "словарь" => (_, arguments, span) {
         if arguments.len() % 2 != 0 {
-            return Err(RuntimeError::InvalidOperation(ErrorData::new(
+            return bail_runtime!(
+                InvalidOperation,
                 span,
                 "Функция 'словарь' ожидает четное количество аргументов (пары ключ-значение)"
-                    .to_string(),
-            )));
+            );
         }
 
         let mut dict = HashMap::new();

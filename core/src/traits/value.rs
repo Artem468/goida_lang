@@ -3,7 +3,7 @@ use crate::ast::program::FieldData;
 use crate::interpreter::prelude::{ClassInstance, RuntimeError};
 use crate::interpreter::structs::Value;
 use crate::shared::SharedMut;
-use crate::INTERNER;
+use crate::{bail_runtime, runtime_error, INTERNER};
 use std::fmt;
 use std::sync::Arc;
 
@@ -79,10 +79,7 @@ impl Value {
         if let Value::Object(obj) = self {
             Ok(obj.clone())
         } else {
-            Err(RuntimeError::TypeError(ErrorData::new(
-                span,
-                "Ожидался объект".into(),
-            )))
+            bail_runtime!(TypeError, span, "Ожидался объект")
         }
     }
 
@@ -90,23 +87,25 @@ impl Value {
         let raw_idx = match self {
             Value::Number(n) => *n,
             _ => {
-                return Err(RuntimeError::TypeError(ErrorData::new(
+                return bail_runtime!(
+                    TypeError,
                     span,
-                    format!("Индекс должен быть числом, получено {:?}", self),
-                )))
+                    "Индекс должен быть числом, получено {:?}",
+                    self
+                )
             }
         };
 
         let final_idx = if raw_idx < 0 {
             let abs_idx = raw_idx.unsigned_abs() as usize;
             if abs_idx > len {
-                return Err(RuntimeError::InvalidOperation(ErrorData::new(
+                return bail_runtime!(
+                    InvalidOperation,
                     span,
-                    format!(
-                        "Отрицательный индекс {} слишком велик (длина {})",
-                        raw_idx, len
-                    ),
-                )));
+                    "Отрицательный индекс {} слишком велик (длина {})",
+                    raw_idx,
+                    len
+                );
             }
             len - abs_idx
         } else {
@@ -114,10 +113,13 @@ impl Value {
         };
 
         if final_idx >= len {
-            return Err(RuntimeError::InvalidOperation(ErrorData::new(
+            return bail_runtime!(
+                InvalidOperation,
                 span,
-                format!("Индекс {} вне границ (длина {})", raw_idx, len),
-            )));
+                "Индекс {} вне границ (длина {})",
+                raw_idx,
+                len
+            );
         }
 
         Ok(final_idx)
@@ -183,12 +185,10 @@ impl fmt::Display for Value {
                 write!(f, "}}")
             }),
             Value::NativeResource(resource) => write!(f, "<Ресурс {:p}>", resource),
-            Value::NativeGlobal(binding) => {
-                INTERNER.read(|i| {
-                    let binding_name = i.resolve(binding.symbol_name).unwrap_or("неизвестно");
-                    write!(f, "<Нативная переменная {}>", binding_name)
-                })
-            }
+            Value::NativeGlobal(binding) => INTERNER.read(|i| {
+                let binding_name = i.resolve(binding.symbol_name).unwrap_or("неизвестно");
+                write!(f, "<Нативная переменная {}>", binding_name)
+            }),
             Value::Empty => write!(f, "пустота"),
         }
     }

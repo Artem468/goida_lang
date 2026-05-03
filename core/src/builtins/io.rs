@@ -1,7 +1,7 @@
 use crate::ast::prelude::ErrorData;
 use crate::ast::span::Span;
-use crate::define_builtin;
 use crate::interpreter::prelude::{Interpreter, RuntimeError, SharedInterner, Value};
+use crate::{bail_runtime, define_builtin, runtime_error};
 use std::io;
 use std::io::Write;
 
@@ -31,10 +31,12 @@ pub fn setup_io_func(interpreter: &mut Interpreter, interner: &SharedInterner) {
             Some("вывод") | None => Box::new(io::stdout()),
             Some(path) => {
                 let file = std::fs::File::create(path).map_err(|e| {
-                    RuntimeError::IOError(ErrorData::new(
+                    runtime_error!(
+                        IOError,
                         Span::default(),
-                        format!("Ошибка вывода {}", e),
-                    ))
+                        "Ошибка вывода {}",
+                        e
+                    )
                 })?;
                 Box::new(file)
             }
@@ -47,29 +49,32 @@ pub fn setup_io_func(interpreter: &mut Interpreter, interner: &SharedInterner) {
             .join(&_sep);
 
         write!(writer, "{}{}", output, _end).map_err(|e| {
-            RuntimeError::IOError(ErrorData::new(
+            runtime_error!(
+                IOError,
                 Span::default(),
-                format!("Ошибка вывода {}", e),
-            ))
+                "Ошибка вывода {}",
+                e
+            )
         })?;
         writer.flush().map_err(|e| {
-            RuntimeError::IOError(ErrorData::new(
+            runtime_error!(
+                IOError,
                 Span::default(),
-                format!("Ошибка вывода {}", e),
-            ))
+                "Ошибка вывода {}",
+                e
+            )
         })?;
         Ok(Value::Empty)
     });
 
     define_builtin!(interpreter, interner, "ввод" => (_interpreter, arguments, span) {
         if arguments.len() != 1 {
-            return Err(RuntimeError::InvalidOperation(ErrorData::new(
+            return bail_runtime!(
+                InvalidOperation,
                 span,
-                format!(
-                    "Функция 'ввод' ожидает 1 аргумент, получено {}",
-                    arguments.len()
-                ),
-            )));
+                "Функция 'ввод' ожидает 1 аргумент, получено {}",
+                arguments.len()
+            )
         }
 
         print!("{}", arguments[0].value);
@@ -79,10 +84,11 @@ pub fn setup_io_func(interpreter: &mut Interpreter, interner: &SharedInterner) {
         if let Ok(_) = io::stdin().read_line(&mut input) {
             Ok(Value::Text(input.trim().to_string()))
         } else {
-            Err(RuntimeError::IOError(ErrorData::new(
+            bail_runtime!(
+                IOError,
                 span,
-                "Не удалось прочитать ввод".into(),
-            )))
+                "Не удалось прочитать ввод"
+            )
         }
     });
 }

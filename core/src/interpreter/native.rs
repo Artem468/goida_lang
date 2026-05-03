@@ -7,6 +7,7 @@ use crate::interpreter::prelude::{
 };
 use crate::shared::SharedMut;
 use crate::traits::prelude::CoreOperations;
+use crate::{bail_runtime, runtime_error};
 use libffi::middle::{Arg, Cif, CodePtr, Type};
 #[cfg(windows)]
 use libloading::os::windows::{Library as WindowsLibrary, LOAD_WITH_ALTERED_SEARCH_PATH};
@@ -115,13 +116,13 @@ impl Interpreter {
         };
         let mut missing = |param: &crate::ast::prelude::Parameter| {
             let param_name = self.resolve_symbol(param.name).unwrap_or_default();
-            Err(RuntimeError::InvalidOperation(ErrorData::new(
+            bail_runtime!(
+                InvalidOperation,
                 span,
-                format!(
-                    "Аргумент '{}' для native {} не передан",
-                    param_name, function_name
-                ),
-            )))
+                "Аргумент '{}' для native {} не передан",
+                param_name,
+                function_name
+            )
         };
         let bound_arguments = Self::bind_arguments(
             &binding.params,
@@ -138,13 +139,12 @@ impl Interpreter {
         for (param, value) in binding.params.iter().zip(bound_arguments.iter()) {
             let kind = self.native_kind_from_type_id(param.param_type, binding.module_id, span)?;
             if kind == NativeFfiKind::Void {
-                return Err(RuntimeError::TypeError(ErrorData::new(
+                return bail_runtime!(
+                    TypeError,
                     span,
-                    format!(
-                        "Native parameter '{}' cannot be void",
-                        self.resolve_symbol(param.name).unwrap_or_default()
-                    ),
-                )));
+                    "Native parameter '{}' cannot be void",
+                    self.resolve_symbol(param.name).unwrap_or_default()
+                );
             }
             ffi_param_types.push(kind.libffi_type());
             ffi_values.push(Self::value_to_ffi_arg(value.clone(), kind, span)?);
@@ -163,10 +163,13 @@ impl Interpreter {
                 .get::<*const ()>(symbol_name.as_bytes())
                 .map(|symbol| *symbol)
                 .map_err(|err| {
-                    RuntimeError::InvalidOperation(ErrorData::new(
+                    runtime_error!(
+                        InvalidOperation,
                         span,
-                        format!("Failed to find symbol '{}': {}", symbol_name, err),
-                    ))
+                        "Failed to find symbol '{}': {}",
+                        symbol_name,
+                        err
+                    )
                 })
         })?;
 
@@ -215,17 +218,15 @@ impl Interpreter {
         path_symbol: Symbol,
         span: Span,
     ) -> Result<PathBuf, RuntimeError> {
-        let module = self.modules.get(&current_module_id).ok_or_else(|| {
-            RuntimeError::InvalidOperation(ErrorData::new(span, "Current module is missing".into()))
-        })?;
+        let module = self
+            .modules
+            .get(&current_module_id)
+            .ok_or_else(|| runtime_error!(InvalidOperation, span, "Current module is missing"))?;
         let path = module
             .arena
             .resolve_symbol(&self.interner, path_symbol)
             .ok_or_else(|| {
-                RuntimeError::InvalidOperation(ErrorData::new(
-                    span,
-                    "Native library path is missing".into(),
-                ))
+                runtime_error!(InvalidOperation, span, "Native library path is missing")
             })?;
 
         let relative_path = Path::new(&path);
@@ -234,10 +235,7 @@ impl Interpreter {
         } else {
             std::env::current_dir()
                 .map_err(|err| {
-                    RuntimeError::IOError(ErrorData::new(
-                        span,
-                        format!("Failed to resolve current directory: {err}"),
-                    ))
+                    runtime_error!(IOError, span, "Failed to resolve current directory: {err}")
                 })?
                 .join(&module.path)
         };
@@ -246,14 +244,13 @@ impl Interpreter {
 
         if full_path.exists() {
             return full_path.canonicalize().map_err(|err| {
-                RuntimeError::IOError(ErrorData::new(
+                runtime_error!(
+                    IOError,
                     span,
-                    format!(
-                        "Failed to normalize native library path '{}': {}",
-                        full_path.display(),
-                        err
-                    ),
-                ))
+                    "Failed to normalize native library path '{}': {}",
+                    full_path.display(),
+                    err
+                )
             });
         }
 
@@ -261,22 +258,22 @@ impl Interpreter {
             let candidate = full_path.with_extension(std::env::consts::DLL_EXTENSION);
             if candidate.exists() {
                 return candidate.canonicalize().map_err(|err| {
-                    RuntimeError::IOError(ErrorData::new(
+                    runtime_error!(
+                        IOError,
                         span,
-                        format!(
-                            "Failed to normalize native library path '{}': {}",
-                            candidate.display(),
-                            err
-                        ),
-                    ))
+                        "Failed to normalize native library path '{}': {}",
+                        candidate.display(),
+                        err
+                    )
                 });
             }
         }
-
-        Err(RuntimeError::IOError(ErrorData::new(
+        bail_runtime!(
+            IOError,
             span,
-            format!("Native library not found: {}", full_path.display()),
-        )))
+            "Native library not found: {}",
+            full_path.display()
+        )
     }
 
     fn ensure_native_library_loaded(
@@ -293,14 +290,13 @@ impl Interpreter {
                 .source()
                 .map(|source| format!("{err}: {source}"))
                 .unwrap_or_else(|| err.to_string());
-            RuntimeError::IOError(ErrorData::new(
+            runtime_error!(
+                IOError,
                 span,
-                format!(
-                    "Failed to load native library '{}': {}",
-                    path.display(),
-                    detail
-                ),
-            ))
+                "Failed to load native library '{}': {}",
+                path.display(),
+                detail
+            )
         })?;
 
         self.native_libraries.insert(
@@ -316,10 +312,12 @@ impl Interpreter {
         span: Span,
     ) -> Result<SharedMut<LoadedNativeLibrary>, RuntimeError> {
         self.native_libraries.get(path).cloned().ok_or_else(|| {
-            RuntimeError::InvalidOperation(ErrorData::new(
+            runtime_error!(
+                InvalidOperation,
                 span,
-                format!("Native library '{}' is not loaded", path.display()),
-            ))
+                "Native library '{}' is not loaded",
+                path.display()
+            )
         })
     }
 
@@ -331,10 +329,12 @@ impl Interpreter {
         let kind = self.native_kind_from_type_id(binding.value_type, binding.module_id, span)?;
         let global_name = self.resolve_symbol(binding.symbol_name).unwrap_or_default();
         if kind == NativeFfiKind::Void {
-            return Err(RuntimeError::TypeError(ErrorData::new(
+            return bail_runtime!(
+                TypeError,
                 span,
-                format!("Global '{}' cannot have void type", global_name),
-            )));
+                "Global '{}' cannot have void type",
+                global_name
+            );
         }
 
         let library = self.get_loaded_native_library(&binding.library_path, span)?;
@@ -343,33 +343,43 @@ impl Interpreter {
             match kind {
                 NativeFfiKind::I64 => {
                     let symbol = library.handle.get::<*mut i64>(symbol_name).map_err(|err| {
-                        RuntimeError::InvalidOperation(ErrorData::new(
+                        runtime_error!(
+                            InvalidOperation,
                             span,
-                            format!("Failed to find symbol '{}': {}", global_name, err),
-                        ))
+                            "Failed to find symbol '{}': {}",
+                            global_name,
+                            err
+                        )
                     })?;
                     let ptr = *symbol;
                     if ptr.is_null() {
-                        return Err(RuntimeError::InvalidOperation(ErrorData::new(
+                        return bail_runtime!(
+                            InvalidOperation,
                             span,
-                            format!("Global '{}' is not initialized", global_name),
-                        )));
+                            "Global '{}' is not initialized",
+                            global_name
+                        );
                     }
                     Ok(Value::Number(*ptr))
                 }
                 NativeFfiKind::F64 => {
                     let symbol = library.handle.get::<*mut f64>(symbol_name).map_err(|err| {
-                        RuntimeError::InvalidOperation(ErrorData::new(
+                        runtime_error!(
+                            InvalidOperation,
                             span,
-                            format!("Failed to find symbol '{}': {}", global_name, err),
-                        ))
+                            "Failed to find symbol '{}': {}",
+                            global_name,
+                            err
+                        )
                     })?;
                     let ptr = *symbol;
                     if ptr.is_null() {
-                        return Err(RuntimeError::InvalidOperation(ErrorData::new(
+                        return bail_runtime!(
+                            InvalidOperation,
                             span,
-                            format!("Global '{}' is not initialized", global_name),
-                        )));
+                            "Global '{}' is not initialized",
+                            global_name
+                        );
                     }
                     Ok(Value::Float(*ptr))
                 }
@@ -378,17 +388,22 @@ impl Interpreter {
                         .handle
                         .get::<*mut *mut c_void>(symbol_name)
                         .map_err(|err| {
-                            RuntimeError::InvalidOperation(ErrorData::new(
+                            runtime_error!(
+                                InvalidOperation,
                                 span,
-                                format!("Failed to find symbol '{}': {}", global_name, err),
-                            ))
+                                "Failed to find symbol '{}': {}",
+                                global_name,
+                                err
+                            )
                         })?;
                     let ptr = *symbol;
                     if ptr.is_null() {
-                        return Err(RuntimeError::InvalidOperation(ErrorData::new(
+                        return bail_runtime!(
+                            InvalidOperation,
                             span,
-                            format!("Global '{}' is not initialized", global_name),
-                        )));
+                            "Global '{}' is not initialized",
+                            global_name
+                        );
                     }
                     Ok(Value::Number((*ptr) as isize as i64))
                 }
@@ -415,10 +430,12 @@ impl Interpreter {
         let kind = self.native_kind_from_type_id(binding.value_type, binding.module_id, span)?;
         let global_name = self.resolve_symbol(binding.symbol_name).unwrap_or_default();
         if kind == NativeFfiKind::Void {
-            return Err(RuntimeError::TypeError(ErrorData::new(
+            return bail_runtime!(
+                TypeError,
                 span,
-                format!("Global '{}' cannot have void type", global_name),
-            )));
+                "Global '{}' cannot have void type",
+                global_name
+            );
         }
 
         self.ensure_value_matches_type(
@@ -434,46 +451,60 @@ impl Interpreter {
             match kind {
                 NativeFfiKind::I64 => {
                     let symbol = library.handle.get::<*mut i64>(symbol_name).map_err(|err| {
-                        RuntimeError::InvalidOperation(ErrorData::new(
+                        runtime_error!(
+                            InvalidOperation,
                             span,
-                            format!("Failed to find symbol '{}': {}", global_name, err),
-                        ))
+                            "Failed to find symbol '{}': {}",
+                            global_name,
+                            err
+                        )
                     })?;
                     let ptr = *symbol;
                     if ptr.is_null() {
-                        return Err(RuntimeError::InvalidOperation(ErrorData::new(
+                        return bail_runtime!(
+                            InvalidOperation,
                             span,
-                            format!("Global '{}' is not initialized", global_name),
-                        )));
+                            "Global '{}' is not initialized",
+                            global_name
+                        );
                     }
                     let Value::Number(number) = value else {
-                        return Err(RuntimeError::TypeError(ErrorData::new(
+                        return bail_runtime!(
+                            TypeError,
                             span,
-                            format!("Global '{}' expects i64 value", global_name),
-                        )));
+                            "Global '{}' expects i64 value",
+                            global_name
+                        );
                     };
                     *ptr = number;
                     Ok(())
                 }
                 NativeFfiKind::F64 => {
                     let symbol = library.handle.get::<*mut f64>(symbol_name).map_err(|err| {
-                        RuntimeError::InvalidOperation(ErrorData::new(
+                        runtime_error!(
+                            InvalidOperation,
                             span,
-                            format!("Failed to find symbol '{}': {}", global_name, err),
-                        ))
+                            "Failed to find symbol '{}': {}",
+                            global_name,
+                            err
+                        )
                     })?;
                     let ptr = *symbol;
                     if ptr.is_null() {
-                        return Err(RuntimeError::InvalidOperation(ErrorData::new(
+                        return bail_runtime!(
+                            InvalidOperation,
                             span,
-                            format!("Global '{}' is not initialized", global_name),
-                        )));
+                            "Global '{}' is not initialized",
+                            global_name
+                        );
                     }
                     let Value::Float(float) = value else {
-                        return Err(RuntimeError::TypeError(ErrorData::new(
+                        return bail_runtime!(
+                            TypeError,
                             span,
-                            format!("Global '{}' expects f64 value", global_name),
-                        )));
+                            "Global '{}' expects f64 value",
+                            global_name
+                        );
                     };
                     *ptr = float;
                     Ok(())
@@ -483,26 +514,33 @@ impl Interpreter {
                         .handle
                         .get::<*mut *mut c_void>(symbol_name)
                         .map_err(|err| {
-                            RuntimeError::InvalidOperation(ErrorData::new(
+                            runtime_error!(
+                                InvalidOperation,
                                 span,
-                                format!("Failed to find symbol '{}': {}", global_name, err),
-                            ))
+                                "Failed to find symbol '{}': {}",
+                                global_name,
+                                err
+                            )
                         })?;
                     let ptr = *symbol;
                     if ptr.is_null() {
-                        return Err(RuntimeError::InvalidOperation(ErrorData::new(
+                        return bail_runtime!(
+                            InvalidOperation,
                             span,
-                            format!("Global '{}' is not initialized", global_name),
-                        )));
+                            "Global '{}' is not initialized",
+                            global_name
+                        );
                     }
                     let number = match value {
                         Value::Number(number) => number,
                         Value::Empty => 0,
                         _ => {
-                            return Err(RuntimeError::TypeError(ErrorData::new(
+                            return bail_runtime!(
+                                TypeError,
                                 span,
-                                format!("Global '{}' expects pointer value", global_name),
-                            )))
+                                "Global '{}' expects pointer value",
+                                global_name
+                            )
                         }
                     };
                     *ptr = number as isize as usize as *mut c_void;
@@ -531,15 +569,14 @@ impl Interpreter {
         module_id: Symbol,
         span: Span,
     ) -> Result<NativeFfiKind, RuntimeError> {
-        let module = self.modules.get(&module_id).ok_or_else(|| {
-            RuntimeError::InvalidOperation(ErrorData::new(span, "Module not found".into()))
-        })?;
-        let data_type = module.arena.types.get(type_id as usize).ok_or_else(|| {
-            RuntimeError::TypeError(ErrorData::new(
-                span,
-                format!("Unknown native type id {}", type_id),
-            ))
-        })?;
+        let module = self
+            .modules
+            .get(&module_id)
+            .ok_or_else(|| runtime_error!(InvalidOperation, span, "Module not found"))?;
+        let data_type =
+            module.arena.types.get(type_id as usize).ok_or_else(|| {
+                runtime_error!(TypeError, span, "Unknown native type id {}", type_id)
+            })?;
 
         match data_type {
             DataType::Unit => Ok(NativeFfiKind::Void),
@@ -547,13 +584,12 @@ impl Interpreter {
             DataType::Primitive(PrimitiveType::Float) => Ok(NativeFfiKind::F64),
             DataType::Primitive(PrimitiveType::Pointer) => Ok(NativeFfiKind::Pointer),
             DataType::Any => Ok(NativeFfiKind::Pointer),
-            other => Err(RuntimeError::TypeError(ErrorData::new(
+            other => bail_runtime!(
+                TypeError,
                 span,
-                format!(
-                    "Неподдерживаемый тип для native ABI: {}. Используйте число/дробь/указатель/пустота",
+                "Неподдерживаемый тип для native ABI: {}. Используйте число/дробь/указатель/пустота",
                     Self::describe_type(other)
-                ),
-            ))),
+            ),
         }
     }
 
@@ -565,17 +601,11 @@ impl Interpreter {
         match kind {
             NativeFfiKind::I64 => match value {
                 Value::Number(number) => Ok(NativeFfiArgValue::I64(number)),
-                _ => Err(RuntimeError::TypeError(ErrorData::new(
-                    span,
-                    "Аргумент native-функции должен быть типа 'число'".into(),
-                ))),
+                _ => bail_runtime!(TypeError, span, "Аргумент native-функции должен быть типа 'число'"),
             },
             NativeFfiKind::F64 => match value {
                 Value::Float(float) => Ok(NativeFfiArgValue::F64(float)),
-                _ => Err(RuntimeError::TypeError(ErrorData::new(
-                    span,
-                    "Аргумент native-функции должен быть типа 'дробь'".into(),
-                ))),
+                _ => bail_runtime!(TypeError, span, "Аргумент native-функции должен быть типа 'дробь'"),
             },
             NativeFfiKind::Pointer => match value {
                 Value::Number(number) => {
@@ -602,15 +632,9 @@ impl Interpreter {
                     let ptr = boxed.as_mut() as *mut Value as *mut c_void;
                     Ok(NativeFfiArgValue::ManagedPointer(boxed, ptr))
                 }
-                _ => Err(RuntimeError::TypeError(ErrorData::new(
-                    span,
-                    "Аргумент типа 'указатель' должен быть адресом, пустотой или значением строка/список/массив/словарь".into(),
-                ))),
+                _ => bail_runtime!(TypeError, span, "Аргумент типа 'указатель' должен быть адресом, пустотой или значением строка/список/массив/словарь"),
             },
-            NativeFfiKind::Void => Err(RuntimeError::TypeError(ErrorData::new(
-                span,
-                "Тип 'пустота' нельзя использовать для аргумента native-функции".into(),
-            ))),
+            NativeFfiKind::Void => bail_runtime!(TypeError, span, "Тип 'пустота' нельзя использовать для аргумента native-функции"),
         }
     }
 
@@ -642,10 +666,13 @@ impl Interpreter {
             .and_then(|module| module.arena.types.get(expected as usize))
             .map(Self::describe_type)
             .unwrap_or_else(|| "неизвестно".to_string());
-        Err(RuntimeError::TypeError(ErrorData::new(
+        bail_runtime!(
+            TypeError,
             span,
-            format!("Неверный тип {}: ожидался {}", label, expected_name),
-        )))
+            "Неверный тип {}: ожидался {}",
+            label,
+            expected_name
+        )
     }
 
     fn value_matches_type(
@@ -655,10 +682,11 @@ impl Interpreter {
         module_id: Symbol,
     ) -> Result<bool, RuntimeError> {
         let module = self.modules.get(&module_id).ok_or_else(|| {
-            RuntimeError::InvalidOperation(ErrorData::new(
+            runtime_error!(
+                InvalidOperation,
                 Span::default(),
-                "Module not found".into(),
-            ))
+                "Module not found"
+            )
         })?;
         let Some(data_type) = module.arena.types.get(expected as usize) else {
             return Ok(true);

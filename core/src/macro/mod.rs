@@ -52,3 +52,30 @@ macro_rules! define_builtin {
         );
     };
 }
+
+#[macro_export]
+macro_rules! runtime_error {
+    ($variant:ident, $span:expr, $fmt:expr $(, $arg:expr)*) => {
+        RuntimeError::$variant(ErrorData::new(
+            $span,
+            format!($fmt $(, $arg)*),
+        ))
+    };
+    
+    ($variant:ident, $span:expr, $fmt:expr $(, $arg:expr)* => $extra:expr) => {
+        RuntimeError::$variant(
+            ErrorData::new($span, format!($fmt $(, $arg)*)),
+            $extra
+        )
+    };
+}
+
+#[macro_export]
+macro_rules! bail_runtime {
+    ($variant:ident, $span:expr, $fmt:expr $(, $arg:expr)*) => {
+        Err(runtime_error!($variant, $span, $fmt $(, $arg)*))
+    };
+    ($variant:ident, $span:expr, $fmt:expr $(, $arg:expr)* => $extra:expr) => {
+        Err(runtime_error!($variant, $span, $fmt $(, $arg)* => $extra))
+    };
+}

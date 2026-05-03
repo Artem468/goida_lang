@@ -3,7 +3,7 @@ use crate::interpreter::prelude::{
     CallArgListExt, CallArgValue, RuntimeError, SharedInterner, Value,
 };
 use crate::shared::SharedMut;
-use crate::{define_constructor, define_method};
+use crate::{bail_runtime, define_constructor, define_method, runtime_error};
 use std::fs;
 use std::path::Path;
 use string_interner::DefaultSymbol as Symbol;
@@ -22,10 +22,11 @@ pub fn setup_file_class(interner_ref: &SharedInterner) -> (Symbol, SharedMut<Cla
             instance.write(|i| i.field_values.insert(path_sym, Value::Text(path.clone())));
             Ok(Value::Empty)
         } else {
-            Err(RuntimeError::TypeError(ErrorData::new(
+            bail_runtime!(
+                TypeError,
                 span,
-                "Использование: новый Файл(путь)".into(),
-            )))
+                "Использование: новый Файл(путь)"
+            )
         }
     });
 
@@ -37,17 +38,10 @@ pub fn setup_file_class(interner_ref: &SharedInterner) -> (Symbol, SharedMut<Cla
                         return Ok(p.clone());
                     }
                 }
-                Err(RuntimeError::InvalidOperation(ErrorData::new(
-                    Span::default(),
-                    "Путь не найден".into(),
-                )))
+                bail_runtime!(InvalidOperation, Span::default(), "Путь не найден")
             });
         }
-
-        Err(RuntimeError::InvalidOperation(ErrorData::new(
-            Span::default(),
-            "Путь не найден".into(),
-        )))
+        bail_runtime!(InvalidOperation, Span::default(), "Путь не найден")
     };
 
     // --- .существует() -> Bool ---
@@ -60,7 +54,7 @@ pub fn setup_file_class(interner_ref: &SharedInterner) -> (Symbol, SharedMut<Cla
     define_method!(class_def, interner_ref, "читать" => (_, args, span) {
         let path = get_path(&args)?;
         let content = fs::read_to_string(path)
-            .map_err(|e| RuntimeError::IOError(ErrorData::new(span, e.to_string())))?;
+            .map_err(|e| runtime_error!(IOError, span, "{}", e.to_string()))?;
         Ok(Value::Text(content))
     });
 
@@ -75,11 +69,11 @@ pub fn setup_file_class(interner_ref: &SharedInterner) -> (Symbol, SharedMut<Cla
 
         if let Some(parent) = Path::new(&path).parent() {
             fs::create_dir_all(parent)
-                .map_err(|e| RuntimeError::IOError(ErrorData::new(span, e.to_string())))?;
+                .map_err(|e| runtime_error!(IOError, span, "{}", e.to_string()))?;
         }
 
         fs::write(path, text)
-            .map_err(|e| RuntimeError::IOError(ErrorData::new(span, e.to_string())))?;
+            .map_err(|e| runtime_error!(IOError, span, "{}", e.to_string()))?;
         Ok(Value::Empty)
     });
 
@@ -94,18 +88,18 @@ pub fn setup_file_class(interner_ref: &SharedInterner) -> (Symbol, SharedMut<Cla
 
         if let Some(parent) = Path::new(&path).parent() {
             fs::create_dir_all(parent)
-                .map_err(|e| RuntimeError::IOError(ErrorData::new(span, e.to_string())))?;
+                .map_err(|e| runtime_error!(IOError, span, "{}", e.to_string()))?;
         }
 
         let mut file = fs::OpenOptions::new()
             .append(true)
             .create(true)
             .open(path)
-            .map_err(|e| RuntimeError::IOError(ErrorData::new(span, e.to_string())))?;
+            .map_err(|e| runtime_error!(IOError, span, "{}", e.to_string()))?;
 
         use std::io::Write;
         file.write_all(text.as_bytes())
-            .map_err(|e| RuntimeError::IOError(ErrorData::new(span, e.to_string())))?;
+            .map_err(|e| runtime_error!(IOError, span, "{}", e.to_string()))?;
 
         Ok(Value::Empty)
     });
@@ -114,7 +108,7 @@ pub fn setup_file_class(interner_ref: &SharedInterner) -> (Symbol, SharedMut<Cla
     define_method!(class_def, interner_ref, "удалить" => (_, args, span) {
         let path = get_path(&args)?;
         fs::remove_file(path)
-            .map_err(|e| RuntimeError::IOError(ErrorData::new(span, e.to_string())))?;
+            .map_err(|e| runtime_error!(IOError, span, "{}", e.to_string()))?;
         Ok(Value::Empty)
     });
 

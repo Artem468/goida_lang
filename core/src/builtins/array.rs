@@ -3,7 +3,7 @@ use crate::interpreter::prelude::{
     CallArgListExt, Interpreter, RuntimeError, SharedInterner, Value,
 };
 use crate::shared::SharedMut;
-use crate::{define_builtin, define_constructor, define_method};
+use crate::{bail_runtime, define_builtin, define_constructor, define_method, runtime_error};
 use std::sync::Arc;
 use string_interner::DefaultSymbol as Symbol;
 
@@ -29,10 +29,11 @@ pub fn setup_array_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassD
             let length = arr.len();
             Ok(Value::Number(length as i64))
         } else {
-            Err(RuntimeError::TypeError(ErrorData::new(
+            bail_runtime!(
+                TypeError,
                 span,
-                "Ожидался массив".into(),
-            )))
+                "Ожидался массив"
+            )
         }
     });
 
@@ -50,10 +51,11 @@ pub fn setup_array_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassD
 
             Ok(Value::Text(res))
         } else {
-            Err(RuntimeError::TypeError(ErrorData::new(
+            bail_runtime!(
+                TypeError,
                 span,
-                "Использование: array.join(string)".into(),
-            )))
+                "Использование: array.join(string)"
+            )
         }
     });
 
@@ -66,10 +68,11 @@ pub fn setup_array_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassD
             let i = idx.resolve_index(arr.len(), span)?;
             Ok(arr[i].clone())
         } else {
-            Err(RuntimeError::TypeError(ErrorData::new(
+            bail_runtime!(
+                TypeError,
                 span,
-                "Использование: array.get(number)".into(),
-            )))
+                "Использование: array.get(number)"
+            )
         }
     });
 

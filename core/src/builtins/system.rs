@@ -1,7 +1,7 @@
 use crate::ast::prelude::{ClassDefinition, ErrorData, Span};
-use crate::define_method;
 use crate::interpreter::prelude::{CallArgListExt, RuntimeError, SharedInterner, Value};
 use crate::shared::SharedMut;
+use crate::{bail_runtime, define_method, runtime_error};
 use std::io::Write;
 use std::sync::Arc;
 use string_interner::DefaultSymbol as Symbol;
@@ -24,7 +24,12 @@ pub fn setup_system_class(interner_ref: &SharedInterner) -> (Symbol, SharedMut<C
         let msg = CallArgListExt::get_value(&args, 1)
             .map(|v| v.to_string())
             .unwrap_or_else(|| "Неизвестная ошибка".into());
-        Err(RuntimeError::Panic(ErrorData::new(span, msg)))
+        bail_runtime!(
+            Panic,
+            span,
+            "{}", msg
+        )
+
     });
 
     // --- Система.платформа() -> Text ---
@@ -58,18 +63,20 @@ pub fn setup_system_class(interner_ref: &SharedInterner) -> (Symbol, SharedMut<C
         let ms = match CallArgListExt::get_value(&args, 1) {
             Some(Value::Number(n)) => *n,
             _ => {
-                return Err(RuntimeError::TypeError(ErrorData::new(
+                return bail_runtime!(
+                    TypeError,
                     span,
-                    "Функция 'сон' ожидает число (миллисекунды)".into(),
-                )))
+                    "Функция 'сон' ожидает число (миллисекунды)"
+                )
             }
         };
 
         if ms < 0 {
-            return Err(RuntimeError::InvalidOperation(ErrorData::new(
+            return bail_runtime!(
+                InvalidOperation,
                 span,
-                "Время сна не может быть отрицательным".into(),
-            )));
+                "Функция 'сон' ожидает число (миллисекунды)"
+            );
         }
 
         std::thread::sleep(std::time::Duration::from_millis(ms as u64));

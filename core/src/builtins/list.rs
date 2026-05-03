@@ -4,7 +4,7 @@ use crate::interpreter::prelude::{
 };
 use crate::shared::SharedMut;
 use crate::traits::prelude::CoreOperations;
-use crate::{define_builtin, define_constructor, define_method};
+use crate::{bail_runtime, define_builtin, define_constructor, define_method, runtime_error};
 use string_interner::DefaultSymbol as Symbol;
 
 pub fn setup_list_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassDefinition>) {
@@ -32,10 +32,11 @@ pub fn setup_list_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassDe
             list.write(|i| i.push(val.clone()));
             Ok(Value::Empty)
         } else {
-            Err(RuntimeError::TypeError(ErrorData::new(
+            bail_runtime!(
+                TypeError,
                 span,
-                "Использование: list.append(value)".into(),
-            )))
+                "Использование: list.append(value)"
+            )
         }
     });
 
@@ -52,10 +53,7 @@ pub fn setup_list_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassDe
                 Ok(Value::Empty)
             })
         } else {
-            Err(RuntimeError::TypeError(ErrorData::new(
-                span,
-                "Использование: list.set(number, value)".into(),
-            )))
+            bail_runtime!(TypeError, span, "Использование: list.set(number, value)")
         }
     });
 
@@ -65,10 +63,7 @@ pub fn setup_list_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassDe
             let length = list.read(|i| i.len());
             Ok(Value::Number(length as i64))
         } else {
-            Err(RuntimeError::TypeError(ErrorData::new(
-                span,
-                "Ожидался список".into(),
-            )))
+            bail_runtime!(TypeError, span, "Ожидался список")
         }
     });
 
@@ -77,10 +72,7 @@ pub fn setup_list_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassDe
         if let Some(Value::List(list)) = CallArgListExt::first_value(&args) {
             list.write(|vec| {
                 if vec.is_empty() {
-                    return Err(RuntimeError::InvalidOperation(ErrorData::new(
-                        span,
-                        "удаление у пустого списка".into(),
-                    )));
+                    return bail_runtime!(InvalidOperation, span, "удаление у пустого списка");
                 }
 
                 let val = if let Some(raw_idx) = CallArgListExt::get_value(&args, 1) {
@@ -93,10 +85,7 @@ pub fn setup_list_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassDe
                 Ok(val)
             })
         } else {
-            Err(RuntimeError::TypeError(ErrorData::new(
-                span,
-                "Ожидался список".into(),
-            )))
+            bail_runtime!(TypeError, span, "Ожидался список")
         }
     });
 
@@ -106,10 +95,7 @@ pub fn setup_list_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassDe
             list.write(|i| i.clear());
             Ok(Value::Empty)
         } else {
-            Err(RuntimeError::TypeError(ErrorData::new(
-                span,
-                "Ожидался список".into(),
-            )))
+            bail_runtime!(TypeError, span, "Ожидался список")
         }
     });
 
@@ -127,10 +113,7 @@ pub fn setup_list_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassDe
             });
             Ok(Value::Text(joined))
         } else {
-            Err(RuntimeError::TypeError(ErrorData::new(
-                span,
-                "Использование: list.join(string)".into(),
-            )))
+            bail_runtime!(TypeError, span, "Использование: list.join(string)")
         }
     });
 
@@ -145,10 +128,7 @@ pub fn setup_list_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassDe
                 Ok(vec[i].clone())
             })
         } else {
-            Err(RuntimeError::TypeError(ErrorData::new(
-                span,
-                "Использование: list.get(number)".into(),
-            )))
+            bail_runtime!(TypeError, span, "Использование: list.get(number)")
         }
     });
 

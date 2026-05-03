@@ -3,7 +3,7 @@ use crate::interpreter::prelude::{
     BuiltinFn, CallArgListExt, CallArgValue, RuntimeError, SharedInterner, Value,
 };
 use crate::shared::SharedMut;
-use crate::{define_constructor, define_method};
+use crate::{bail_runtime, define_constructor, define_method, runtime_error};
 use chrono::{Datelike, Local, TimeZone, Timelike};
 use std::sync::Arc;
 use string_interner::DefaultSymbol as Symbol;
@@ -18,16 +18,17 @@ pub fn setup_datetime_class(interner_ref: &SharedInterner) -> (Symbol, SharedMut
         let instance = match CallArgListExt::first_value(&args) {
             Some(Value::Object(inst)) => inst,
             _ => {
-                return Err(RuntimeError::TypeError(ErrorData::new(
+                return bail_runtime!(
+                    TypeError,
                     span,
-                    "Ошибка инициализации self".into(),
-                )))
+                    "Ошибка инициализации self"
+                )
             }
         };
 
         let ms = if let Some(val) = CallArgListExt::get_value(&args, 1) {
             val.as_i64().ok_or_else(|| {
-                RuntimeError::TypeError(ErrorData::new(span, "Аргумент должен быть числом".into()))
+                runtime_error!(TypeError, span, "Аргумент должен быть числом")
             })?
         } else {
             Local::now().timestamp_millis()
@@ -46,17 +47,19 @@ pub fn setup_datetime_class(interner_ref: &SharedInterner) -> (Symbol, SharedMut
                     .get(&ms_sym)
                     .and_then(|v| v.as_i64())
                     .ok_or_else(|| {
-                        RuntimeError::InvalidOperation(ErrorData::new(
+                        runtime_error!(
+                            InvalidOperation,
                             Span::default(),
-                            "Объект ДатаВремя поврежден".into(),
-                        ))
+                            "Объект ДатаВремя поврежден"
+                        )
                     })
             })
         } else {
-            Err(RuntimeError::InvalidOperation(ErrorData::new(
+            bail_runtime!(
+                InvalidOperation,
                 Span::default(),
-                "Метод должен вызываться у объекта".into(),
-            )))
+                "Метод должен вызываться у объекта"
+            )
         }
     };
 

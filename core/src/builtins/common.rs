@@ -1,18 +1,17 @@
 use crate::ast::prelude::ErrorData;
-use crate::define_builtin;
 use crate::interpreter::prelude::{Interpreter, RuntimeError, SharedInterner, Value};
 use crate::traits::core::CoreOperations;
+use crate::{bail_runtime, define_builtin, runtime_error};
 
 pub fn setup_type_func(interpreter: &mut Interpreter, interner: &SharedInterner) {
     define_builtin!(interpreter, interner, "тип" => (interpreter, arguments, span) {
         if arguments.len() != 1 {
-            return Err(RuntimeError::InvalidOperation(ErrorData::new(
+            return bail_runtime!(
+                InvalidOperation,
                 span,
-                format!(
-                    "Функция 'тип' ожидает 1 аргумент, получено {}",
-                    arguments.len()
-                ),
-            )));
+                "Функция 'тип' ожидает 1 аргумент, получено {}",
+                arguments.len()
+            );
         }
 
         let val = &arguments[0].value;
@@ -24,24 +23,24 @@ pub fn setup_type_func(interpreter: &mut Interpreter, interner: &SharedInterner)
             Value::Object(obj) => {
                 let name_sym = obj.read(|i| i.class_name);
                 let name = interpreter.resolve_symbol(name_sym)
-                    .ok_or_else(|| RuntimeError::InvalidOperation(ErrorData::new(span, "Тип не найден".into())))?;
+                    .ok_or_else(|| runtime_error!(InvalidOperation, span, "Тип не найден"))?;
                 Ok(Value::Text(format!("объект \"{}\"", name)))
             }
             Value::Class(cls) => {
                 let name_sym = cls.read(|i| i.name);
                 let name = interpreter.resolve_symbol(name_sym)
-                    .ok_or_else(|| RuntimeError::InvalidOperation(ErrorData::new(span, "Тип не найден".into())))?;
+                    .ok_or_else(|| runtime_error!(InvalidOperation, span, "Тип не найден"))?;
                 Ok(Value::Text(format!("класс \"{}\"", name)))
             }
             Value::Function(obj) => {
                 let name = interpreter.resolve_symbol(obj.name)
-                    .ok_or_else(|| RuntimeError::InvalidOperation(ErrorData::new(span, "Тип не найден".into())))?;
+                    .ok_or_else(|| runtime_error!(InvalidOperation, span, "Тип не найден"))?;
                 Ok(Value::Text(format!("функция \"{}\"", name)))
             }
             Value::Builtin(_) => Ok(Value::Text("встроенная функция".into())),
             Value::Module(sym) => {
                 let name = interpreter.resolve_symbol(*sym)
-                    .ok_or_else(|| RuntimeError::InvalidOperation(ErrorData::new(span, "Модуль не найден".into())))?;
+                    .ok_or_else(|| runtime_error!(InvalidOperation, span, "Модуль не найден"))?;
                 Ok(Value::Text(format!("модуль \"{}\"", name)))
             }
             Value::List(_) => Ok(Value::Text("список".into())),
@@ -57,13 +56,12 @@ pub fn setup_type_func(interpreter: &mut Interpreter, interner: &SharedInterner)
 pub fn setup_is_instance_func(interpreter: &mut Interpreter, interner: &SharedInterner) {
     define_builtin!(interpreter, interner, "является" => (interpreter, arguments, span) {
         if arguments.len() != 2 {
-            return Err(RuntimeError::InvalidOperation(ErrorData::new(
+            return bail_runtime!(
+                InvalidOperation,
                 span,
-                format!(
-                    "Функция 'является' ожидает 2 аргумента, получено {}",
-                    arguments.len()
-                ),
-            )));
+                "Функция 'является' ожидает 2 аргумента, получено {}",
+                arguments.len()
+            )
         }
 
         let target = &arguments[0].value;

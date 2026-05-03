@@ -3,7 +3,7 @@ use crate::interpreter::prelude::{
     CallArgListExt, Interpreter, RuntimeError, SharedInterner, Value,
 };
 use crate::shared::SharedMut;
-use crate::{define_builtin, define_constructor, define_method};
+use crate::{bail_runtime, define_builtin, define_constructor, define_method, runtime_error};
 use std::ffi::{c_char, CStr};
 use string_interner::DefaultSymbol as Symbol;
 
@@ -33,10 +33,11 @@ pub fn setup_text_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassDe
         if let Some(Value::Text(s)) = CallArgListExt::first_value(&args) {
             Ok(Value::Number(s.chars().count() as i64))
         } else {
-            Err(RuntimeError::TypeError(ErrorData::new(
+            bail_runtime!(
+                TypeError,
                 span,
-                "Ожидалась строка".into(),
-            )))
+                "Ожидалась строка"
+            )
         }
     });
 
@@ -52,10 +53,11 @@ pub fn setup_text_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassDe
                 .collect();
             Ok(Value::List(SharedMut::new(parts)))
         } else {
-            Err(RuntimeError::TypeError(ErrorData::new(
+            bail_runtime!(
+                TypeError,
                 span,
-                "Использование: str.split(separator)".into(),
-            )))
+                "Использование: str.split(separator)"
+            )
         }
     });
 
@@ -64,10 +66,11 @@ pub fn setup_text_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassDe
         if let Some(Value::Text(s)) = CallArgListExt::first_value(&args) {
             Ok(Value::Text(s.to_uppercase()))
         } else {
-            Err(RuntimeError::TypeError(ErrorData::new(
+            bail_runtime!(
+                TypeError,
                 span,
-                "Ожидалась строка".into(),
-            )))
+                "Ожидалась строка"
+            )
         }
     });
 
@@ -76,10 +79,11 @@ pub fn setup_text_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassDe
         if let Some(Value::Text(s)) = CallArgListExt::first_value(&args) {
             Ok(Value::Text(s.to_lowercase()))
         } else {
-            Err(RuntimeError::TypeError(ErrorData::new(
+            bail_runtime!(
+                TypeError,
                 span,
-                "Ожидалась строка".into(),
-            )))
+                "Ожидалась строка"
+            )
         }
     });
 
@@ -91,10 +95,11 @@ pub fn setup_text_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassDe
         ) {
             Ok(Value::Boolean(s.contains(sub)))
         } else {
-            Err(RuntimeError::TypeError(ErrorData::new(
+            bail_runtime!(
+                TypeError,
                 span,
-                "Использование: str.contains(substring)".into(),
-            )))
+                "Использование: str.contains(substring)"
+            )
         }
     });
 
@@ -107,10 +112,11 @@ pub fn setup_text_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassDe
         ) {
             Ok(Value::Text(s.replace(old, new)))
         } else {
-            Err(RuntimeError::TypeError(ErrorData::new(
+            bail_runtime!(
+                TypeError,
                 span,
-                "Использование: str.replace(old, new)".into(),
-            )))
+                "Использование: str.replace(old, new)"
+            )
         }
     });
 
@@ -120,13 +126,12 @@ pub fn setup_text_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassDe
 pub fn setup_text_func(interpreter: &mut Interpreter, interner: &SharedInterner) {
     define_builtin!(interpreter, interner, "строка" => (_, arguments, span) {
         if arguments.len() != 1 {
-            return Err(RuntimeError::InvalidOperation(ErrorData::new(
+            return bail_runtime!(
+                InvalidOperation,
                 span,
-                format!(
-                    "Функция 'строка' ожидает 1 аргумент, получено {}",
-                    arguments.len()
-                ),
-            )));
+                "Функция 'строка' ожидает 1 аргумент, получено {}",
+                arguments.len()
+            )
         }
         let n: String = arguments[0].value.clone().try_into()?;
         Ok(Value::Text(n))

@@ -3,6 +3,7 @@ use crate::interpreter::structs::{CallArgValue, Interpreter, RuntimeError, Value
 use crate::traits::prelude::{
     CoreOperations, ExpressionEvaluator, InterpreterFunctions, StatementExecutor,
 };
+use crate::{bail_runtime, runtime_error};
 use string_interner::DefaultSymbol as Symbol;
 
 impl InterpreterFunctions for Interpreter {
@@ -54,9 +55,10 @@ impl InterpreterFunctions for Interpreter {
 
         let name_str = self.resolve_symbol(name).unwrap();
 
-        let current_module = self.modules.get(&current_module_id).ok_or_else(|| {
-            RuntimeError::InvalidOperation(ErrorData::new(span, "Текущий модуль не найден".into()))
-        })?;
+        let current_module = self
+            .modules
+            .get(&current_module_id)
+            .ok_or_else(|| runtime_error!(InvalidOperation, span, "Текущий модуль не найден"))?;
 
         if let Some(dot_index) = name_str.find('.') {
             let mod_part = &name_str[..dot_index];
@@ -75,14 +77,10 @@ impl InterpreterFunctions for Interpreter {
                         self.call_function((*func).clone(), arguments, definition_module_id, span)
                     }
                     Value::Builtin(builtin) => builtin(self, arguments, span),
-                    _ => Err(RuntimeError::UndefinedFunction(ErrorData::new(
-                        span, name_str,
-                    ))),
+                    _ => bail_runtime!(UndefinedFunction, span, "{}", name_str),
                 };
             }
-            return Err(RuntimeError::UndefinedFunction(ErrorData::new(
-                span, name_str,
-            )));
+            return bail_runtime!(UndefinedFunction, span, "{}", name_str);
         }
 
         if let Some(function) = current_module.functions.get(&name) {
@@ -102,9 +100,7 @@ impl InterpreterFunctions for Interpreter {
             return builtin_fn(self, arguments, span);
         }
 
-        Err(RuntimeError::UndefinedFunction(ErrorData::new(
-            span, name_str,
-        )))
+        bail_runtime!(UndefinedFunction, span, "{}", name_str)
     }
 }
 
@@ -134,13 +130,14 @@ impl Interpreter {
                 self.evaluate_expression(default_expr_id, current_module_id)
             } else {
                 let param_name = self.resolve_symbol(param.name).unwrap_or_default();
-                Err(RuntimeError::InvalidOperation(ErrorData::new(
+                bail_runtime!(
+                    InvalidOperation,
                     span,
-                    format!(
-                        "Аргумент '{}' для {} {} не передан",
-                        param_name, kind_label, function_name
-                    ),
-                )))
+                    "Аргумент '{}' для {} {} не передан",
+                    param_name,
+                    kind_label,
+                    function_name
+                )
             }
         };
 
@@ -185,47 +182,49 @@ impl Interpreter {
                         Some(i) => i,
                         None => {
                             let name_str = resolve_symbol(name);
-                            return Err(RuntimeError::InvalidOperation(ErrorData::new(
+                            return bail_runtime!(
+                                InvalidOperation,
                                 span,
-                                format!(
-                                    "Неизвестный именованный аргумент '{}' для {} {}",
-                                    name_str, kind_label, callable_name
-                                ),
-                            )));
+                                "Неизвестный именованный аргумент '{}' для {} {}",
+                                name_str,
+                                kind_label,
+                                callable_name
+                            );
                         }
                     };
 
                     if final_args[idx].is_some() {
                         let name_str = resolve_symbol(name);
-                        return Err(RuntimeError::InvalidOperation(ErrorData::new(
+                        return bail_runtime!(
+                            InvalidOperation,
                             span,
-                            format!(
-                                "Аргумент '{}' для {} {} передан несколько раз",
-                                name_str, kind_label, callable_name
-                            ),
-                        )));
+                            "Аргумент '{}' для {} {} передан несколько раз",
+                            name_str,
+                            kind_label,
+                            callable_name
+                        );
                     }
 
                     final_args[idx] = Some(arg.value);
                 }
                 None => {
                     if saw_named {
-                        return Err(RuntimeError::InvalidOperation(ErrorData::new(
+                        return bail_runtime!(
+                            InvalidOperation,
                             span,
-                            "Именованные аргументы должны идти после позиционных".into(),
-                        )));
+                            "Именованные аргументы должны идти после позиционных"
+                        );
                     }
                     if positional_index >= total_params {
-                        return Err(RuntimeError::InvalidOperation(ErrorData::new(
+                        return bail_runtime!(
+                            InvalidOperation,
                             span,
-                            format!(
-                                "{} {} ожидает {} аргументов, получено {}",
-                                kind_label,
-                                callable_name,
-                                total_params,
-                                positional_index + 1
-                            ),
-                        )));
+                            "{} {} ожидает {} аргументов, получено {}",
+                            kind_label,
+                            callable_name,
+                            total_params,
+                            positional_index + 1
+                        );
                     }
                     final_args[positional_index] = Some(arg.value);
                     positional_index += 1;
