@@ -79,3 +79,12 @@ macro_rules! bail_runtime {
         Err(runtime_error!($variant, $span, $fmt $(, $arg)* => $extra))
     };
 }
+
+#[macro_export]
+macro_rules! expect_args {
+    ($args:expr, $n:expr, $span:expr, $name:expr) => {
+        if $args.len() != $n {
+            return crate::bail_runtime!(InvalidOperation, $span, "{} ожидает {} аргументов, получено {}", $name, $n, $args.len());
+        }
+    };
+}

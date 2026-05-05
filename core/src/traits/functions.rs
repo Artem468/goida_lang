@@ -7,7 +7,7 @@ use string_interner::DefaultSymbol as Symbol;
 pub trait InterpreterFunctions {
     fn call_function(
         &mut self,
-        function: FunctionDefinition,
+        function: Arc<FunctionDefinition>,
         arguments: Vec<CallArgValue>,
         current_module_id: Symbol,
         span: Span,

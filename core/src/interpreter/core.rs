@@ -7,7 +7,6 @@ use crate::shared::SharedMut;
 use crate::traits::prelude::{CoreOperations, ExpressionEvaluator, StatementExecutor};
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
-use std::sync::Arc;
 use string_interner::DefaultSymbol as Symbol;
 
 impl CoreOperations for Interpreter {
@@ -176,7 +175,7 @@ impl Interpreter {
         }
 
         for (function_name, function_fn) in &module.functions {
-            let func_value = Value::Function(Arc::new(function_fn.clone()));
+            let func_value = Value::Function(function_fn.clone());
             self.environment
                 .write(|env| env.define(*function_name, func_value.clone()));
             if let Some(mod_entry) = self.modules.get_mut(&module.name) {
@@ -233,7 +232,7 @@ impl Interpreter {
         let module = self.modules.get(&module_id)?;
 
         if let Some(function) = module.functions.get(&member) {
-            return Some((module_id, Value::Function(Arc::new(function.clone()))));
+            return Some((module_id, Value::Function(function.clone())));
         }
 
         if let Some(value) = module.globals.get(&member) {

@@ -8,6 +8,7 @@ use pest::error::ErrorVariant;
 use pest::Parser;
 use pest_derive::Parser;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use string_interner::DefaultSymbol as Symbol;
 
 #[derive(Parser)]
@@ -204,7 +205,7 @@ impl ParserTrait {
                         module: None,
                     };
                     return if self.nesting_level == 0 {
-                        self.module.functions.insert(symbol_name, func_def);
+                        self.module.functions.insert(symbol_name, Arc::new(func_def));
                         Ok(self
                             .module
                             .arena

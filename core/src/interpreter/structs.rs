@@ -134,7 +134,7 @@ pub struct Module {
     pub path: PathBuf,
     pub arena: AstArena,
 
-    pub functions: HashMap<Symbol, FunctionDefinition>,
+    pub functions: HashMap<Symbol, Arc<FunctionDefinition>>,
     pub classes: HashMap<Symbol, SharedMut<ClassDefinition>>,
 
     pub body: Vec<StmtId>,

@@ -185,7 +185,7 @@ impl ExpressionEvaluator for Interpreter {
                         let func_value = self.evaluate_expression(function, current_module_id)?;
                         match func_value {
                             Value::Function(f_def) => self.call_function(
-                                (*f_def).clone(),
+                                f_def.clone(),
                                 arguments,
                                 current_module_id,
                                 func_expr.span,
@@ -515,7 +515,7 @@ impl ExpressionEvaluator for Interpreter {
                             {
                                 return match value {
                                     Value::Function(function) => self.call_function(
-                                        (*function).clone(),
+                                        function.clone(),
                                         arguments,
                                         definition_module_id,
                                         obj_expr.span,

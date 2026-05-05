@@ -1,18 +1,11 @@
 use crate::ast::prelude::ErrorData;
 use crate::interpreter::prelude::{Interpreter, RuntimeError, SharedInterner, Value};
 use crate::traits::core::CoreOperations;
-use crate::{bail_runtime, define_builtin, runtime_error};
+use crate::{define_builtin, expect_args, runtime_error};
 
 pub fn setup_type_func(interpreter: &mut Interpreter, interner: &SharedInterner) {
     define_builtin!(interpreter, interner, "тип" => (interpreter, arguments, span) {
-        if arguments.len() != 1 {
-            return bail_runtime!(
-                InvalidOperation,
-                span,
-                "Функция 'тип' ожидает 1 аргумент, получено {}",
-                arguments.len()
-            );
-        }
+        expect_args!(arguments, 1, span, "тип");
 
         let val = &arguments[0].value;
         match val {
@@ -55,14 +48,7 @@ pub fn setup_type_func(interpreter: &mut Interpreter, interner: &SharedInterner)
 
 pub fn setup_is_instance_func(interpreter: &mut Interpreter, interner: &SharedInterner) {
     define_builtin!(interpreter, interner, "является" => (interpreter, arguments, span) {
-        if arguments.len() != 2 {
-            return bail_runtime!(
-                InvalidOperation,
-                span,
-                "Функция 'является' ожидает 2 аргумента, получено {}",
-                arguments.len()
-            )
-        }
+        expect_args!(arguments, 2, span, "является");
 
         let target = &arguments[0].value;
         let schema = &arguments[1].value;

@@ -4,18 +4,19 @@ use crate::traits::prelude::{
     CoreOperations, ExpressionEvaluator, InterpreterFunctions, StatementExecutor,
 };
 use crate::{bail_runtime, runtime_error};
+use std::sync::Arc;
 use string_interner::DefaultSymbol as Symbol;
 
 impl InterpreterFunctions for Interpreter {
     fn call_function(
         &mut self,
-        function: FunctionDefinition,
+        function: Arc<FunctionDefinition>,
         arguments: Vec<CallArgValue>,
         current_module_id: Symbol,
         span: Span,
     ) -> Result<Value, RuntimeError> {
         let final_arguments =
-            self.bind_call_arguments(&function, arguments, current_module_id, span, "Функция")?;
+            self.bind_call_arguments(&*function, arguments, current_module_id, span, "Функция")?;
 
         let execution_result = self.scoped_child_environment(
             |local_env| {
@@ -43,8 +44,7 @@ impl InterpreterFunctions for Interpreter {
         if let Some(val) = self.environment.read(|env| env.get(&name)) {
             match val {
                 Value::Function(func) => {
-                    let func_clone = (*func).clone();
-                    return self.call_function(func_clone, arguments, current_module_id, span);
+                    return self.call_function(func.clone(), arguments, current_module_id, span);
                 }
                 Value::Builtin(builtin) => {
                     return builtin(self, arguments, span);
@@ -74,7 +74,7 @@ impl InterpreterFunctions for Interpreter {
             {
                 return match value {
                     Value::Function(func) => {
-                        self.call_function((*func).clone(), arguments, definition_module_id, span)
+                        self.call_function(func.clone(), arguments, definition_module_id, span)
                     }
                     Value::Builtin(builtin) => builtin(self, arguments, span),
                     _ => bail_runtime!(UndefinedFunction, span, "{}", name_str),
@@ -89,8 +89,7 @@ impl InterpreterFunctions for Interpreter {
         }
 
         if let Some(Value::Function(func)) = current_module.globals.get(&name) {
-            let func_clone = (**func).clone();
-            return self.call_function(func_clone, arguments, current_module_id, span);
+            return self.call_function(func.clone(), arguments, current_module_id, span);
         }
         if let Some(Value::Builtin(builtin)) = current_module.globals.get(&name) {
             return builtin(self, arguments, span);
