@@ -369,8 +369,9 @@ impl Backend {
         let mut diagnostics = Vec::new();
         if let Err(err) = parser.parse(&text) {
             let (msg, err_data) = match err {
-                ParseError::TypeError(e) => ("РћС€РёР±РєР° С‚РёРїРѕРІ", e),
-                ParseError::InvalidSyntax(e) => ("РћС€РёР±РєР° СЃРёРЅС‚Р°РєСЃРёСЃР°", e),
+                ParseError::TypeError(e) => ("Ошибка типов", e),
+                ParseError::InvalidSyntax(e) => ("Некорректный синтаксис", e),
+                ParseError::ImportError(e) => ("Ошибка импортов", e),
             };
 
             let span = err_data.location.as_ariadne(text.as_ref());

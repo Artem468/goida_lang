@@ -8,6 +8,7 @@ use crate::shared::SharedMut;
 use crate::traits::prelude::{
     CoreOperations, ExpressionEvaluator, InterpreterClasses, InterpreterFunctions, ValueOperations,
 };
+use crate::{bail_runtime, runtime_error};
 use string_interner::DefaultSymbol as Symbol;
 
 impl ExpressionEvaluator for Interpreter {
@@ -18,10 +19,12 @@ impl ExpressionEvaluator for Interpreter {
     ) -> Result<Value, RuntimeError> {
         let expr_kind = {
             let module = self.modules.get(&current_module_id).ok_or_else(|| {
-                RuntimeError::InvalidOperation(ErrorData::new(
+                let module_name = self.resolve_symbol(current_module_id).unwrap();
+                runtime_error!(
+                    InvalidOperation,
                     Span::default(),
-                    "Модуль не найден".into(),
-                ))
+                    "Модуль {module_name} не найден"
+                )
             })?;
             module.arena.get_expression(expr_id).unwrap().clone()
         };
@@ -43,10 +46,7 @@ impl ExpressionEvaluator for Interpreter {
                 }
 
                 let current_module = self.modules.get(&current_module_id).ok_or_else(|| {
-                    RuntimeError::InvalidOperation(ErrorData::new(
-                        expr_kind.span,
-                        "Текущий модуль не найден".into(),
-                    ))
+                    runtime_error!(InvalidOperation, expr_kind.span, "Текущий модуль не найден")
                 })?;
 
                 if let Some(val) = current_module.globals.get(&symbol) {
@@ -77,17 +77,21 @@ impl ExpressionEvaluator for Interpreter {
                                 .get(&var_sym)
                                 .cloned()
                                 .ok_or_else(|| {
-                                    RuntimeError::UndefinedVariable(ErrorData::new(
+                                    runtime_error!(
+                                        UndefinedVariable,
                                         expr_kind.span,
-                                        name_str.clone(),
-                                    ))
+                                        "{}",
+                                        name_str.clone()
+                                    )
                                 })?;
                         self.resolve_runtime_value(value, expr_kind.span)
                     } else {
-                        Err(RuntimeError::InvalidOperation(ErrorData::new(
+                        bail_runtime!(
+                            InvalidOperation,
                             expr_kind.span,
-                            format!("Модуль '{}' не найден", mod_name),
-                        )))
+                            "Модуль '{}' не найден",
+                            mod_name
+                        )
                     };
                 }
 
@@ -96,43 +100,64 @@ impl ExpressionEvaluator for Interpreter {
                 {
                     return Ok(Value::Module(module_symbol));
                 }
-
-                Err(RuntimeError::UndefinedVariable(ErrorData::new(
-                    expr_kind.span,
-                    name_str,
-                )))
+                bail_runtime!(UndefinedVariable, expr_kind.span, "{}", name_str)
             }
 
             ExpressionKind::Binary { op, left, right } => {
                 let left_val = self.evaluate_expression(left, current_module_id)?;
-                let right_val = self.evaluate_expression(right, current_module_id)?;
 
                 match op {
-                    BinaryOperator::Add => self.add_values(left_val, right_val, expr_kind.span),
-                    BinaryOperator::Sub => {
-                        self.subtract_values(left_val, right_val, expr_kind.span)
+                    BinaryOperator::And => {
+                        if !left_val.is_truthy() {
+                            return Ok(Value::Boolean(false));
+                        }
+                        let right_val = self.evaluate_expression(right, current_module_id)?;
+                        Ok(Value::Boolean(right_val.is_truthy()))
                     }
-                    BinaryOperator::Mul => {
-                        self.multiply_values(left_val, right_val, expr_kind.span)
+
+                    BinaryOperator::Or => {
+                        if left_val.is_truthy() {
+                            return Ok(Value::Boolean(true));
+                        }
+                        let right_val = self.evaluate_expression(right, current_module_id)?;
+                        Ok(Value::Boolean(right_val.is_truthy()))
                     }
-                    BinaryOperator::Div => self.divide_values(left_val, right_val, expr_kind.span),
-                    BinaryOperator::Mod => self.modulo_values(left_val, right_val, expr_kind.span),
-                    BinaryOperator::Eq => Ok(Value::Boolean(left_val == right_val)),
-                    BinaryOperator::Ne => Ok(Value::Boolean(left_val != right_val)),
-                    BinaryOperator::Gt => self.compare_greater(left_val, right_val, expr_kind.span),
-                    BinaryOperator::Lt => self.compare_less(left_val, right_val, expr_kind.span),
-                    BinaryOperator::Ge => {
-                        self.compare_greater_equal(left_val, right_val, expr_kind.span)
+
+                    _ => {
+                        let right_val = self.evaluate_expression(right, current_module_id)?;
+                        match op {
+                            BinaryOperator::Add => {
+                                self.add_values(left_val, right_val, expr_kind.span)
+                            }
+                            BinaryOperator::Sub => {
+                                self.subtract_values(left_val, right_val, expr_kind.span)
+                            }
+                            BinaryOperator::Mul => {
+                                self.multiply_values(left_val, right_val, expr_kind.span)
+                            }
+                            BinaryOperator::Div => {
+                                self.divide_values(left_val, right_val, expr_kind.span)
+                            }
+                            BinaryOperator::Mod => {
+                                self.modulo_values(left_val, right_val, expr_kind.span)
+                            }
+                            BinaryOperator::Eq => Ok(Value::Boolean(left_val == right_val)),
+                            BinaryOperator::Ne => Ok(Value::Boolean(left_val != right_val)),
+                            BinaryOperator::Gt => {
+                                self.compare_greater(left_val, right_val, expr_kind.span)
+                            }
+                            BinaryOperator::Lt => {
+                                self.compare_less(left_val, right_val, expr_kind.span)
+                            }
+                            BinaryOperator::Ge => {
+                                self.compare_greater_equal(left_val, right_val, expr_kind.span)
+                            }
+                            BinaryOperator::Le => {
+                                self.compare_less_equal(left_val, right_val, expr_kind.span)
+                            }
+                            _ => unreachable!(),
+                        }
                     }
-                    BinaryOperator::Le => {
-                        self.compare_less_equal(left_val, right_val, expr_kind.span)
-                    }
-                    BinaryOperator::And => Ok(Value::Boolean(
-                        left_val.is_truthy() && right_val.is_truthy(),
-                    )),
-                    BinaryOperator::Or => Ok(Value::Boolean(
-                        left_val.is_truthy() || right_val.is_truthy(),
-                    )),
                 }
             }
 
@@ -142,10 +167,11 @@ impl ExpressionEvaluator for Interpreter {
                 match op {
                     UnaryOperator::Negative => match value {
                         Value::Number(n) => Ok(Value::Number(-n)),
-                        _ => Err(RuntimeError::TypeMismatch(ErrorData::new(
+                        _ => bail_runtime!(
+                            TypeMismatch,
                             expr_kind.span,
-                            "Унарный минус применим только к числам".to_string(),
-                        ))),
+                            "Унарный минус применим только к числам"
+                        ),
                     },
                     UnaryOperator::Not => Ok(Value::Boolean(!value.is_truthy())),
                 }
@@ -154,10 +180,12 @@ impl ExpressionEvaluator for Interpreter {
             ExpressionKind::FunctionCall { function, args } => {
                 let func_expr = {
                     let module = self.modules.get(&current_module_id).ok_or_else(|| {
-                        RuntimeError::InvalidOperation(ErrorData::new(
+                        let module_name = self.resolve_symbol(current_module_id).unwrap();
+                        runtime_error!(
+                            InvalidOperation,
                             expr_kind.span,
-                            "Модуль не найден".into(),
-                        ))
+                            "Модуль {module_name} не найден"
+                        )
                     })?;
                     module.arena.get_expression(function).unwrap().clone()
                 };
@@ -182,7 +210,7 @@ impl ExpressionEvaluator for Interpreter {
                         let func_value = self.evaluate_expression(function, current_module_id)?;
                         match func_value {
                             Value::Function(f_def) => self.call_function(
-                                (*f_def).clone(),
+                                f_def.clone(),
                                 arguments,
                                 current_module_id,
                                 func_expr.span,
@@ -190,10 +218,11 @@ impl ExpressionEvaluator for Interpreter {
                             Value::Builtin(builtin_func) => {
                                 builtin_func(self, arguments, func_expr.span)
                             }
-                            _ => Err(RuntimeError::InvalidOperation(ErrorData::new(
+                            _ => bail_runtime!(
+                                InvalidOperation,
                                 expr_kind.span,
-                                "Выражение не является вызываемой функцией".to_string(),
-                            ))),
+                                "Выражение не является вызываемой функцией"
+                            ),
                         }
                     }
                 }
@@ -208,10 +237,13 @@ impl ExpressionEvaluator for Interpreter {
                         let idx = idx_val.resolve_index(vec.len(), expr_kind.span)?;
 
                         vec.get(idx).cloned().ok_or_else(|| {
-                            RuntimeError::InvalidOperation(ErrorData::new(
+                            runtime_error!(
+                                InvalidOperation,
                                 expr_kind.span,
-                                format!("Индекс {} вне границ списка (длина {})", idx, vec.len()),
-                            ))
+                                "Индекс {} вне границ списка (длина {})",
+                                idx,
+                                vec.len()
+                            )
                         })
                     }),
 
@@ -219,79 +251,76 @@ impl ExpressionEvaluator for Interpreter {
                         let idx = idx_val.resolve_index(arr.len(), expr_kind.span)?;
 
                         arr.get(idx).cloned().ok_or_else(|| {
-                            RuntimeError::InvalidOperation(ErrorData::new(
+                            runtime_error!(
+                                InvalidOperation,
                                 expr_kind.span,
-                                format!("Индекс {} вне границ списка (длина {})", idx, arr.len()),
-                            ))
+                                "Индекс {} вне границ списка (длина {})",
+                                idx,
+                                arr.len()
+                            )
                         })
                     }
 
                     Value::Dict(dict) => dict.read(|d| {
                         let key = idx_val.to_string();
                         d.get(&key).cloned().ok_or_else(|| {
-                            RuntimeError::InvalidOperation(ErrorData::new(
+                            runtime_error!(
+                                InvalidOperation,
                                 expr_kind.span,
-                                format!("Ключ '{}' не найден в словаре", key),
-                            ))
+                                "Ключ '{}' не найден в словаре",
+                                key
+                            )
                         })
                     }),
 
-                    _ => Err(RuntimeError::TypeError(ErrorData::new(
+                    _ => bail_runtime!(
+                        TypeError,
                         expr_kind.span,
-                        "Операция [] доступна только для итерируемых коллекций".into(),
-                    ))),
+                        "Операция [] доступна только для итерируемых коллекций"
+                    ),
                 }
             }
 
             ExpressionKind::PropertyAccess { object, property } => {
                 let obj_expr = {
                     let module = self.modules.get(&current_module_id).ok_or_else(|| {
-                        RuntimeError::InvalidOperation(ErrorData::new(
+                        let module_name = self.resolve_symbol(current_module_id).unwrap();
+                        runtime_error!(
+                            InvalidOperation,
                             expr_kind.span,
-                            "Модуль не найден".into(),
-                        ))
+                            "Модуль {module_name} не найден"
+                        )
                     })?;
-                    module.arena.get_expression(expr_id).unwrap().clone()
+                    module.arena.get_expression(object).unwrap().clone()
                 };
-                if let ExpressionKind::Identifier(module_symbol) = obj_expr.kind {
-                    if let Some(module_env) = self.modules.get(&module_symbol) {
-                        let value = module_env.globals.get(&property).ok_or_else(|| {
-                            RuntimeError::UndefinedVariable(ErrorData::new(
-                                expr_kind.span,
-                                format!(
-                                    "{}.{}",
-                                    self.resolve_symbol(module_symbol).unwrap(),
-                                    self.resolve_symbol(property).unwrap()
-                                ),
-                            ))
-                        })?;
-                        return self.resolve_runtime_value(value.clone(), expr_kind.span);
+                if let ExpressionKind::Identifier(module_alias) = obj_expr.kind {
+                    if let Some(current_module) = self.modules.get(&current_module_id) {
+                        if let Some(module_symbol) =
+                            self.resolve_import_alias_symbol(current_module, module_alias)
+                        {
+                            if let Some((_, value)) =
+                                self.resolve_module_member_value(module_symbol, property)
+                            {
+                                return self.resolve_runtime_value(value, expr_kind.span);
+                            }
+                        }
                     }
                 }
 
                 let obj_result = self.evaluate_expression(object, current_module_id);
                 match obj_result {
                     Ok(Value::Module(module_symbol)) => {
-                        if let Some(module_env) = self.modules.get(&module_symbol) {
-                            let value = module_env.globals.get(&property).ok_or_else(|| {
-                                RuntimeError::UndefinedVariable(ErrorData::new(
-                                    expr_kind.span,
-                                    format!(
-                                        "{}.{}",
-                                        self.resolve_symbol(module_symbol).unwrap(),
-                                        self.resolve_symbol(property).unwrap()
-                                    ),
-                                ))
-                            })?;
-                            self.resolve_runtime_value(value.clone(), expr_kind.span)
+                        if let Some((_, value)) =
+                            self.resolve_module_member_value(module_symbol, property)
+                        {
+                            self.resolve_runtime_value(value, expr_kind.span)
                         } else {
-                            Err(RuntimeError::InvalidOperation(ErrorData::new(
+                            bail_runtime!(
+                                InvalidOperation,
                                 expr_kind.span,
-                                format!(
-                                    "Модуль '{}' не найден",
-                                    self.resolve_symbol(module_symbol).unwrap()
-                                ),
-                            )))
+                                "Модуль '{}' не найден",
+                                self.resolve_symbol(module_symbol).unwrap()
+                            )
                         }
                     }
                     Ok(Value::Object(instance_ref)) => {
@@ -315,13 +344,12 @@ impl ExpressionEvaluator for Interpreter {
                         });
 
                         if !is_accessible {
-                            return Err(RuntimeError::InvalidOperation(ErrorData::new(
+                            return bail_runtime!(
+                                InvalidOperation,
                                 expr_kind.span,
-                                format!(
-                                    "Поле '{}' недоступно для чтения",
-                                    self.resolve_symbol(property).unwrap()
-                                ),
-                            )));
+                                "Поле '{}' недоступно для чтения",
+                                self.resolve_symbol(property).unwrap()
+                            );
                         }
                         match field_data {
                             Some(Ok(value)) => Ok(value),
@@ -354,35 +382,37 @@ impl ExpressionEvaluator for Interpreter {
                                     let p_name = self.resolve_symbol(property).unwrap_or_default();
                                     let c_name =
                                         self.resolve_symbol(class_name_sym).unwrap_or_default();
-                                    return Err(RuntimeError::UndefinedVariable(ErrorData::new(
+                                    return bail_runtime!(
+                                        UndefinedVariable,
                                         expr_kind.span,
-                                        format!(
-                                            "Статическое поле '{}' не найдено в классе '{}'",
-                                            p_name, c_name
-                                        ),
-                                    )));
+                                        "Статическое поле '{}' не найдено в классе '{}'",
+                                        p_name,
+                                        c_name
+                                    );
                                 }
 
                                 if !is_static {
                                     let p_name = self.resolve_symbol(property).unwrap_or_default();
                                     let c_name =
                                         self.resolve_symbol(class_name_sym).unwrap_or_default();
-                                    return Err(RuntimeError::InvalidOperation(ErrorData::new(
+                                    return bail_runtime!(
+                                        InvalidOperation,
                                         expr_kind.span,
-                                        format!(
-                                            "Поле '{}' класса '{}' не является статичным",
-                                            p_name, c_name
-                                        ),
-                                    )));
+                                        "Поле '{}' класса '{}' не является статичным",
+                                        p_name,
+                                        c_name
+                                    );
                                 }
 
                                 let is_external = !matches!(obj_expr.kind, ExpressionKind::This);
                                 if is_external && matches!(visibility, Visibility::Private) {
                                     let p_name = self.resolve_symbol(property).unwrap_or_default();
-                                    return Err(RuntimeError::InvalidOperation(ErrorData::new(
+                                    return bail_runtime!(
+                                        InvalidOperation,
                                         obj_expr.span,
-                                        format!("Поле '{}' является приватным", p_name),
-                                    )));
+                                        "Поле '{}' является приватным",
+                                        p_name
+                                    );
                                 }
 
                                 match data {
@@ -392,13 +422,12 @@ impl ExpressionEvaluator for Interpreter {
                                     FieldData::Expression(_) => {
                                         let p_name =
                                             self.resolve_symbol(property).unwrap_or_default();
-                                        Err(RuntimeError::InvalidOperation(ErrorData::new(
+                                        bail_runtime!(
+                                            InvalidOperation,
                                             expr_kind.span,
-                                            format!(
-                                                "Статическое поле '{}' еще не инициализировано",
-                                                p_name
-                                            ),
-                                        )))
+                                            "Статическое поле '{}' еще не инициализировано",
+                                            p_name
+                                        )
                                     }
                                 }
                             }
@@ -408,18 +437,18 @@ impl ExpressionEvaluator for Interpreter {
 
                     _ => {
                         if let ExpressionKind::Identifier(symbol) = obj_expr.kind {
-                            Err(RuntimeError::InvalidOperation(ErrorData::new(
+                            bail_runtime!(
+                                InvalidOperation,
                                 expr_kind.span,
-                                format!(
-                                    "Модуль '{}' не найден",
-                                    self.resolve_symbol(symbol).unwrap()
-                                ),
-                            )))
+                                "Модуль '{}' не найден",
+                                self.resolve_symbol(symbol).unwrap()
+                            )
                         } else {
-                            Err(RuntimeError::InvalidOperation(ErrorData::new(
+                            bail_runtime!(
+                                InvalidOperation,
                                 expr_kind.span,
-                                "Попытка доступа к свойству не-объектного типа".to_string(),
-                            )))
+                                "Попытка доступа к свойству не-объектного типа"
+                            )
                         }
                     }
                 }
@@ -435,10 +464,12 @@ impl ExpressionEvaluator for Interpreter {
                 let result = (|| -> Result<Value, RuntimeError> {
                     let obj_expr = {
                         let module = self.modules.get(&current_module_id).ok_or_else(|| {
-                            RuntimeError::InvalidOperation(ErrorData::new(
+                            let module_name = self.resolve_symbol(current_module_id).unwrap();
+                            runtime_error!(
+                                InvalidOperation,
                                 expr_kind.span,
-                                "Модуль не найден".into(),
-                            ))
+                                "Модуль {module_name} не найден"
+                            )
                         })?;
                         module.arena.get_expression(object).unwrap().clone()
                     };
@@ -465,10 +496,11 @@ impl ExpressionEvaluator for Interpreter {
                             let is_calling_on_class = matches!(target_value, Value::Class(_));
 
                             if is_calling_on_class && !is_static {
-                                return Err(RuntimeError::InvalidOperation(ErrorData::new(
+                                return bail_runtime!(
+                                    InvalidOperation,
                                     expr_kind.span,
-                                    "Нельзя вызвать обычный метод у класса. Создайте экземпляр через 'новый'".into()
-                                )));
+                                    "Нельзя вызвать обычный метод у класса. Создайте экземпляр через 'новый'"
+                                );
                             }
 
                             let this_val = if is_static {
@@ -480,10 +512,12 @@ impl ExpressionEvaluator for Interpreter {
 
                             if is_external && matches!(visibility, Visibility::Private) {
                                 let m_name = self.resolve_symbol(method).unwrap_or_default();
-                                return Err(RuntimeError::InvalidOperation(ErrorData::new(
+                                return bail_runtime!(
+                                    InvalidOperation,
                                     obj_expr.span,
-                                    format!("Метод '{}' является приватным", m_name),
-                                )));
+                                    "Метод '{}' является приватным",
+                                    m_name
+                                );
                             }
 
                             let method_module =
@@ -501,61 +535,43 @@ impl ExpressionEvaluator for Interpreter {
 
                     match target_value {
                         Value::Module(mod_symbol) => {
-                            if let Some(target_module) = self.modules.get(&mod_symbol) {
-                                return if let Some(function) = target_module.functions.get(&method)
-                                {
-                                    self.call_function(
+                            if let Some((definition_module_id, value)) =
+                                self.resolve_module_member_value(mod_symbol, method)
+                            {
+                                return match value {
+                                    Value::Function(function) => self.call_function(
                                         function.clone(),
                                         arguments,
-                                        mod_symbol,
+                                        definition_module_id,
                                         obj_expr.span,
-                                    )
-                                } else if let Some(Value::Builtin(builtin)) =
-                                    target_module.globals.get(&method)
-                                {
-                                    builtin(self, arguments, obj_expr.span)
-                                } else {
-                                    let m_name = self.resolve_symbol(method).unwrap();
-                                    let mod_name = self.resolve_symbol(mod_symbol).unwrap();
-                                    Err(RuntimeError::UndefinedFunction(ErrorData::new(
-                                        expr_kind.span,
-                                        format!(
+                                    ),
+                                    Value::Builtin(builtin) => {
+                                        builtin(self, arguments, obj_expr.span)
+                                    }
+                                    _ => {
+                                        let m_name = self.resolve_symbol(method).unwrap();
+                                        let mod_name = self.resolve_symbol(mod_symbol).unwrap();
+                                        bail_runtime!(
+                                            UndefinedFunction,
+                                            expr_kind.span,
                                             "Функция '{}' не найдена в модуле '{}'",
-                                            m_name, mod_name
-                                        ),
-                                    )))
+                                            m_name,
+                                            mod_name
+                                        )
+                                    }
                                 };
                             }
                         }
-                        _ => {
-                            if let ExpressionKind::Identifier(mod_symbol) = obj_expr.kind {
-                                if let Some(target_module) = self.modules.get(&mod_symbol) {
-                                    if let Some(function) = target_module.functions.get(&method) {
-                                        return self.call_function(
-                                            function.clone(),
-                                            arguments,
-                                            mod_symbol,
-                                            obj_expr.span,
-                                        );
-                                    }
-                                    if let Some(Value::Builtin(builtin)) =
-                                        target_module.globals.get(&method)
-                                    {
-                                        return builtin(self, arguments, obj_expr.span);
-                                    }
-                                }
-                            }
-                        }
+                        _ => {}
                     }
 
                     let m_name = self.resolve_symbol(method).unwrap();
-                    Err(RuntimeError::UndefinedMethod(ErrorData::new(
+                    bail_runtime!(
+                        UndefinedMethod,
                         expr_kind.span,
-                        format!(
-                            "Не удалось вызвать '{}': цель не является объектом или модулем",
-                            m_name
-                        ),
-                    )))
+                        "Не удалось вызвать '{}': цель не является объектом или модулем",
+                        m_name
+                    )
                 })();
                 self.environment = previous_env_at_start;
 
@@ -591,23 +607,25 @@ impl ExpressionEvaluator for Interpreter {
                         let target_module = target_module_symbol
                             .and_then(|sym| self.modules.get(&sym))
                             .ok_or_else(|| {
-                                RuntimeError::InvalidOperation(ErrorData::new(
+                                runtime_error!(
+                                    InvalidOperation,
                                     expr_kind.span,
-                                    format!("Модуль '{}' не найден", mod_name),
-                                ))
+                                    "Модуль '{}' не найден",
+                                    mod_name
+                                )
                             })?;
 
                         let class = target_module.classes.get(&class_sym).ok_or_else(|| {
-                            RuntimeError::UndefinedVariable(ErrorData::new(
+                            runtime_error!(
+                                UndefinedVariable,
                                 expr_kind.span,
-                                format!(
-                                    "Класс '{}' не найден в модуле '{}'",
-                                    class_simple_name, mod_name
-                                ),
-                            ))
+                                "Класс '{}' не найден в модуле '{}'",
+                                class_simple_name,
+                                mod_name
+                            )
                         })?;
 
-                        (class.clone(), mod_sym)
+                        (class.clone(), target_module.name)
                     } else {
                         let current_mod = self.modules.get(&current_module_id).unwrap();
 
@@ -623,14 +641,17 @@ impl ExpressionEvaluator for Interpreter {
                         });
 
                         final_found.ok_or_else(|| {
-                            RuntimeError::UndefinedVariable(ErrorData::new(
+                            runtime_error!(
+                                UndefinedVariable,
                                 expr_kind.span,
-                                format!("Класс '{}' не найден", name_str),
-                            ))
+                                "Класс '{}' не найден",
+                                name_str
+                            )
                         })?
                     }
                 };
 
+                let class_rc = self.set_class_module(class_rc, definition_module);
                 let instance = ClassDefinition::create_instance(class_rc.clone());
                 let instance_ref = SharedMut::new(instance);
 
@@ -663,10 +684,11 @@ impl ExpressionEvaluator for Interpreter {
                 self.environment
                     .read(|env| env.get(&this_sym))
                     .ok_or_else(|| {
-                        RuntimeError::InvalidOperation(ErrorData::new(
+                        runtime_error!(
+                            InvalidOperation,
                             expr_kind.span,
-                            "'это' можно использовать только внутри методов класса".to_string(),
-                        ))
+                            "'это' можно использовать только внутри методов класса"
+                        )
                     })
             }
         };

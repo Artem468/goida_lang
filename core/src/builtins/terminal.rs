@@ -1,9 +1,9 @@
 use crate::ast::prelude::{ClassDefinition, Span, Visibility};
 use crate::ast::program::FieldData;
-use crate::interpreter::prelude::{BuiltinFn, CallArgListExt, SharedInterner, Value};
+use crate::define_method;
+use crate::interpreter::prelude::{CallArgListExt, SharedInterner, Value};
 use crate::shared::SharedMut;
 use std::io::{stdin, stdout, Write};
-use std::sync::Arc;
 use string_interner::DefaultSymbol as Symbol;
 
 pub fn setup_terminal_class(interner_ref: &SharedInterner) -> (Symbol, SharedMut<ClassDefinition>) {
@@ -73,96 +73,68 @@ pub fn setup_terminal_class(interner_ref: &SharedInterner) -> (Symbol, SharedMut
     }
 
     // --- Терминал.очистить() ---
-    class_def.add_method(
-        interner_ref.write(|i| i.get_or_intern("очистить")),
-        Visibility::Public,
-        true,
-        BuiltinFn(Arc::new(move |_, _, _| {
-            // ANSI escape-последовательность для очистки экрана и возврата курсора в 1,1
-            print!("\x1B[2J\x1B[1;1H");
-            let _ = std::io::stdout().flush();
-            Ok(Value::Empty)
-        })),
-    );
+    define_method!(class_def, interner_ref, @static "очистить" => (_, _, _) {
+        // ANSI escape-последовательность для очистки экрана и возврата курсора в 1,1
+        print!("\x1B[2J\x1B[1;1H");
+        let _ = stdout().flush();
+        Ok(Value::Empty)
+    });
 
     // Метод: Терминал.заголовок(текст)
-    class_def.add_method(
-        interner_ref.write(|i| i.get_or_intern("заголовок")),
-        Visibility::Public,
-        true,
-        BuiltinFn(Arc::new(move |_, args, _| {
-            let title = CallArgListExt::get_value(&args, 1)
-                .map(|v| v.to_string())
-                .unwrap_or_default();
-            print!("\x1b]0;{}\x07", title);
-            let _ = stdout().flush();
-            Ok(Value::Empty)
-        })),
-    );
+    define_method!(class_def, interner_ref, @static "заголовок" => (_, args, _) {
+        let title = CallArgListExt::get_value(&args, 1)
+            .map(|v| v.to_string())
+            .unwrap_or_default();
+        print!("\x1b]0;{}\x07", title);
+        let _ = stdout().flush();
+        Ok(Value::Empty)
+    });
 
     // Метод: Терминал.скрыть_курсор()
-    class_def.add_method(
-        interner_ref.write(|i| i.get_or_intern("скрыть_курсор")),
-        Visibility::Public,
-        true,
-        BuiltinFn(Arc::new(move |_, _, _| {
-            print!("\x1b[?25l");
-            let _ = stdout().flush();
-            Ok(Value::Empty)
-        })),
-    );
+    define_method!(class_def, interner_ref, @static "скрыть_курсор" => (_, _, _) {
+        // ANSI последовательность: скрыть курсор
+        print!("\x1b[?25l");
+        let _ = stdout().flush();
+        Ok(Value::Empty)
+    });
 
     // Метод: Терминал.показать_курсор()
-    class_def.add_method(
-        interner_ref.write(|i| i.get_or_intern("показать_курсор")),
-        Visibility::Public,
-        true,
-        BuiltinFn(Arc::new(move |_, _, _| {
-            print!("\x1b[?25h");
-            let _ = stdout().flush();
-            Ok(Value::Empty)
-        })),
-    );
+    define_method!(class_def, interner_ref, @static "показать_курсор" => (_, _, _) {
+        // ANSI последовательность: показать курсор
+        print!("\x1b[?25h");
+        let _ = stdout().flush();
+        Ok(Value::Empty)
+    });
 
     // --- Терминал.позиция(х, у) ---
-    class_def.add_method(
-        interner_ref.write(|i| i.get_or_intern("позиция")),
-        Visibility::Public,
-        true,
-        BuiltinFn(Arc::new(move |_, args, _span| {
-            let x = CallArgListExt::get_value(&args, 1)
-                .and_then(|v| v.as_i64())
-                .unwrap_or(1);
-            let y = CallArgListExt::get_value(&args, 2)
-                .and_then(|v| v.as_i64())
-                .unwrap_or(1);
-            // ANSI: \x1b[Y;XH (отсчет с 1)
-            print!("\x1b[{};{}H", y, x);
-            let _ = stdout().flush();
-            Ok(Value::Empty)
-        })),
-    );
+    define_method!(class_def, interner_ref, @static "позиция" => (_, args, _span) {
+        let x = CallArgListExt::get_value(&args, 1)
+            .and_then(|v| v.as_i64())
+            .unwrap_or(1);
+        let y = CallArgListExt::get_value(&args, 2)
+            .and_then(|v| v.as_i64())
+            .unwrap_or(1);
+        // ANSI: \x1b[Y;XH (отсчет с 1)
+        print!("\x1b[{};{}H", y, x);
+        let _ = stdout().flush();
+        Ok(Value::Empty)
+    });
 
     // --- Терминал.пауза(сообщение) ---
-    class_def.add_method(
-        interner_ref.write(|i| i.get_or_intern("пауза")),
-        Visibility::Public,
-        true,
-        BuiltinFn(Arc::new(move |_, args, _| {
-            let msg = CallArgListExt::get_value(&args, 1)
-                .and_then(|v| v.as_str())
-                .map(|s| s.as_str())
-                .unwrap_or("Нажмите Enter, чтобы продолжить...");
+    define_method!(class_def, interner_ref, @static "пауза" => (_, args, _) {
+        let msg = CallArgListExt::get_value(&args, 1)
+            .and_then(|v| v.as_str())
+            .map(|s| s.as_str())
+            .unwrap_or("Нажмите Enter, чтобы продолжить...");
 
-            print!("{}", msg);
-            let _ = stdout().flush();
+        print!("{}", msg);
+        let _ = stdout().flush();
 
-            let mut buffer = String::new();
-            let _ = stdin().read_line(&mut buffer);
+        let mut buffer = String::new();
+        let _ = stdin().read_line(&mut buffer);
 
-            Ok(Value::Empty)
-        })),
-    );
+        Ok(Value::Empty)
+    });
 
     (name_sym, SharedMut::new(class_def))
 }

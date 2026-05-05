@@ -11,8 +11,6 @@ mod io;
 mod json;
 mod list;
 mod number;
-mod request;
-mod response;
 mod system;
 mod terminal;
 mod text;
@@ -49,9 +47,5 @@ impl Interpreter {
         self.std_classes.insert(color_name, color_class);
         let (datetime_name, datetime_class) = datetime::setup_datetime_class(&interner);
         self.std_classes.insert(datetime_name, datetime_class);
-        let (req_name, req_class) = request::setup_request_class(&interner);
-        self.std_classes.insert(req_name, req_class);
-        let (resp_name, resp_class) = response::setup_response_class(&interner);
-        self.std_classes.insert(resp_name, resp_class);
     }
 }

@@ -1,8 +1,9 @@
 use crate::ast::prelude::{ErrorData, Span};
-use crate::interpreter::prelude::{Environment, RuntimeError, Value};
+use crate::interpreter::prelude::{Environment, Interpreter, RuntimeError, Value};
 use crate::shared::SharedMut;
 use std::collections::HashMap;
 use string_interner::DefaultSymbol as Symbol;
+use crate::{bail_runtime, runtime_error};
 
 impl Environment {
     pub(crate) fn new() -> Self {
@@ -49,10 +50,34 @@ impl Environment {
         if let Some(parent_shared) = &self.parent {
             return parent_shared.write(|parent| parent.set(name, value, span));
         }
-
-        Err(RuntimeError::UndefinedVariable(ErrorData::new(
+        bail_runtime!(
+            UndefinedVariable,
             span,
-            "Переменная не найдена".into(),
-        )))
+            "Переменная не найдена"
+        )
+    }
+}
+
+impl Interpreter {
+    pub(crate) fn scoped_environment<R>(
+        &mut self,
+        environment: Environment,
+        execute: impl FnOnce(&mut Self) -> Result<R, RuntimeError>,
+    ) -> Result<R, RuntimeError> {
+        let previous_env = self.environment.clone();
+        self.environment = SharedMut::new(environment);
+        let result = execute(self);
+        self.environment = previous_env;
+        result
+    }
+
+    pub(crate) fn scoped_child_environment<R>(
+        &mut self,
+        configure: impl FnOnce(&mut Environment),
+        execute: impl FnOnce(&mut Self) -> Result<R, RuntimeError>,
+    ) -> Result<R, RuntimeError> {
+        let mut environment = Environment::with_parent(self.environment.clone());
+        configure(&mut environment);
+        self.scoped_environment(environment, execute)
     }
 }

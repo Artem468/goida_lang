@@ -38,7 +38,7 @@ pub enum Value {
 pub struct NativeFunctionBinding {
     pub module_id: Symbol,
     pub library_path: Arc<PathBuf>,
-    pub symbol_name: String,
+    pub symbol_name: Symbol,
     pub params: Vec<Parameter>,
     pub return_type: Option<u32>,
 }
@@ -47,7 +47,7 @@ pub struct NativeFunctionBinding {
 pub struct NativeGlobalBinding {
     pub module_id: Symbol,
     pub library_path: Arc<PathBuf>,
-    pub symbol_name: String,
+    pub symbol_name: Symbol,
     pub value_type: u32,
 }
 
@@ -134,11 +134,12 @@ pub struct Module {
     pub path: PathBuf,
     pub arena: AstArena,
 
-    pub functions: HashMap<Symbol, FunctionDefinition>,
+    pub functions: HashMap<Symbol, Arc<FunctionDefinition>>,
     pub classes: HashMap<Symbol, SharedMut<ClassDefinition>>,
 
     pub body: Vec<StmtId>,
     pub imports: Vec<Import>,
+    pub modules: HashMap<Symbol, Module>,
 
     pub globals: HashMap<Symbol, Value>,
 }

@@ -15,6 +15,7 @@ impl Module {
             classes: HashMap::new(),
             body: Vec::new(),
             imports: Vec::new(),
+            modules: HashMap::new(),
             globals: HashMap::new(),
         }
     }

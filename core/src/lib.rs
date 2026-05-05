@@ -1,6 +1,7 @@
 pub mod ast;
 pub mod builtins;
 pub mod interpreter;
+pub mod r#macro;
 pub mod parser;
 pub mod shared;
 pub mod traits;

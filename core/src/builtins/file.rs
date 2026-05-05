@@ -1,13 +1,11 @@
-use crate::ast::prelude::{ClassDefinition, ErrorData, Span, Visibility};
-use crate::ast::program::MethodType;
+use crate::ast::prelude::{ClassDefinition, ErrorData, Span};
 use crate::interpreter::prelude::{
-    BuiltinFn, CallArgListExt, CallArgValue, RuntimeError, SharedInterner, Value,
+    CallArgListExt, CallArgValue, RuntimeError, SharedInterner, Value,
 };
 use crate::shared::SharedMut;
+use crate::{bail_runtime, define_constructor, define_method, runtime_error};
 use std::fs;
-use std::io::Write;
 use std::path::Path;
-use std::sync::Arc;
 use string_interner::DefaultSymbol as Symbol;
 
 pub fn setup_file_class(interner_ref: &SharedInterner) -> (Symbol, SharedMut<ClassDefinition>) {
@@ -15,7 +13,7 @@ pub fn setup_file_class(interner_ref: &SharedInterner) -> (Symbol, SharedMut<Cla
 
     let mut class_def = ClassDefinition::new(name, Span::default());
 
-    class_def.set_constructor(BuiltinFn(Arc::new(|interp, args, span| {
+    define_constructor!(class_def, (interp, args, span) {
         if let (Some(Value::Object(instance)), Some(Value::Text(path))) = (
             CallArgListExt::first_value(&args),
             CallArgListExt::get_value(&args, 1),
@@ -24,12 +22,13 @@ pub fn setup_file_class(interner_ref: &SharedInterner) -> (Symbol, SharedMut<Cla
             instance.write(|i| i.field_values.insert(path_sym, Value::Text(path.clone())));
             Ok(Value::Empty)
         } else {
-            Err(RuntimeError::TypeError(ErrorData::new(
+            bail_runtime!(
+                TypeError,
                 span,
-                "Использование: новый Файл(путь)".into(),
-            )))
+                "Использование: новый Файл(путь)"
+            )
         }
-    })));
+    });
 
     let get_path = |args: &Vec<CallArgValue>| -> Result<String, RuntimeError> {
         if let Some(Value::Object(instance)) = CallArgListExt::first_value(args) {
@@ -39,108 +38,79 @@ pub fn setup_file_class(interner_ref: &SharedInterner) -> (Symbol, SharedMut<Cla
                         return Ok(p.clone());
                     }
                 }
-                Err(RuntimeError::InvalidOperation(ErrorData::new(
-                    Span::default(),
-                    "Путь не найден".into(),
-                )))
+                bail_runtime!(InvalidOperation, Span::default(), "Путь не найден")
             });
         }
-
-        Err(RuntimeError::InvalidOperation(ErrorData::new(
-            Span::default(),
-            "Путь не найден".into(),
-        )))
+        bail_runtime!(InvalidOperation, Span::default(), "Путь не найден")
     };
 
     // --- .существует() -> Bool ---
-    class_def.add_method(
-        interner_ref.write(|i| i.get_or_intern("существует")),
-        Visibility::Public,
-        false,
-        BuiltinFn(Arc::new(move |_, args, _| {
-            let path = get_path(&args).unwrap_or_default();
-            Ok(Value::Boolean(Path::new(&path).exists()))
-        })),
-    );
+    define_method!(class_def, interner_ref, "существует" => (_, args, _) {
+        let path = get_path(&args).unwrap_or_default();
+        Ok(Value::Boolean(Path::new(&path).exists()))
+    });
 
     // --- .читать() -> Text ---
-    class_def.add_method(
-        interner_ref.write(|i| i.get_or_intern("читать")),
-        Visibility::Public,
-        false,
-        BuiltinFn(Arc::new(move |_, args, span| {
-            let path = get_path(&args)?;
-            let content = fs::read_to_string(path)
-                .map_err(|e| RuntimeError::IOError(ErrorData::new(span, e.to_string())))?;
-            Ok(Value::Text(content))
-        })),
-    );
+    define_method!(class_def, interner_ref, "читать" => (_, args, span) {
+        let path = get_path(&args)?;
+        let content = fs::read_to_string(path)
+            .map_err(|e| runtime_error!(IOError, span, "{}", e.to_string()))?;
+        Ok(Value::Text(content))
+    });
 
     // --- .записать(текст) ---
-    class_def.add_method(
-        interner_ref.write(|i| i.get_or_intern("записать")),
-        Visibility::Public,
-        false,
-        BuiltinFn(Arc::new(move |_, args, span| {
-            let path = get_path(&args)?;
-            let text = if let Some(t) = CallArgListExt::get_value(&args, 1) {
-                t.to_string()
-            } else {
-                "".into()
-            };
+    define_method!(class_def, interner_ref, "записать" => (_, args, span) {
+        let path = get_path(&args)?;
+        let text = if let Some(t) = CallArgListExt::get_value(&args, 1) {
+            t.to_string()
+        } else {
+            "".into()
+        };
 
-            if let Some(parent) = Path::new(&path).parent() {
-                fs::create_dir_all(parent)
-                    .map_err(|e| RuntimeError::IOError(ErrorData::new(span, e.to_string())))?;
-            }
+        if let Some(parent) = Path::new(&path).parent() {
+            fs::create_dir_all(parent)
+                .map_err(|e| runtime_error!(IOError, span, "{}", e.to_string()))?;
+        }
 
-            fs::write(path, text)
-                .map_err(|e| RuntimeError::IOError(ErrorData::new(span, e.to_string())))?;
-            Ok(Value::Empty)
-        })),
-    );
+        fs::write(path, text)
+            .map_err(|e| runtime_error!(IOError, span, "{}", e.to_string()))?;
+        Ok(Value::Empty)
+    });
 
     // --- .дописать(текст) ---
-    class_def.add_method(
-        interner_ref.write(|i| i.get_or_intern("дописать")),
-        Visibility::Public,
-        false,
-        MethodType::Native(Arc::from(BuiltinFn(Arc::new(move |_, args, span| {
-            let path = get_path(&args)?;
-            let text = if let Some(t) = CallArgListExt::get_value(&args, 1) {
-                t.to_string()
-            } else {
-                "".into()
-            };
+    define_method!(class_def, interner_ref, "дописать" => (_, args, span) {
+        let path = get_path(&args)?;
+        let text = if let Some(t) = CallArgListExt::get_value(&args, 1) {
+            t.to_string()
+        } else {
+            "".into()
+        };
 
-            if let Some(parent) = Path::new(&path).parent() {
-                fs::create_dir_all(parent)
-                    .map_err(|e| RuntimeError::IOError(ErrorData::new(span, e.to_string())))?;
-            }
+        if let Some(parent) = Path::new(&path).parent() {
+            fs::create_dir_all(parent)
+                .map_err(|e| runtime_error!(IOError, span, "{}", e.to_string()))?;
+        }
 
-            let mut file = fs::OpenOptions::new()
-                .append(true)
-                .create(true)
-                .open(path)
-                .map_err(|e| RuntimeError::IOError(ErrorData::new(span, e.to_string())))?;
-            file.write_all(text.as_bytes())
-                .map_err(|e| RuntimeError::IOError(ErrorData::new(span, e.to_string())))?;
-            Ok(Value::Empty)
-        })))),
-    );
+        let mut file = fs::OpenOptions::new()
+            .append(true)
+            .create(true)
+            .open(path)
+            .map_err(|e| runtime_error!(IOError, span, "{}", e.to_string()))?;
+
+        use std::io::Write;
+        file.write_all(text.as_bytes())
+            .map_err(|e| runtime_error!(IOError, span, "{}", e.to_string()))?;
+
+        Ok(Value::Empty)
+    });
 
     // --- .удалить() ---
-    class_def.add_method(
-        interner_ref.write(|i| i.get_or_intern("удалить")),
-        Visibility::Public,
-        false,
-        BuiltinFn(Arc::new(move |_, args, span| {
-            let path = get_path(&args)?;
-            fs::remove_file(path)
-                .map_err(|e| RuntimeError::IOError(ErrorData::new(span, e.to_string())))?;
-            Ok(Value::Empty)
-        })),
-    );
+    define_method!(class_def, interner_ref, "удалить" => (_, args, span) {
+        let path = get_path(&args)?;
+        fs::remove_file(path)
+            .map_err(|e| runtime_error!(IOError, span, "{}", e.to_string()))?;
+        Ok(Value::Empty)
+    });
 
     (name, SharedMut::new(class_def))
 }

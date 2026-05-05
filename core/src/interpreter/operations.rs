@@ -2,6 +2,7 @@ use crate::ast::prelude::{ErrorData, Span};
 use crate::interpreter::structs::{Interpreter, RuntimeError, Value};
 use crate::shared::SharedMut;
 use crate::traits::prelude::ValueOperations;
+use crate::{bail_runtime, runtime_error};
 use std::sync::Arc;
 
 impl ValueOperations for Interpreter {
@@ -9,6 +10,8 @@ impl ValueOperations for Interpreter {
         match (&left, &right) {
             (Value::Number(a), Value::Number(b)) => Ok(Value::Number(a + b)),
             (Value::Float(a), Value::Float(b)) => Ok(Value::Float(a + b)),
+            (Value::Number(a), Value::Float(b)) => Ok(Value::Float(*a as f64 + *b)),
+            (Value::Float(a), Value::Number(b)) => Ok(Value::Float(*a + *b as f64)),
 
             (Value::Text(a), Value::Text(b)) => Ok(Value::Text(format!("{}{}", a, b))),
             (Value::Text(a), any) => Ok(Value::Text(format!("{}{}", a, any))),
@@ -45,10 +48,11 @@ impl ValueOperations for Interpreter {
                 Ok(Value::Array(Arc::new(new_vec)))
             }
 
-            _ => Err(RuntimeError::TypeMismatch(ErrorData::new(
+            _ => bail_runtime!(
+                TypeMismatch,
                 span,
-                "Неподдерживаемые типы для операции сложения".to_string(),
-            ))),
+                "Неподдерживаемые типы для операции сложения"
+            ),
         }
     }
 
@@ -60,10 +64,11 @@ impl ValueOperations for Interpreter {
     ) -> Result<Value, RuntimeError> {
         match (left, right) {
             (Value::Number(a), Value::Number(b)) => Ok(Value::Number(a - b)),
-            _ => Err(RuntimeError::TypeMismatch(ErrorData::new(
-                span,
-                "Вычитание применимо только к числам".to_string(),
-            ))),
+            (Value::Float(a), Value::Float(b)) => Ok(Value::Float(a - b)),
+            (Value::Number(a), Value::Float(b)) => Ok(Value::Float((a as f64) - b)),
+            (Value::Float(a), Value::Number(b)) => Ok(Value::Float(a - (b as f64))),
+
+            _ => bail_runtime!(TypeMismatch, span, "Вычитание применимо только к числам"),
         }
     }
 
@@ -75,10 +80,10 @@ impl ValueOperations for Interpreter {
     ) -> Result<Value, RuntimeError> {
         match (left, right) {
             (Value::Number(a), Value::Number(b)) => Ok(Value::Number(a * b)),
-            _ => Err(RuntimeError::TypeMismatch(ErrorData::new(
-                span,
-                "Умножение применимо только к числам".to_string(),
-            ))),
+            (Value::Float(a), Value::Float(b)) => Ok(Value::Float(a * b)),
+            (Value::Number(a), Value::Float(b)) => Ok(Value::Float((a as f64) * b)),
+            (Value::Float(a), Value::Number(b)) => Ok(Value::Float(a * (b as f64))),
+            _ => bail_runtime!(TypeMismatch, span, "Умножение применимо только к числам"),
         }
     }
 
@@ -86,18 +91,33 @@ impl ValueOperations for Interpreter {
         match (left, right) {
             (Value::Number(a), Value::Number(b)) => {
                 if b == 0 {
-                    Err(RuntimeError::DivisionByZero(ErrorData::new(
-                        span,
-                        "Деление на 0 запрещено".into(),
-                    )))
+                    bail_runtime!(DivisionByZero, span, "Деление на 0 запрещено")
                 } else {
                     Ok(Value::Number(a / b))
                 }
             }
-            _ => Err(RuntimeError::TypeMismatch(ErrorData::new(
-                span,
-                "Деление применимо только к числам".to_string(),
-            ))),
+            (Value::Float(a), Value::Float(b)) => {
+                if b == 0.0 {
+                    bail_runtime!(DivisionByZero, span, "Деление на 0 запрещено")
+                } else {
+                    Ok(Value::Float(a / b))
+                }
+            }
+            (Value::Float(a), Value::Number(b)) => {
+                if b == 0 {
+                    bail_runtime!(DivisionByZero, span, "Деление на 0 запрещено")
+                } else {
+                    Ok(Value::Float(a / b as f64))
+                }
+            }
+            (Value::Number(a), Value::Float(b)) => {
+                if b == 0.0 {
+                    bail_runtime!(DivisionByZero, span, "Деление на 0 запрещено")
+                } else {
+                    Ok(Value::Float(a as f64 / b))
+                }
+            }
+            _ => bail_runtime!(TypeMismatch, span, "Деление применимо только к числам"),
         }
     }
 
@@ -105,18 +125,37 @@ impl ValueOperations for Interpreter {
         match (left, right) {
             (Value::Number(a), Value::Number(b)) => {
                 if b == 0 {
-                    Err(RuntimeError::DivisionByZero(ErrorData::new(
-                        span,
-                        "Деление на 0 запрещено".into(),
-                    )))
+                    bail_runtime!(DivisionByZero, span, "Деление на 0 запрещено")
                 } else {
                     Ok(Value::Number(a % b))
                 }
             }
-            _ => Err(RuntimeError::TypeMismatch(ErrorData::new(
+            (Value::Float(a), Value::Float(b)) => {
+                if b == 0.0 {
+                    bail_runtime!(DivisionByZero, span, "Деление на 0 запрещено")
+                } else {
+                    Ok(Value::Float(a % b))
+                }
+            }
+            (Value::Float(a), Value::Number(b)) => {
+                if b == 0 {
+                    bail_runtime!(DivisionByZero, span, "Деление на 0 запрещено")
+                } else {
+                    Ok(Value::Float(a % b as f64))
+                }
+            }
+            (Value::Number(a), Value::Float(b)) => {
+                if b == 0.0 {
+                    bail_runtime!(DivisionByZero, span, "Деление на 0 запрещено")
+                } else {
+                    Ok(Value::Float(a as f64 % b))
+                }
+            }
+            _ => bail_runtime!(
+                TypeMismatch,
                 span,
-                "Остаток от деления применим только к числам".to_string(),
-            ))),
+                "Остаток от деления применим только к числам"
+            ),
         }
     }
 
@@ -128,20 +167,20 @@ impl ValueOperations for Interpreter {
     ) -> Result<Value, RuntimeError> {
         match (left, right) {
             (Value::Number(a), Value::Number(b)) => Ok(Value::Boolean(a > b)),
-            _ => Err(RuntimeError::TypeMismatch(ErrorData::new(
-                span,
-                "Сравнение применимо только к числам".to_string(),
-            ))),
+            (Value::Float(a), Value::Float(b)) => Ok(Value::Boolean(a > b)),
+            (Value::Number(a), Value::Float(b)) => Ok(Value::Boolean((a as f64) > b)),
+            (Value::Float(a), Value::Number(b)) => Ok(Value::Boolean(a > (b as f64))),
+            _ => bail_runtime!(TypeMismatch, span, "Сравнение применимо только к числам"),
         }
     }
 
     fn compare_less(&self, left: Value, right: Value, span: Span) -> Result<Value, RuntimeError> {
         match (left, right) {
             (Value::Number(a), Value::Number(b)) => Ok(Value::Boolean(a < b)),
-            _ => Err(RuntimeError::TypeMismatch(ErrorData::new(
-                span,
-                "Сравнение применимо только к числам".to_string(),
-            ))),
+            (Value::Float(a), Value::Float(b)) => Ok(Value::Boolean(a < b)),
+            (Value::Number(a), Value::Float(b)) => Ok(Value::Boolean((a as f64) < b)),
+            (Value::Float(a), Value::Number(b)) => Ok(Value::Boolean(a < (b as f64))),
+            _ => bail_runtime!(TypeMismatch, span, "Сравнение применимо только к числам"),
         }
     }
 
@@ -153,10 +192,10 @@ impl ValueOperations for Interpreter {
     ) -> Result<Value, RuntimeError> {
         match (left, right) {
             (Value::Number(a), Value::Number(b)) => Ok(Value::Boolean(a >= b)),
-            _ => Err(RuntimeError::TypeMismatch(ErrorData::new(
-                span,
-                "Сравнение применимо только к числам".to_string(),
-            ))),
+            (Value::Float(a), Value::Float(b)) => Ok(Value::Boolean(a >= b)),
+            (Value::Number(a), Value::Float(b)) => Ok(Value::Boolean((a as f64) >= b)),
+            (Value::Float(a), Value::Number(b)) => Ok(Value::Boolean(a >= (b as f64))),
+            _ => bail_runtime!(TypeMismatch, span, "Сравнение применимо только к числам"),
         }
     }
 
@@ -168,10 +207,10 @@ impl ValueOperations for Interpreter {
     ) -> Result<Value, RuntimeError> {
         match (left, right) {
             (Value::Number(a), Value::Number(b)) => Ok(Value::Boolean(a <= b)),
-            _ => Err(RuntimeError::TypeMismatch(ErrorData::new(
-                span,
-                "Сравнение применимо только к числам".to_string(),
-            ))),
+            (Value::Float(a), Value::Float(b)) => Ok(Value::Boolean(a <= b)),
+            (Value::Number(a), Value::Float(b)) => Ok(Value::Boolean((a as f64) <= b)),
+            (Value::Float(a), Value::Number(b)) => Ok(Value::Boolean(a <= (b as f64))),
+            _ => bail_runtime!(TypeMismatch, span, "Сравнение применимо только к числам"),
         }
     }
 }
