@@ -105,34 +105,59 @@ impl ExpressionEvaluator for Interpreter {
 
             ExpressionKind::Binary { op, left, right } => {
                 let left_val = self.evaluate_expression(left, current_module_id)?;
-                let right_val = self.evaluate_expression(right, current_module_id)?;
 
                 match op {
-                    BinaryOperator::Add => self.add_values(left_val, right_val, expr_kind.span),
-                    BinaryOperator::Sub => {
-                        self.subtract_values(left_val, right_val, expr_kind.span)
+                    BinaryOperator::And => {
+                        if !left_val.is_truthy() {
+                            return Ok(Value::Boolean(false));
+                        }
+                        let right_val = self.evaluate_expression(right, current_module_id)?;
+                        Ok(Value::Boolean(right_val.is_truthy()))
                     }
-                    BinaryOperator::Mul => {
-                        self.multiply_values(left_val, right_val, expr_kind.span)
+
+                    BinaryOperator::Or => {
+                        if left_val.is_truthy() {
+                            return Ok(Value::Boolean(true));
+                        }
+                        let right_val = self.evaluate_expression(right, current_module_id)?;
+                        Ok(Value::Boolean(right_val.is_truthy()))
                     }
-                    BinaryOperator::Div => self.divide_values(left_val, right_val, expr_kind.span),
-                    BinaryOperator::Mod => self.modulo_values(left_val, right_val, expr_kind.span),
-                    BinaryOperator::Eq => Ok(Value::Boolean(left_val == right_val)),
-                    BinaryOperator::Ne => Ok(Value::Boolean(left_val != right_val)),
-                    BinaryOperator::Gt => self.compare_greater(left_val, right_val, expr_kind.span),
-                    BinaryOperator::Lt => self.compare_less(left_val, right_val, expr_kind.span),
-                    BinaryOperator::Ge => {
-                        self.compare_greater_equal(left_val, right_val, expr_kind.span)
+
+                    _ => {
+                        let right_val = self.evaluate_expression(right, current_module_id)?;
+                        match op {
+                            BinaryOperator::Add => {
+                                self.add_values(left_val, right_val, expr_kind.span)
+                            }
+                            BinaryOperator::Sub => {
+                                self.subtract_values(left_val, right_val, expr_kind.span)
+                            }
+                            BinaryOperator::Mul => {
+                                self.multiply_values(left_val, right_val, expr_kind.span)
+                            }
+                            BinaryOperator::Div => {
+                                self.divide_values(left_val, right_val, expr_kind.span)
+                            }
+                            BinaryOperator::Mod => {
+                                self.modulo_values(left_val, right_val, expr_kind.span)
+                            }
+                            BinaryOperator::Eq => Ok(Value::Boolean(left_val == right_val)),
+                            BinaryOperator::Ne => Ok(Value::Boolean(left_val != right_val)),
+                            BinaryOperator::Gt => {
+                                self.compare_greater(left_val, right_val, expr_kind.span)
+                            }
+                            BinaryOperator::Lt => {
+                                self.compare_less(left_val, right_val, expr_kind.span)
+                            }
+                            BinaryOperator::Ge => {
+                                self.compare_greater_equal(left_val, right_val, expr_kind.span)
+                            }
+                            BinaryOperator::Le => {
+                                self.compare_less_equal(left_val, right_val, expr_kind.span)
+                            }
+                            _ => unreachable!(),
+                        }
                     }
-                    BinaryOperator::Le => {
-                        self.compare_less_equal(left_val, right_val, expr_kind.span)
-                    }
-                    BinaryOperator::And => Ok(Value::Boolean(
-                        left_val.is_truthy() && right_val.is_truthy(),
-                    )),
-                    BinaryOperator::Or => Ok(Value::Boolean(
-                        left_val.is_truthy() || right_val.is_truthy(),
-                    )),
                 }
             }
 
@@ -619,7 +644,8 @@ impl ExpressionEvaluator for Interpreter {
                             runtime_error!(
                                 UndefinedVariable,
                                 expr_kind.span,
-                                "Класс '{}' не найден", name_str
+                                "Класс '{}' не найден",
+                                name_str
                             )
                         })?
                     }

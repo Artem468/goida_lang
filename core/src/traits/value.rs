@@ -263,6 +263,8 @@ impl PartialEq for Value {
         match (self, other) {
             (Value::Number(a), Value::Number(b)) => a == b,
             (Value::Float(a), Value::Float(b)) => a == b,
+            (Value::Number(a), Value::Float(b)) => (*a as f64) == *b,
+            (Value::Float(a), Value::Number(b)) => *a == (*b as f64),
             (Value::Text(a), Value::Text(b)) => a == b,
             (Value::Boolean(a), Value::Boolean(b)) => a == b,
             (Value::Object(a), Value::Object(b)) => a.ptr_eq(b),

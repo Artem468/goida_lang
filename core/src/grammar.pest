@@ -144,11 +144,19 @@ expression = {
 }
 
 logical_or = {
-    logical_and ~ ("или" ~ logical_and)*
+    logical_and ~ (logical_or_op ~ logical_and)*
 }
 
 logical_and = {
-    comparison ~ ("и" ~ comparison)*
+    comparison ~ (logical_and_op ~ comparison)*
+}
+
+logical_or_op = @{
+    "или" ~ !identifier_part
+}
+
+logical_and_op = @{
+    "и" ~ !identifier_part
 }
 
 comparison = {
@@ -278,6 +286,10 @@ visibility = @{
 
 identifier = @{
     (LETTER | "_") ~ (LETTER | DIGIT | "_")*
+}
+
+identifier_part = _{
+    LETTER | DIGIT | "_"
 }
 
 string_literal = @{

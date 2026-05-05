@@ -1371,7 +1371,7 @@ impl ParserTrait {
         })?)?;
 
         while let Some(token) = inner.next() {
-            if token.as_str() == "или" {
+            if token.as_rule() == Rule::logical_or_op {
                 let right = self.parse_logical_and(inner.next().ok_or_else(|| {
                     ParseError::InvalidSyntax(ErrorData::new(or_span, "Ожидалось выражение".into()))
                 })?)?;
@@ -1400,7 +1400,7 @@ impl ParserTrait {
         })?)?;
 
         while let Some(token) = inner.next() {
-            if token.as_str() == "и" {
+            if token.as_rule() == Rule::logical_and_op {
                 let right = self.parse_comparison(inner.next().ok_or_else(|| {
                     ParseError::InvalidSyntax(ErrorData::new(
                         and_span,
