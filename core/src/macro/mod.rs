@@ -61,7 +61,7 @@ macro_rules! runtime_error {
             format!($fmt $(, $arg)*),
         ))
     };
-    
+
     ($variant:ident, $span:expr, $fmt:expr $(, $arg:expr)* => $extra:expr) => {
         RuntimeError::$variant(
             ErrorData::new($span, format!($fmt $(, $arg)*)),
@@ -84,7 +84,14 @@ macro_rules! bail_runtime {
 macro_rules! expect_args {
     ($args:expr, $n:expr, $span:expr, $name:expr) => {
         if $args.len() != $n {
-            return crate::bail_runtime!(InvalidOperation, $span, "{} ожидает {} аргументов, получено {}", $name, $n, $args.len());
+            return crate::bail_runtime!(
+                InvalidOperation,
+                $span,
+                "{} ожидает {} аргументов, получено {}",
+                $name,
+                $n,
+                $args.len()
+            );
         }
     };
 }

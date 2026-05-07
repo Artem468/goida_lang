@@ -56,3 +56,62 @@ fn test_all_examples() {
 
     println!("Все примеры успешно протестированы!");
 }
+
+#[test]
+fn test_imported_top_level_globals_are_available() {
+    let output = Command::new("cargo")
+        .args([
+            "run",
+            "-q",
+            "-p",
+            "cli",
+            "--",
+            "run",
+            "examples/import_globals.goida",
+        ])
+        .output()
+        .expect("Не удалось запустить команду cargo run");
+
+    assert!(
+        output.status.success(),
+        "import_globals.goida завершился с ошибкой\nSTDOUT: {}\nSTDERR: {}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    assert_eq!("42\nok\n", String::from_utf8_lossy(&output.stdout));
+}
+
+#[test]
+fn test_local_binding_shadows_import_alias_for_property_access() {
+    let dir = Path::new("target/import_shadow_property_access");
+    fs::create_dir_all(dir).expect("Не удалось создать временную папку теста");
+    fs::write(dir.join("mod.goida"), "value = 41;\n")
+        .expect("Не удалось записать временный модуль");
+    fs::write(
+        dir.join("main.goida"),
+        "подключить \"mod\" в m;\nm = \"shadowed\";\nпечать(m.value);\n",
+    )
+    .expect("Не удалось записать временный основной файл");
+
+    let main_file = dir.join("main.goida");
+    let output = Command::new("cargo")
+        .args([
+            "run",
+            "-q",
+            "-p",
+            "cli",
+            "--",
+            "run",
+            main_file.to_str().unwrap(),
+        ])
+        .output()
+        .expect("Не удалось запустить команду cargo run");
+
+    assert!(
+        !output.status.success(),
+        "локальная переменная должна затенять alias импорта\nSTDOUT: {}\nSTDERR: {}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+}

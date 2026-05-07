@@ -205,7 +205,9 @@ impl ParserTrait {
                         module: None,
                     };
                     return if self.nesting_level == 0 {
-                        self.module.functions.insert(symbol_name, Arc::new(func_def));
+                        self.module
+                            .functions
+                            .insert(symbol_name, Arc::new(func_def));
                         Ok(self
                             .module
                             .arena
@@ -1221,8 +1223,9 @@ impl ParserTrait {
 
         let module = self.parse_and_register_import(path_symbol, import_span)?;
         self.register_imported_type_aliases(alias_symbol, module);
-        self.module.globals.insert(alias_symbol, Value::Module(module));
-
+        self.module
+            .globals
+            .insert(alias_symbol, Value::Module(module));
 
         Ok(stmt_id)
     }
@@ -1315,7 +1318,9 @@ impl ParserTrait {
                     .unwrap_or_default()
                     .to_string()
             });
-            self.module.arena.register_custom_type(&self.interner, class_name.as_str());
+            self.module
+                .arena
+                .register_custom_type(&self.interner, class_name.as_str());
         }
 
         self.module.modules.insert(module_symbol, new_module);
@@ -1791,10 +1796,6 @@ impl ParserTrait {
                 .module
                 .arena
                 .add_expression(ExpressionKind::Literal(LiteralValue::Unit), primary_span)),
-            Rule::this_expr => Ok(self
-                .module
-                .arena
-                .add_expression(ExpressionKind::This, primary_span)),
             _ => Err(ParseError::InvalidSyntax(ErrorData::new(
                 primary_span,
                 "Неожиданное выражение".into(),

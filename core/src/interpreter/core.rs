@@ -18,6 +18,7 @@ impl CoreOperations for Interpreter {
             native_libraries: HashMap::new(),
             interner,
             environment: SharedMut::new(Environment::new()),
+            method_depth: 0,
             source_manager: SourceManager::new(),
         }
     }
@@ -150,64 +151,76 @@ impl Interpreter {
             }
         }
 
-        for (class_name, class_def) in &module.classes {
-            let class_value = Value::Class(class_def.clone());
-            self.environment
-                .write(|env| env.define(*class_name, class_value.clone()));
-            if let Some(mod_entry) = self.modules.get_mut(&module.name) {
-                mod_entry.globals.insert(*class_name, class_value);
+        self.scoped_environment(Environment::new(), |interpreter| {
+            if let Some(mod_entry) = interpreter.modules.get(&module.name) {
+                for (name, value) in mod_entry.globals.clone() {
+                    interpreter.environment.write(|env| env.define(name, value));
+                }
             }
 
-            let fields = class_def.read(|i| i.fields.clone());
-            for (name, (_, is_static, data)) in fields {
-                if is_static {
-                    if let FieldData::Expression(Some(expr_id)) = data {
-                        let val = self.evaluate_expression(expr_id, module.name)?;
+            for (class_name, class_def) in &module.classes {
+                let class_value = Value::Class(class_def.clone());
+                interpreter
+                    .environment
+                    .write(|env| env.define(*class_name, class_value.clone()));
+                if let Some(mod_entry) = interpreter.modules.get_mut(&module.name) {
+                    mod_entry.globals.insert(*class_name, class_value);
+                }
 
-                        class_def.write(|c| {
-                            if let Some((_, _, target_data)) = c.fields.get_mut(&name) {
-                                *target_data = FieldData::Value(SharedMut::new(val));
-                            }
-                        });
+                let fields = class_def.read(|i| i.fields.clone());
+                for (name, (_, is_static, data)) in fields {
+                    if is_static {
+                        if let FieldData::Expression(Some(expr_id)) = data {
+                            let val = interpreter.evaluate_expression(expr_id, module.name)?;
+
+                            class_def.write(|c| {
+                                if let Some((_, _, target_data)) = c.fields.get_mut(&name) {
+                                    *target_data = FieldData::Value(SharedMut::new(val));
+                                }
+                            });
+                        }
                     }
                 }
             }
-        }
 
-        for (function_name, function_fn) in &module.functions {
-            let func_value = Value::Function(function_fn.clone());
-            self.environment
-                .write(|env| env.define(*function_name, func_value.clone()));
-            if let Some(mod_entry) = self.modules.get_mut(&module.name) {
-                mod_entry.globals.insert(*function_name, func_value);
+            for (function_name, function_fn) in &module.functions {
+                let func_value = Value::Function(function_fn.clone());
+                interpreter
+                    .environment
+                    .write(|env| env.define(*function_name, func_value.clone()));
+                if let Some(mod_entry) = interpreter.modules.get_mut(&module.name) {
+                    mod_entry.globals.insert(*function_name, func_value);
+                }
             }
-        }
 
-        for (builtin_name, builtin_fn) in &self.builtins.clone() {
-            self.environment
-                .write(|env| env.define(*builtin_name, Value::Builtin(builtin_fn.clone())));
-        }
-
-        for (name_symbol, class_def) in &self.std_classes.clone() {
-            self.environment
-                .write(|env| env.define(*name_symbol, Value::Class(class_def.clone())));
-
-            if let Some(mod_entry) = self.modules.get_mut(&module.name) {
-                mod_entry
-                    .globals
-                    .insert(*name_symbol, Value::Class(class_def.clone()));
+            for (builtin_name, builtin_fn) in &interpreter.builtins.clone() {
+                interpreter
+                    .environment
+                    .write(|env| env.define(*builtin_name, Value::Builtin(builtin_fn.clone())));
             }
-        }
 
-        for &stmt_id in &module.body {
-            match self.execute_statement(stmt_id, module.name) {
-                Err(RuntimeError::Return(..)) => {}
-                Err(e) => return Err(e),
-                Ok(()) => {}
+            for (name_symbol, class_def) in &interpreter.std_classes.clone() {
+                interpreter
+                    .environment
+                    .write(|env| env.define(*name_symbol, Value::Class(class_def.clone())));
+
+                if let Some(mod_entry) = interpreter.modules.get_mut(&module.name) {
+                    mod_entry
+                        .globals
+                        .insert(*name_symbol, Value::Class(class_def.clone()));
+                }
             }
-        }
 
-        Ok(())
+            for &stmt_id in &module.body {
+                match interpreter.execute_statement(stmt_id, module.name) {
+                    Err(RuntimeError::Return(..)) => {}
+                    Err(e) => return Err(e),
+                    Ok(()) => {}
+                }
+            }
+
+            Ok(())
+        })
     }
 
     pub(crate) fn resolve_module_member_value(

@@ -3,7 +3,9 @@ use crate::interpreter::prelude::{
     CallArgListExt, Interpreter, RuntimeError, SharedInterner, Value,
 };
 use crate::shared::SharedMut;
-use crate::{bail_runtime, define_builtin, define_constructor, define_method, expect_args, runtime_error};
+use crate::{
+    bail_runtime, define_builtin, define_constructor, define_method, expect_args, runtime_error,
+};
 use std::ffi::{c_char, CStr};
 use string_interner::DefaultSymbol as Symbol;
 

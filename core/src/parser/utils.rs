@@ -26,7 +26,6 @@ pub fn translate_rule(rule: &Rule) -> String {
         Rule::number_literal => "число".into(),
         Rule::bool_literal => "логическое значение (истина/ложь)".into(),
         Rule::empty_literal => "пустота".into(),
-        Rule::this_expr => "ключевое слово 'это'".into(),
         Rule::new_expr => "создание объекта 'новый'".into(),
         Rule::expression => "выражение".into(),
         Rule::paren_expr => "выражение в скобках".into(),

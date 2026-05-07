@@ -153,8 +153,7 @@ impl StatementExecutor for Interpreter {
                 };
                 let is_external = !matches!(obj_expr.kind, ExpressionKind::This);
 
-                let this_sym = self.intern_string("this");
-                let is_inside_method = self.environment.read(|env| env.get(&this_sym).is_some());
+                let is_inside_method = self.method_depth > 0;
                 let is_external = is_external && !is_inside_method;
 
                 let obj_value = self.evaluate_expression(object, current_module_id)?;
