@@ -55,16 +55,21 @@ impl Environment {
 }
 
 impl Interpreter {
+    fn enter_environment(&mut self, environment: SharedMut<Environment>) -> EnvironmentGuard {
+        let previous = std::mem::replace(&mut self.environment, environment);
+        EnvironmentGuard {
+            environment: &mut self.environment,
+            previous: Some(previous),
+        }
+    }
+
     pub(crate) fn scoped_environment<R>(
         &mut self,
         environment: Environment,
         execute: impl FnOnce(&mut Self) -> Result<R, RuntimeError>,
     ) -> Result<R, RuntimeError> {
-        let previous_env = self.environment.clone();
-        self.environment = SharedMut::new(environment);
-        let result = execute(self);
-        self.environment = previous_env;
-        result
+        let _guard = self.enter_environment(SharedMut::new(environment));
+        execute(self)
     }
 
     pub(crate) fn scoped_child_environment<R>(
@@ -75,5 +80,30 @@ impl Interpreter {
         let mut environment = Environment::with_parent(self.environment.clone());
         configure(&mut environment);
         self.scoped_environment(environment, execute)
+    }
+
+    pub(crate) fn preserving_environment<R>(
+        &mut self,
+        execute: impl FnOnce(&mut Self) -> Result<R, RuntimeError>,
+    ) -> Result<R, RuntimeError> {
+        let _guard = self.enter_environment(self.environment.clone());
+        execute(self)
+    }
+}
+
+struct EnvironmentGuard {
+    environment: *mut SharedMut<Environment>,
+    previous: Option<SharedMut<Environment>>,
+}
+
+impl Drop for EnvironmentGuard {
+    fn drop(&mut self) {
+        if let Some(previous) = self.previous.take() {
+            // SAFETY: EnvironmentGuard is created only from Interpreter methods and is not exposed.
+            // The pointed field belongs to that interpreter and remains valid for the guarded scope.
+            unsafe {
+                *self.environment = previous;
+            }
+        }
     }
 }

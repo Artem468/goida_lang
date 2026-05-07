@@ -446,12 +446,10 @@ impl ExpressionEvaluator for Interpreter {
                 method,
                 args,
             } => {
-                let previous_env_at_start = self.environment.clone();
-
-                let result = (|| -> Result<Value, RuntimeError> {
+                self.preserving_environment(|interpreter| {
                     let obj_expr = {
-                        let module = self.modules.get(&current_module_id).ok_or_else(|| {
-                            let module_name = self.resolve_symbol(current_module_id).unwrap();
+                        let module = interpreter.modules.get(&current_module_id).ok_or_else(|| {
+                            let module_name = interpreter.resolve_symbol(current_module_id).unwrap();
                             runtime_error!(
                                 InvalidOperation,
                                 expr_kind.span,
@@ -463,16 +461,16 @@ impl ExpressionEvaluator for Interpreter {
 
                     let mut arguments = Vec::new();
                     for arg in args {
-                        let value = self.evaluate_expression(arg.value, current_module_id)?;
+                        let value = interpreter.evaluate_expression(arg.value, current_module_id)?;
                         arguments.push(CallArgValue {
                             name: arg.name,
                             value,
                         });
                     }
 
-                    let target_value = self.evaluate_expression(object, current_module_id)?;
+                    let target_value = interpreter.evaluate_expression(object, current_module_id)?;
 
-                    if let Some(class_def) = self.get_class_for_value(&target_value) {
+                    if let Some(class_def) = interpreter.get_class_for_value(&target_value) {
                         let method_info = class_def.read(|c| {
                             c.methods.get(&method).map(|(vis, is_static, m_type)| {
                                 (vis.clone(), *is_static, m_type.clone())
@@ -498,7 +496,8 @@ impl ExpressionEvaluator for Interpreter {
                             let is_external = !matches!(obj_expr.kind, ExpressionKind::This);
 
                             if is_external && matches!(visibility, Visibility::Private) {
-                                let m_name = self.resolve_symbol(method).unwrap_or_default();
+                                let m_name =
+                                    interpreter.resolve_symbol(method).unwrap_or_default();
                                 return bail_runtime!(
                                     InvalidOperation,
                                     obj_expr.span,
@@ -510,7 +509,7 @@ impl ExpressionEvaluator for Interpreter {
                             let method_module =
                                 method_type.get_module().unwrap_or(current_module_id);
 
-                            return self.call_method(
+                            return interpreter.call_method(
                                 method_type,
                                 arguments,
                                 this_val,
@@ -523,21 +522,22 @@ impl ExpressionEvaluator for Interpreter {
                     match target_value {
                         Value::Module(mod_symbol) => {
                             if let Some((definition_module_id, value)) =
-                                self.resolve_module_member_value(mod_symbol, method)
+                                interpreter.resolve_module_member_value(mod_symbol, method)
                             {
                                 return match value {
-                                    Value::Function(function) => self.call_function(
+                                    Value::Function(function) => interpreter.call_function(
                                         function.clone(),
                                         arguments,
                                         definition_module_id,
                                         obj_expr.span,
                                     ),
                                     Value::Builtin(builtin) => {
-                                        builtin(self, arguments, obj_expr.span)
+                                        builtin(interpreter, arguments, obj_expr.span)
                                     }
                                     _ => {
-                                        let m_name = self.resolve_symbol(method).unwrap();
-                                        let mod_name = self.resolve_symbol(mod_symbol).unwrap();
+                                        let m_name = interpreter.resolve_symbol(method).unwrap();
+                                        let mod_name =
+                                            interpreter.resolve_symbol(mod_symbol).unwrap();
                                         bail_runtime!(
                                             UndefinedFunction,
                                             expr_kind.span,
@@ -552,17 +552,14 @@ impl ExpressionEvaluator for Interpreter {
                         _ => {}
                     }
 
-                    let m_name = self.resolve_symbol(method).unwrap();
+                    let m_name = interpreter.resolve_symbol(method).unwrap();
                     bail_runtime!(
                         UndefinedMethod,
                         expr_kind.span,
                         "Не удалось вызвать '{}': цель не является объектом или модулем",
                         m_name
                     )
-                })();
-                self.environment = previous_env_at_start;
-
-                result
+                })
             }
 
             ExpressionKind::ObjectCreation { class_name, args } => {
