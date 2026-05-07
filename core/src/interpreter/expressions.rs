@@ -282,7 +282,7 @@ impl ExpressionEvaluator for Interpreter {
             }
 
             ExpressionKind::PropertyAccess { object, property } => {
-                let obj_expr = {
+                let receiver_expr = {
                     let module = self.modules.get(&current_module_id).ok_or_else(|| {
                         let module_name = self.resolve_symbol(current_module_id).unwrap();
                         runtime_error!(
@@ -293,20 +293,6 @@ impl ExpressionEvaluator for Interpreter {
                     })?;
                     module.arena.get_expression(object).unwrap().clone()
                 };
-                if let ExpressionKind::Identifier(module_alias) = obj_expr.kind {
-                    if let Some(current_module) = self.modules.get(&current_module_id) {
-                        if let Some(module_symbol) =
-                            self.resolve_import_alias_symbol(current_module, module_alias)
-                        {
-                            if let Some((_, value)) =
-                                self.resolve_module_member_value(module_symbol, property)
-                            {
-                                return self.resolve_runtime_value(value, expr_kind.span);
-                            }
-                        }
-                    }
-                }
-
                 let obj_result = self.evaluate_expression(object, current_module_id);
                 match obj_result {
                     Ok(Value::Module(module_symbol)) => {
@@ -325,7 +311,7 @@ impl ExpressionEvaluator for Interpreter {
                     }
                     Ok(Value::Object(instance_ref)) => {
                         let (field_data, is_accessible) = instance_ref.read(|instance| {
-                            let is_external = !matches!(obj_expr.kind, ExpressionKind::This);
+                            let is_external = !matches!(receiver_expr.kind, ExpressionKind::This);
                             let this_sym = self.intern_string("this");
                             let is_inside_method =
                                 self.environment.read(|env| env.get(&this_sym).is_some());
@@ -404,12 +390,13 @@ impl ExpressionEvaluator for Interpreter {
                                     );
                                 }
 
-                                let is_external = !matches!(obj_expr.kind, ExpressionKind::This);
+                                let is_external =
+                                    !matches!(receiver_expr.kind, ExpressionKind::This);
                                 if is_external && matches!(visibility, Visibility::Private) {
                                     let p_name = self.resolve_symbol(property).unwrap_or_default();
                                     return bail_runtime!(
                                         InvalidOperation,
-                                        obj_expr.span,
+                                        receiver_expr.span,
                                         "Поле '{}' является приватным",
                                         p_name
                                     );
@@ -436,12 +423,12 @@ impl ExpressionEvaluator for Interpreter {
                     }
 
                     _ => {
-                        if let ExpressionKind::Identifier(symbol) = obj_expr.kind {
+                        if let ExpressionKind::Identifier(symbol) = &receiver_expr.kind {
                             bail_runtime!(
                                 InvalidOperation,
                                 expr_kind.span,
                                 "Модуль '{}' не найден",
-                                self.resolve_symbol(symbol).unwrap()
+                                self.resolve_symbol(*symbol).unwrap()
                             )
                         } else {
                             bail_runtime!(

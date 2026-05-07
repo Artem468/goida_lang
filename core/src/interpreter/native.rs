@@ -681,13 +681,10 @@ impl Interpreter {
         expected: u32,
         module_id: Symbol,
     ) -> Result<bool, RuntimeError> {
-        let module = self.modules.get(&module_id).ok_or_else(|| {
-            runtime_error!(
-                InvalidOperation,
-                Span::default(),
-                "Module not found"
-            )
-        })?;
+        let module = self
+            .modules
+            .get(&module_id)
+            .ok_or_else(|| runtime_error!(InvalidOperation, Span::default(), "Module not found"))?;
         let Some(data_type) = module.arena.types.get(expected as usize) else {
             return Ok(true);
         };

@@ -1,9 +1,9 @@
 use crate::ast::prelude::{ErrorData, Span};
 use crate::interpreter::prelude::{Environment, Interpreter, RuntimeError, Value};
 use crate::shared::SharedMut;
+use crate::{bail_runtime, runtime_error};
 use std::collections::HashMap;
 use string_interner::DefaultSymbol as Symbol;
-use crate::{bail_runtime, runtime_error};
 
 impl Environment {
     pub(crate) fn new() -> Self {
@@ -50,11 +50,7 @@ impl Environment {
         if let Some(parent_shared) = &self.parent {
             return parent_shared.write(|parent| parent.set(name, value, span));
         }
-        bail_runtime!(
-            UndefinedVariable,
-            span,
-            "Переменная не найдена"
-        )
+        bail_runtime!(UndefinedVariable, span, "Переменная не найдена")
     }
 }
 
