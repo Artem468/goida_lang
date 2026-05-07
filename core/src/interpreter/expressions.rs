@@ -312,9 +312,7 @@ impl ExpressionEvaluator for Interpreter {
                     Ok(Value::Object(instance_ref)) => {
                         let (field_data, is_accessible) = instance_ref.read(|instance| {
                             let is_external = !matches!(receiver_expr.kind, ExpressionKind::This);
-                            let this_sym = self.intern_string("this");
-                            let is_inside_method =
-                                self.environment.read(|env| env.get(&this_sym).is_some());
+                            let is_inside_method = self.method_depth > 0;
                             let final_is_external = is_external && !is_inside_method;
 
                             let accessible =
@@ -662,19 +660,12 @@ impl ExpressionEvaluator for Interpreter {
                 }
             }
 
-            ExpressionKind::This => {
-                let this_sym = self.interner.write(|i| i.get_or_intern("this"));
+            ExpressionKind::This => bail_runtime!(
+                InvalidOperation,
+                expr_kind.span,
+                "'это' не является ключевым словом среды выполнения, передайте получатель в качестве явного параметра метода"
+            ),
 
-                self.environment
-                    .read(|env| env.get(&this_sym))
-                    .ok_or_else(|| {
-                        runtime_error!(
-                            InvalidOperation,
-                            expr_kind.span,
-                            "'это' можно использовать только внутри методов класса"
-                        )
-                    })
-            }
         };
         result
     }

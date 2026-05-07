@@ -89,6 +89,17 @@ impl Interpreter {
         let _guard = self.enter_environment(self.environment.clone());
         execute(self)
     }
+
+    pub(crate) fn scoped_method_context<R>(
+        &mut self,
+        execute: impl FnOnce(&mut Self) -> Result<R, RuntimeError>,
+    ) -> Result<R, RuntimeError> {
+        self.method_depth += 1;
+        let _guard = MethodContextGuard {
+            method_depth: &mut self.method_depth,
+        };
+        execute(self)
+    }
 }
 
 struct EnvironmentGuard {
@@ -104,6 +115,19 @@ impl Drop for EnvironmentGuard {
             unsafe {
                 *self.environment = previous;
             }
+        }
+    }
+}
+
+struct MethodContextGuard {
+    method_depth: *mut usize,
+}
+
+impl Drop for MethodContextGuard {
+    fn drop(&mut self) {
+        // SAFETY: MethodContextGuard is created only from Interpreter methods and is not exposed.
+        unsafe {
+            *self.method_depth -= 1;
         }
     }
 }

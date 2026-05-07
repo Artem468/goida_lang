@@ -18,6 +18,7 @@ impl CoreOperations for Interpreter {
             native_libraries: HashMap::new(),
             interner,
             environment: SharedMut::new(Environment::new()),
+            method_depth: 0,
             source_manager: SourceManager::new(),
         }
     }

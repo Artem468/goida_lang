@@ -125,6 +125,7 @@ pub struct Interpreter {
     pub(crate) native_libraries: HashMap<PathBuf, SharedMut<LoadedNativeLibrary>>,
     pub interner: SharedInterner,
     pub(crate) environment: SharedMut<Environment>,
+    pub(crate) method_depth: usize,
     pub source_manager: SourceManager,
 }
 

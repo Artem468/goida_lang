@@ -2,7 +2,7 @@ use crate::ast::prelude::{ClassDefinition, ExprId, Span, Visibility};
 use crate::ast::program::{FieldData, MethodType};
 use crate::interpreter::prelude::{CallArgValue, ClassInstance, Interpreter, RuntimeError, Value};
 use crate::shared::SharedMut;
-use crate::traits::prelude::{CoreOperations, InterpreterClasses, StatementExecutor};
+use crate::traits::prelude::{InterpreterClasses, StatementExecutor};
 use std::collections::HashMap;
 use std::sync::Arc;
 use string_interner::DefaultSymbol as Symbol;
@@ -20,21 +20,31 @@ impl InterpreterClasses for Interpreter {
         match method {
             MethodType::User(func) => {
                 let method_module = func.module.unwrap_or(current_module_id);
+                let mut arguments = arguments;
+                if !matches!(this_obj, Value::Empty) {
+                    arguments.insert(
+                        0,
+                        CallArgValue {
+                            name: None,
+                            value: this_obj,
+                        },
+                    );
+                }
 
                 let final_arguments =
                     self.bind_call_arguments(&func, arguments, method_module, span, "Метод")?;
 
-                let this_sym = self.intern_string("this");
-                let execution_result = self.scoped_child_environment(
-                    |local_env| {
-                        local_env.define(this_sym, this_obj);
-
-                        for (param, arg_value) in func.params.iter().zip(final_arguments.iter()) {
-                            local_env.define(param.name, arg_value.clone());
-                        }
-                    },
-                    |interpreter| interpreter.execute_statement(func.body, method_module),
-                );
+                let execution_result = self.scoped_method_context(|interpreter| {
+                    interpreter.scoped_child_environment(
+                        |local_env| {
+                            for (param, arg_value) in func.params.iter().zip(final_arguments.iter())
+                            {
+                                local_env.define(param.name, arg_value.clone());
+                            }
+                        },
+                        |interpreter| interpreter.execute_statement(func.body, method_module),
+                    )
+                });
 
                 match execution_result {
                     Ok(()) => Ok(Value::Empty),
@@ -44,11 +54,15 @@ impl InterpreterClasses for Interpreter {
             }
 
             MethodType::Native(builtin) => {
-                let mut final_args = Vec::with_capacity(arguments.len() + 1);
-                final_args.push(CallArgValue {
-                    name: None,
-                    value: this_obj,
-                });
+                let has_receiver = !matches!(this_obj, Value::Empty);
+                let mut final_args =
+                    Vec::with_capacity(arguments.len() + usize::from(has_receiver));
+                if has_receiver {
+                    final_args.push(CallArgValue {
+                        name: None,
+                        value: this_obj,
+                    });
+                }
                 final_args.extend(arguments);
                 builtin(self, final_args, span)
             }

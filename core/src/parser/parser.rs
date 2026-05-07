@@ -1796,10 +1796,6 @@ impl ParserTrait {
                 .module
                 .arena
                 .add_expression(ExpressionKind::Literal(LiteralValue::Unit), primary_span)),
-            Rule::this_expr => Ok(self
-                .module
-                .arena
-                .add_expression(ExpressionKind::This, primary_span)),
             _ => Err(ParseError::InvalidSyntax(ErrorData::new(
                 primary_span,
                 "Неожиданное выражение".into(),
