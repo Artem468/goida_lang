@@ -44,11 +44,59 @@ impl StatementExecutor for Interpreter {
                 }
 
                 self.environment = target_env;
-                self.environment.write(|env| {
-                    if env.set(name, val.clone(), stmt_kind.span).is_err() {
-                        env.define(name, val.clone());
+                // Debug: log whether we set or define the variable and which environment is root
+                let _var_name = self.resolve_symbol(name).unwrap_or_default();
+                let _is_root_env = self.environment.read(|env| env.parent.is_none());
+                // Try to set the variable in the nearest environment where it exists;
+                // if not found, define it in the current environment. This preserves
+                // expected behavior for block-scoped code that assigns to outer
+                // variables while still creating new locals when the variable is new.
+                // We need nuanced assignment semantics:
+                // - Search for the variable in the chain up to the nearest function environment
+                //   (inclusive). If found, update that environment.
+                // - If not found but a containing function environment exists, define the
+                //   variable in that function environment (so nested functions don't
+                //   accidentally update outer function variables with the same name).
+                // - If no function environment exists in the chain, fall back to the
+                //   original set-then-define semantics.
+                let mut search_env = self.environment.clone();
+                let mut found_env: Option<SharedMut<crate::interpreter::structs::Environment>> = None;
+                let mut function_env: Option<SharedMut<crate::interpreter::structs::Environment>> = None;
+
+                loop {
+                    if search_env.read(|env| env.variables.contains_key(&name)) {
+                        found_env = Some(search_env.clone());
+                        break;
                     }
-                });
+                    if search_env.read(|env| env.is_function) {
+                        function_env = Some(search_env.clone());
+                        break;
+                    }
+                    let parent_opt = search_env.read(|env| env.parent.clone());
+                    if let Some(parent) = parent_opt {
+                        search_env = parent;
+                    } else {
+                        break;
+                    }
+                }
+
+                if let Some(target_env) = found_env {
+                    target_env.write(|env| {
+                        env.variables.insert(name, val.clone());
+                    });
+                } else if let Some(fn_env) = function_env {
+                    fn_env.write(|env| {
+                        env.define(name, val.clone());
+                    });
+                } else {
+                    let set_result = self
+                        .environment
+                        .write(|env| env.set(name, val.clone(), stmt_kind.span));
+
+                    if set_result.is_err() {
+                        self.environment.write(|env| env.define(name, val.clone()));
+                    }
+                }
 
                 if self.environment.read(|env| env.parent.is_none()) {
                     if let Some(module) = self.modules.get_mut(&current_module_id) {

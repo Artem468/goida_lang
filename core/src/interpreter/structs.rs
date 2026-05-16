@@ -113,6 +113,7 @@ pub enum RuntimeError {
 pub struct Environment {
     pub(crate) variables: HashMap<Symbol, Value>,
     pub(crate) parent: Option<SharedMut<Environment>>,
+    pub(crate) is_function: bool,
 }
 
 pub type SharedInterner = SharedMut<StringInterner<StringBackend>>;
