@@ -68,6 +68,7 @@ pub enum MethodType {
 #[derive(Clone, Debug)]
 pub struct ClassDefinition {
     pub name: Symbol,
+    pub base_class: Option<Symbol>,
     pub fields: HashMap<Symbol, (Visibility, bool, FieldData)>,
     pub methods: HashMap<Symbol, (Visibility, bool, MethodType)>,
     pub constructor: Option<MethodType>,

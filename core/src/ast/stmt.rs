@@ -40,6 +40,14 @@ pub enum StatementKind {
         update: ExprId,
         body: StmtId,
     },
+    Try {
+        body: StmtId,
+        handlers: Vec<TryHandler>,
+    },
+    Raise {
+        error_type: Symbol,
+        message: Option<ExprId>,
+    },
     Block(Vec<StmtId>),
     Return(Option<ExprId>),
     FunctionDefinition(FunctionDefinition),
@@ -51,4 +59,11 @@ pub enum StatementKind {
         value: ExprId,
     },
     Empty,
+}
+
+#[derive(Debug, Clone)]
+pub struct TryHandler {
+    pub error_type: Option<Symbol>,
+    pub error_text: Option<Symbol>,
+    pub body: StmtId,
 }

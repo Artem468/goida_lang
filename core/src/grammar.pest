@@ -46,7 +46,11 @@ library_param = {
 
 // === Classes ===
 class = {
-    "класс" ~ identifier ~ "{" ~ (NEWLINE | COMMENT)* ~ (class_item ~ (NEWLINE | COMMENT)*)* ~ "}"
+    "класс" ~ identifier ~ inheritance_clause? ~ "{" ~ (NEWLINE | COMMENT)* ~ (class_item ~ (NEWLINE | COMMENT)*)* ~ "}"
+}
+
+inheritance_clause = {
+    "(" ~ identifier ~ ")"
 }
 
 class_item = _{
@@ -72,10 +76,28 @@ statement = _{
     assignment |
     property_assign |
     if_stmt |
+    try_stmt |
+    raise_stmt |
     while_stmt |
     for_stmt |
     return_stmt |
     expr_stmt
+}
+
+try_stmt = {
+    "попробовать" ~ block ~ (NEWLINE | COMMENT)* ~ catch_clause+
+}
+
+catch_clause = {
+    "перехватить" ~ ("(" ~ catch_pattern? ~ ")")? ~ block
+}
+
+catch_pattern = {
+    ("как" ~ identifier) | (identifier ~ ("как" ~ identifier)?)
+}
+
+raise_stmt = {
+    "выбросить" ~ identifier ~ ("(" ~ expression? ~ ")")? ~ ";"
 }
 
 assignment = {

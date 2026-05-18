@@ -6,7 +6,7 @@ pub use super::program::{
     NativeGlobalDefinition, NativeLibraryDefinition, Parameter,
 };
 pub use super::span::Span;
-pub use super::stmt::{StatementKind, StatementNode, StmtId};
+pub use super::stmt::{StatementKind, StatementNode, StmtId, TryHandler};
 pub use super::types::{
     BinaryOperator, DataType, PrimitiveType, RuntimeType, TypeId, UnaryOperator,
 };

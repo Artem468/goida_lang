@@ -1,4 +1,5 @@
 use crate::ast::prelude::*;
+use crate::ast::program::{FieldData, MethodType};
 use crate::interpreter::prelude::{Module, SharedInterner, Value};
 use crate::parser::prelude::{
     extract_last_token, translate_rule, ParseError, Parser as ParserTrait,
@@ -7,6 +8,7 @@ use crate::shared::SharedMut;
 use pest::error::ErrorVariant;
 use pest::Parser;
 use pest_derive::Parser;
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use string_interner::DefaultSymbol as Symbol;
@@ -92,6 +94,7 @@ impl ParserTrait {
             ))
         })?;
         self.module.arena.init_builtin_types(&self.interner);
+        self.init_builtin_error_classes();
         for pair in pairs {
             if pair.as_rule() == Rule::program {
                 for inner in pair.into_inner() {
@@ -120,6 +123,14 @@ impl ParserTrait {
                             let stmt_id = self.parse_if_stmt(inner)?;
                             self.module.body.push(stmt_id);
                         }
+                        Rule::try_stmt => {
+                            let stmt_id = self.parse_try_stmt(inner)?;
+                            self.module.body.push(stmt_id);
+                        }
+                        Rule::raise_stmt => {
+                            let stmt_id = self.parse_raise_stmt(inner)?;
+                            self.module.body.push(stmt_id);
+                        }
                         Rule::while_stmt => {
                             let stmt_id = self.parse_while_stmt(inner)?;
                             self.module.body.push(stmt_id);
@@ -145,8 +156,390 @@ impl ParserTrait {
                 }
             }
         }
+        self.validate_module_names()?;
         self.module.arena.optimize_all(&self.interner);
         Ok(self.module)
+    }
+
+    fn init_builtin_error_classes(&mut self) {
+        let error_root = self
+            .module
+            .arena
+            .intern_string(&self.interner, "Ошибка");
+        self.module
+            .arena
+            .register_custom_type(&self.interner, "Ошибка");
+        self.module.classes.entry(error_root).or_insert_with(|| {
+            SharedMut::new(ClassDefinition::new(error_root, Span::default()))
+        });
+
+        for class_name in [
+            "ОшибкаПеременной",
+            "ОшибкаФункции",
+            "ОшибкаМетода",
+            "ОшибкаТипа",
+            "ОшибкаДеленияНаНоль",
+            "ОшибкаОперации",
+            "ОшибкаВводаВывода",
+            "ОшибкаИмпорта",
+            "Паника",
+        ] {
+            let symbol = self.module.arena.intern_string(&self.interner, class_name);
+            self.module
+                .arena
+                .register_custom_type(&self.interner, class_name);
+            self.module.classes.entry(symbol).or_insert_with(|| {
+                SharedMut::new(ClassDefinition::new_with_base(
+                    symbol,
+                    Some(error_root),
+                    Span::default(),
+                ))
+            });
+        }
+    }
+
+    fn validate_module_names(&self) -> Result<(), ParseError> {
+        let mut known = self.known_global_names();
+        for stmt_id in &self.module.body {
+            let stmt = self.module.arena.get_statement(*stmt_id).unwrap();
+            match &stmt.kind {
+                StatementKind::Assign { name, .. } => {
+                    known.insert(*name);
+                }
+                StatementKind::NativeLibraryDefinition(definition) => {
+                    for function in &definition.functions {
+                        known.insert(function.name);
+                    }
+                    for global in &definition.globals {
+                        known.insert(global.name);
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        let mut scopes = vec![known];
+        for stmt_id in &self.module.body {
+            self.validate_statement_names(*stmt_id, &mut scopes)?;
+        }
+        Ok(())
+    }
+
+    fn known_global_names(&self) -> HashSet<Symbol> {
+        let mut names = HashSet::new();
+
+        for name in self.module.functions.keys() {
+            names.insert(*name);
+        }
+        for name in self.module.classes.keys() {
+            names.insert(*name);
+        }
+        for import in &self.module.imports {
+            names.insert(import.item.alias);
+        }
+        for module in self.module.modules.values() {
+            self.collect_module_exported_names(module, &mut names);
+        }
+
+        for name in [
+            "печать",
+            "ввод",
+            "тип",
+            "является",
+            "число",
+            "строка",
+            "логический",
+            "дробь",
+            "список",
+            "массив",
+            "словарь",
+            "из_json",
+            "в_json",
+            "строка_из_указателя",
+            "Список",
+            "Массив",
+            "Словарь",
+            "Строка",
+            "Файл",
+            "Система",
+            "Терминал",
+            "ДатаВремя",
+        ] {
+            names.insert(self.module.arena.intern_string(&self.interner, name));
+        }
+
+        names
+    }
+
+    fn collect_module_exported_names(&self, module: &Module, names: &mut HashSet<Symbol>) {
+        for name in module.functions.keys() {
+            names.insert(*name);
+        }
+        for name in module.classes.keys() {
+            names.insert(*name);
+        }
+        for stmt_id in &module.body {
+            let Some(stmt) = module.arena.get_statement(*stmt_id) else {
+                continue;
+            };
+            if let StatementKind::Assign { name, .. } = stmt.kind {
+                names.insert(name);
+            } else if let StatementKind::NativeLibraryDefinition(definition) = &stmt.kind {
+                for function in &definition.functions {
+                    names.insert(function.name);
+                }
+                for global in &definition.globals {
+                    names.insert(global.name);
+                }
+            }
+        }
+        for nested in module.modules.values() {
+            self.collect_module_exported_names(nested, names);
+        }
+    }
+
+    fn validate_statement_names(
+        &self,
+        stmt_id: StmtId,
+        scopes: &mut Vec<HashSet<Symbol>>,
+    ) -> Result<(), ParseError> {
+        let stmt = self.module.arena.get_statement(stmt_id).unwrap();
+        match &stmt.kind {
+            StatementKind::Expression(expr) => self.validate_expression_names(*expr, scopes),
+            StatementKind::Assign { name, value, .. } => {
+                self.validate_expression_names(*value, scopes)?;
+                scopes.last_mut().unwrap().insert(*name);
+                Ok(())
+            }
+            StatementKind::IndexAssign {
+                object,
+                index,
+                value,
+            } => {
+                self.validate_expression_names(*object, scopes)?;
+                self.validate_expression_names(*index, scopes)?;
+                self.validate_expression_names(*value, scopes)
+            }
+            StatementKind::PropertyAssign { object, value, .. } => {
+                self.validate_expression_names(*object, scopes)?;
+                self.validate_expression_names(*value, scopes)
+            }
+            StatementKind::If {
+                condition,
+                then_body,
+                else_body,
+            } => {
+                self.validate_expression_names(*condition, scopes)?;
+                self.validate_statement_names(*then_body, scopes)?;
+                if let Some(else_body) = else_body {
+                    self.validate_statement_names(*else_body, scopes)?;
+                }
+                Ok(())
+            }
+            StatementKind::While { condition, body } => {
+                self.validate_expression_names(*condition, scopes)?;
+                self.validate_statement_names(*body, scopes)
+            }
+            StatementKind::For {
+                variable,
+                init,
+                condition,
+                update,
+                body,
+            } => {
+                self.validate_expression_names(*init, scopes)?;
+                scopes.push(HashSet::new());
+                scopes.last_mut().unwrap().insert(*variable);
+                self.validate_expression_names(*condition, scopes)?;
+                self.validate_expression_names(*update, scopes)?;
+                self.validate_statement_names(*body, scopes)?;
+                scopes.pop();
+                Ok(())
+            }
+            StatementKind::Try { body, handlers } => {
+                self.validate_statement_names(*body, scopes)?;
+                for handler in handlers {
+                    if let Some(error_text) = handler.error_text {
+                        scopes.push(HashSet::new());
+                        scopes.last_mut().unwrap().insert(error_text);
+                        self.validate_statement_names(handler.body, scopes)?;
+                        scopes.pop();
+                    } else {
+                        self.validate_statement_names(handler.body, scopes)?;
+                    }
+                }
+                Ok(())
+            }
+            StatementKind::Raise { message, .. } => {
+                if let Some(message) = message {
+                    self.validate_expression_names(*message, scopes)?;
+                }
+                Ok(())
+            }
+            StatementKind::Block(statements) => {
+                scopes.push(HashSet::new());
+                for stmt_id in statements {
+                    self.validate_statement_names(*stmt_id, scopes)?;
+                }
+                scopes.pop();
+                Ok(())
+            }
+            StatementKind::Return(expr) => {
+                if let Some(expr) = expr {
+                    self.validate_expression_names(*expr, scopes)?;
+                }
+                Ok(())
+            }
+            StatementKind::FunctionDefinition(def) => {
+                scopes.last_mut().unwrap().insert(def.name);
+                let mut local = HashSet::new();
+                for param in &def.params {
+                    local.insert(param.name);
+                    if let Some(default_value) = param.default_value {
+                        self.validate_expression_names(default_value, scopes)?;
+                    }
+                }
+                scopes.push(local);
+                self.validate_statement_names(def.body, scopes)?;
+                scopes.pop();
+                Ok(())
+            }
+            StatementKind::ClassDefinition(def) => {
+                for (_, _, field_data) in def.fields.values() {
+                    if let FieldData::Expression(Some(expr)) = field_data {
+                        self.validate_expression_names(*expr, scopes)?;
+                    }
+                }
+                for (_, _, method) in def.methods.values() {
+                    if let MethodType::User(function) = method {
+                        self.validate_function_body_names(function, scopes)?;
+                    }
+                }
+                if let Some(MethodType::User(function)) = &def.constructor {
+                    self.validate_function_body_names(function, scopes)?;
+                }
+                Ok(())
+            }
+            StatementKind::NativeLibraryDefinition(_) | StatementKind::Empty => Ok(()),
+        }
+    }
+
+    fn validate_function_body_names(
+        &self,
+        function: &FunctionDefinition,
+        scopes: &mut Vec<HashSet<Symbol>>,
+    ) -> Result<(), ParseError> {
+        let mut local = HashSet::new();
+        for param in &function.params {
+            local.insert(param.name);
+            if let Some(default_value) = param.default_value {
+                self.validate_expression_names(default_value, scopes)?;
+            }
+        }
+        scopes.push(local);
+        self.validate_statement_names(function.body, scopes)?;
+        scopes.pop();
+        Ok(())
+    }
+
+    fn validate_expression_names(
+        &self,
+        expr_id: ExprId,
+        scopes: &mut Vec<HashSet<Symbol>>,
+    ) -> Result<(), ParseError> {
+        let expr = self.module.arena.get_expression(expr_id).unwrap();
+        match &expr.kind {
+            ExpressionKind::Identifier(symbol) => {
+                if self.is_name_known(*symbol, scopes) {
+                    Ok(())
+                } else {
+                    let name = self
+                        .module
+                        .arena
+                        .resolve_symbol(&self.interner, *symbol)
+                        .unwrap_or_default();
+                    Err(ParseError::InvalidSyntax(ErrorData::new(
+                        expr.span,
+                        format!("Имя '{}' не найдено", name),
+                    )))
+                }
+            }
+            ExpressionKind::Binary { left, right, .. } => {
+                self.validate_expression_names(*left, scopes)?;
+                self.validate_expression_names(*right, scopes)
+            }
+            ExpressionKind::Unary { operand, .. } => {
+                self.validate_expression_names(*operand, scopes)
+            }
+            ExpressionKind::FunctionCall { function, args } => {
+                self.validate_expression_names(*function, scopes)?;
+                for arg in args {
+                    self.validate_expression_names(arg.value, scopes)?;
+                }
+                Ok(())
+            }
+            ExpressionKind::Index { object, index } => {
+                self.validate_expression_names(*object, scopes)?;
+                self.validate_expression_names(*index, scopes)
+            }
+            ExpressionKind::PropertyAccess { object, .. } => {
+                self.validate_expression_names(*object, scopes)
+            }
+            ExpressionKind::MethodCall { object, args, .. } => {
+                self.validate_expression_names(*object, scopes)?;
+                for arg in args {
+                    self.validate_expression_names(arg.value, scopes)?;
+                }
+                Ok(())
+            }
+            ExpressionKind::ObjectCreation { class_name, args } => {
+                if !self.is_name_known(*class_name, scopes) {
+                    let name = self
+                        .module
+                        .arena
+                        .resolve_symbol(&self.interner, *class_name)
+                        .unwrap_or_default();
+                    return Err(ParseError::InvalidSyntax(ErrorData::new(
+                        expr.span,
+                        format!("Класс '{}' не найден", name),
+                    )));
+                }
+                for arg in args {
+                    self.validate_expression_names(arg.value, scopes)?;
+                }
+                Ok(())
+            }
+            ExpressionKind::Literal(_) | ExpressionKind::This => Ok(()),
+        }
+    }
+
+    fn is_name_known(&self, symbol: Symbol, scopes: &[HashSet<Symbol>]) -> bool {
+        if scopes.iter().rev().any(|scope| scope.contains(&symbol)) {
+            return true;
+        }
+
+        let Some(name) = self.module.arena.resolve_symbol(&self.interner, symbol) else {
+            return false;
+        };
+        if let Some((module_name, member_name)) = name.split_once('.') {
+            let module_symbol = self.module.arena.intern_string(&self.interner, module_name);
+            let member_symbol = self.module.arena.intern_string(&self.interner, member_name);
+            if !scopes
+                .iter()
+                .rev()
+                .any(|scope| scope.contains(&module_symbol))
+            {
+                return false;
+            }
+
+            return self.module.modules.values().any(|module| {
+                module.functions.contains_key(&member_symbol)
+                    || module.classes.contains_key(&member_symbol)
+                    || module.globals.contains_key(&member_symbol)
+            });
+        }
+
+        false
     }
 
     fn parse_function(&mut self, pair: pest::iterators::Pair<Rule>) -> Result<StmtId, ParseError> {
@@ -410,7 +803,33 @@ impl ParserTrait {
             .as_str();
         self.module.arena.register_custom_type(&self.interner, name);
         let symbol_name = self.module.arena.intern_string(&self.interner, name);
-        let mut class_def = ClassDefinition::new(symbol_name, class_span);
+        let mut base_class = None;
+        if let Some(token) = inner.peek() {
+            if token.as_rule() == Rule::inheritance_clause {
+                let inheritance = inner.next().unwrap();
+                if let Some(base_token) = inheritance.into_inner().next() {
+                    let base_name = base_token.as_str();
+                    let base_symbol = self.module.arena.intern_string(&self.interner, base_name);
+                    if !self.module.classes.contains_key(&base_symbol) {
+                        return Err(ParseError::TypeError(ErrorData::new(
+                            (base_token.as_span(), self.module.name).into(),
+                            format!("Базовый класс '{}' не найден", base_name),
+                        )));
+                    }
+                    base_class = Some(base_symbol);
+                }
+            }
+        }
+        let mut class_def = ClassDefinition::new_with_base(symbol_name, base_class, class_span);
+        if let Some(base_symbol) = base_class {
+            if let Some(base_def) = self.module.classes.get(&base_symbol) {
+                base_def.read(|base| {
+                    class_def.fields.extend(base.fields.clone());
+                    class_def.methods.extend(base.methods.clone());
+                    class_def.constructor = base.constructor.clone();
+                });
+            }
+        }
 
         for token in inner {
             match token.as_rule() {
@@ -796,6 +1215,14 @@ impl ParserTrait {
                     let stmt_id = self.parse_if_stmt(inner)?;
                     statements.push(stmt_id);
                 }
+                Rule::try_stmt => {
+                    let stmt_id = self.parse_try_stmt(inner)?;
+                    statements.push(stmt_id);
+                }
+                Rule::raise_stmt => {
+                    let stmt_id = self.parse_raise_stmt(inner)?;
+                    statements.push(stmt_id);
+                }
                 Rule::while_stmt => {
                     let stmt_id = self.parse_while_stmt(inner)?;
                     statements.push(stmt_id);
@@ -991,6 +1418,145 @@ impl ParserTrait {
             if_stmt_span,
         );
         Ok(stmt_id)
+    }
+
+    fn parse_try_stmt(&mut self, pair: pest::iterators::Pair<Rule>) -> Result<StmtId, ParseError> {
+        let try_span: Span = (pair.as_span(), self.module.name).into();
+        let mut inner = pair.into_inner();
+
+        let try_block = inner.next().ok_or_else(|| {
+            ParseError::InvalidSyntax(ErrorData::new(try_span, "Ожидался блок попробовать".into()))
+        })?;
+        let try_stmts = self.parse_block(try_block)?;
+        let body = self
+            .module
+            .arena
+            .add_statement(StatementKind::Block(try_stmts), try_span);
+
+        let mut handlers = Vec::new();
+        for handler in inner {
+            if handler.as_rule() != Rule::catch_clause {
+                continue;
+            }
+
+            let handler_span: Span = (handler.as_span(), self.module.name).into();
+            let mut error_type = None;
+            let mut error_text = None;
+            let mut block_pair = None;
+
+            for token in handler.into_inner() {
+                match token.as_rule() {
+                    Rule::catch_pattern => {
+                        let identifiers: Vec<_> = token
+                            .into_inner()
+                            .filter(|inner| inner.as_rule() == Rule::identifier)
+                            .collect();
+
+                        match identifiers.as_slice() {
+                            [] => {}
+                            [single] => {
+                                let name = single.as_str();
+                                let symbol =
+                                    self.module.arena.intern_string(&self.interner, name);
+                                if self.module.classes.contains_key(&symbol) {
+                                    error_type = Some(symbol);
+                                } else {
+                                    error_text = Some(symbol);
+                                }
+                            }
+                            [class_token, text_token] => {
+                                let class_name = class_token.as_str();
+                                let class_symbol =
+                                    self.module.arena.intern_string(&self.interner, class_name);
+                                if !self.module.classes.contains_key(&class_symbol) {
+                                    return Err(ParseError::TypeError(ErrorData::new(
+                                        (class_token.as_span(), self.module.name).into(),
+                                        format!("Класс ошибки '{}' не найден", class_name),
+                                    )));
+                                }
+                                error_type = Some(class_symbol);
+                                error_text = Some(
+                                    self.module
+                                        .arena
+                                        .intern_string(&self.interner, text_token.as_str()),
+                                );
+                            }
+                            _ => {
+                                return Err(ParseError::InvalidSyntax(ErrorData::new(
+                                    handler_span,
+                                    "Некорректный перехватчик ошибки".into(),
+                                )));
+                            }
+                        }
+                    }
+                    Rule::block => block_pair = Some(token),
+                    _ => {}
+                }
+            }
+
+            let block_pair = block_pair.ok_or_else(|| {
+                ParseError::InvalidSyntax(ErrorData::new(
+                    handler_span,
+                    "Ожидался блок перехватить".into(),
+                ))
+            })?;
+            let block_stmts = self.parse_block(block_pair)?;
+            let handler_body = self
+                .module
+                .arena
+                .add_statement(StatementKind::Block(block_stmts), handler_span);
+            handlers.push(TryHandler {
+                error_type,
+                error_text,
+                body: handler_body,
+            });
+        }
+
+        if handlers.is_empty() {
+            return Err(ParseError::InvalidSyntax(ErrorData::new(
+                try_span,
+                "Ожидался хотя бы один блок перехватить".into(),
+            )));
+        }
+
+        Ok(self
+            .module
+            .arena
+            .add_statement(StatementKind::Try { body, handlers }, try_span))
+    }
+
+    fn parse_raise_stmt(
+        &mut self,
+        pair: pest::iterators::Pair<Rule>,
+    ) -> Result<StmtId, ParseError> {
+        let raise_span: Span = (pair.as_span(), self.module.name).into();
+        let mut inner = pair.into_inner();
+
+        let error_token = inner.next().ok_or_else(|| {
+            ParseError::InvalidSyntax(ErrorData::new(raise_span, "Ожидался класс ошибки".into()))
+        })?;
+        let error_name = error_token.as_str();
+        let error_type = self.module.arena.intern_string(&self.interner, error_name);
+        if !self.module.classes.contains_key(&error_type) {
+            return Err(ParseError::TypeError(ErrorData::new(
+                (error_token.as_span(), self.module.name).into(),
+                format!("Класс ошибки '{}' не найден", error_name),
+            )));
+        }
+
+        let message = if let Some(message_expr) = inner.next() {
+            Some(self.parse_expression(message_expr)?)
+        } else {
+            None
+        };
+
+        Ok(self.module.arena.add_statement(
+            StatementKind::Raise {
+                error_type,
+                message,
+            },
+            raise_span,
+        ))
     }
 
     fn parse_while_stmt(
