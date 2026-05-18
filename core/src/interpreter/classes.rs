@@ -95,6 +95,7 @@ impl InterpreterClasses for Interpreter {
 
         let new_class_def = class_def.read(|c| ClassDefinition {
             name: c.name,
+            base_class: c.base_class,
             fields: c.fields.clone(),
             methods,
             constructor: c.constructor.as_ref().map(|constructor| match constructor {
@@ -199,6 +200,18 @@ impl ClassDefinition {
     pub fn new(name: Symbol, span: Span) -> Self {
         Self {
             name,
+            base_class: None,
+            fields: HashMap::new(),
+            methods: HashMap::new(),
+            constructor: None,
+            span,
+        }
+    }
+
+    pub fn new_with_base(name: Symbol, base_class: Option<Symbol>, span: Span) -> Self {
+        Self {
+            name,
+            base_class,
             fields: HashMap::new(),
             methods: HashMap::new(),
             constructor: None,

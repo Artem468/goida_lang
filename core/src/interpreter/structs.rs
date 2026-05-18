@@ -107,12 +107,59 @@ pub enum RuntimeError {
     IOError(ErrorData),
     ImportError(ParseError),
     Panic(ErrorData),
+    Raised(ErrorData, String),
+}
+
+impl RuntimeError {
+    pub fn error_class_name(&self) -> String {
+        match self {
+            RuntimeError::UndefinedVariable(_) => "ОшибкаПеременной".to_string(),
+            RuntimeError::UndefinedFunction(_) => "ОшибкаФункции".to_string(),
+            RuntimeError::UndefinedMethod(_) => "ОшибкаМетода".to_string(),
+            RuntimeError::TypeMismatch(_) | RuntimeError::TypeError(_) => "ОшибкаТипа".to_string(),
+            RuntimeError::DivisionByZero(_) => "ОшибкаДеленияНаНоль".to_string(),
+            RuntimeError::InvalidOperation(_) => "ОшибкаОперации".to_string(),
+            RuntimeError::IOError(_) => "ОшибкаВводаВывода".to_string(),
+            RuntimeError::ImportError(_) => "ОшибкаИмпорта".to_string(),
+            RuntimeError::Panic(_) => "Паника".to_string(),
+            RuntimeError::Raised(_, class_name) => class_name.clone(),
+            RuntimeError::Return(..) => "Возврат".to_string(),
+        }
+    }
+
+    pub fn error_message(&self) -> String {
+        match self {
+            RuntimeError::UndefinedVariable(err)
+            | RuntimeError::UndefinedFunction(err)
+            | RuntimeError::UndefinedMethod(err)
+            | RuntimeError::TypeMismatch(err)
+            | RuntimeError::DivisionByZero(err)
+            | RuntimeError::InvalidOperation(err)
+            | RuntimeError::TypeError(err)
+            | RuntimeError::IOError(err)
+            | RuntimeError::Panic(err)
+            | RuntimeError::Raised(err, _) => err.message.clone(),
+            RuntimeError::ImportError(err) => match err {
+                ParseError::TypeError(err)
+                | ParseError::InvalidSyntax(err)
+                | ParseError::ImportError(err) => err.message.clone(),
+            },
+            RuntimeError::Return(err, value) => {
+                if err.message.is_empty() {
+                    value.to_string()
+                } else {
+                    err.message.clone()
+                }
+            }
+        }
+    }
 }
 
 #[derive(Debug)]
 pub struct Environment {
     pub(crate) variables: HashMap<Symbol, Value>,
     pub(crate) parent: Option<SharedMut<Environment>>,
+    pub(crate) is_function: bool,
 }
 
 pub type SharedInterner = SharedMut<StringInterner<StringBackend>>;

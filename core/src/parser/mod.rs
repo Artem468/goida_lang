@@ -1,4 +1,10 @@
+mod builtin_errors;
+mod declarations;
+mod expressions;
+mod imports;
 pub mod parser;
 pub mod prelude;
+mod statements;
 pub mod structs;
 pub mod utils;
+mod validation;

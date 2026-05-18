@@ -10,6 +10,7 @@ impl Environment {
         Environment {
             variables: HashMap::new(),
             parent: None,
+            is_function: false,
         }
     }
 
@@ -17,6 +18,15 @@ impl Environment {
         Environment {
             variables: HashMap::new(),
             parent: Some(parent),
+            is_function: false,
+        }
+    }
+
+    pub(crate) fn with_parent_function(parent: SharedMut<Environment>) -> Self {
+        Environment {
+            variables: HashMap::new(),
+            parent: Some(parent),
+            is_function: true,
         }
     }
 
@@ -78,6 +88,16 @@ impl Interpreter {
         execute: impl FnOnce(&mut Self) -> Result<R, RuntimeError>,
     ) -> Result<R, RuntimeError> {
         let mut environment = Environment::with_parent(self.environment.clone());
+        configure(&mut environment);
+        self.scoped_environment(environment, execute)
+    }
+
+    pub(crate) fn scoped_child_function_environment<R>(
+        &mut self,
+        configure: impl FnOnce(&mut Environment),
+        execute: impl FnOnce(&mut Self) -> Result<R, RuntimeError>,
+    ) -> Result<R, RuntimeError> {
+        let mut environment = Environment::with_parent_function(self.environment.clone());
         configure(&mut environment);
         self.scoped_environment(environment, execute)
     }

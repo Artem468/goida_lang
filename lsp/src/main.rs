@@ -361,10 +361,16 @@ impl Backend {
     }
 
     async fn validate(&self, uri: Url, text: String) {
-        let path_buf = uri.to_file_path().expect("Invalid file URI");
-        let filename = path_buf.to_str().expect("Path is not valid UTF-8");
-        let intp = self.interpreter.read().await;
-        let parser = Parser::new(intp.interner.clone(), filename, path_buf.clone());
+        let Ok(path_buf) = uri.to_file_path() else {
+            self.client.publish_diagnostics(uri, Vec::new(), None).await;
+            return;
+        };
+        let Some(filename) = path_buf.to_str() else {
+            self.client.publish_diagnostics(uri, Vec::new(), None).await;
+            return;
+        };
+        let interner = self.interpreter.read().await.interner.clone();
+        let parser = Parser::new(interner, filename, path_buf.clone());
 
         let mut diagnostics = Vec::new();
         if let Err(err) = parser.parse(&text) {
@@ -375,17 +381,11 @@ impl Backend {
             };
 
             let span = err_data.location.as_ariadne(text.as_ref());
-            let (sl, sc) = intp
-                .source_manager
-                .get_line_col_from_char_offset(text.as_ref(), span.start);
-            let (el, ec) = intp
-                .source_manager
-                .get_line_col_from_char_offset(text.as_ref(), span.end);
+            let start =
+                char_offset_to_position(&text, span.start).unwrap_or_else(|| Position::new(0, 0));
+            let end = char_offset_to_position(&text, span.end).unwrap_or(start);
 
-            let range = Range::new(
-                Position::new(sl as u32, sc as u32),
-                Position::new(el as u32, ec as u32),
-            );
+            let range = Range::new(start, end);
 
             diagnostics.push(Diagnostic {
                 range,
@@ -491,6 +491,22 @@ fn collect_statement_tokens(
                 collect_expression_tokens(module, interner, *update, text, out);
                 collect_statement_tokens(module, interner, &[*body], text, out);
             }
+            StatementKind::Try { body, handlers } => {
+                collect_statement_tokens(module, interner, &[*body], text, out);
+                for handler in handlers {
+                    collect_statement_tokens(module, interner, &[handler.body], text, out);
+                }
+            }
+            StatementKind::Raise { message, .. } => {
+                if let StatementKind::Raise { error_type, .. } = &statement.kind {
+                    if let Some(name) = module.arena.resolve_symbol(interner, *error_type) {
+                        push_name_token(out, text, statement.span, &name, 3, false);
+                    }
+                }
+                if let Some(message) = message {
+                    collect_expression_tokens(module, interner, *message, text, out);
+                }
+            }
             StatementKind::Block(items) => {
                 collect_statement_tokens(module, interner, items, text, out)
             }
@@ -513,6 +529,11 @@ fn collect_statement_tokens(
             StatementKind::ClassDefinition(class_def) => {
                 if let Some(name) = module.arena.resolve_symbol(interner, class_def.name) {
                     push_name_token(out, text, class_def.span, &name, 3, true);
+                }
+                if let Some(base_class) = class_def.base_class {
+                    if let Some(name) = module.arena.resolve_symbol(interner, base_class) {
+                        push_name_token(out, text, class_def.span, &name, 3, false);
+                    }
                 }
                 if let Some(MethodType::User(constructor)) = &class_def.constructor {
                     for param in &constructor.params {
@@ -661,6 +682,28 @@ fn find_top_level_symbol(
                     });
                 }
             }
+        } else if let StatementKind::NativeLibraryDefinition(definition) = &statement.kind {
+            for function in &definition.functions {
+                if let Some(function_name) = module.arena.resolve_symbol(interner, function.name) {
+                    if function_name == name {
+                        return Some(ResolvedSymbol {
+                            name: function_name,
+                            span: function.span,
+                        });
+                    }
+                }
+            }
+
+            for global in &definition.globals {
+                if let Some(global_name) = module.arena.resolve_symbol(interner, global.name) {
+                    if global_name == name {
+                        return Some(ResolvedSymbol {
+                            name: global_name,
+                            span: global.span,
+                        });
+                    }
+                }
+            }
         }
     }
 
@@ -707,6 +750,20 @@ fn collect_declarations(
             }
             StatementKind::While { body, .. } => {
                 collect_declarations(module, interner, &[*body], out)
+            }
+            StatementKind::Try { body, handlers } => {
+                collect_declarations(module, interner, &[*body], out);
+                for handler in handlers {
+                    if let Some(error_text) = handler.error_text {
+                        if let Some(name) = module.arena.resolve_symbol(interner, error_text) {
+                            out.push(ResolvedSymbol {
+                                name,
+                                span: statement.span,
+                            });
+                        }
+                    }
+                    collect_declarations(module, interner, &[handler.body], out);
+                }
             }
             StatementKind::Block(items) => collect_declarations(module, interner, items, out),
             StatementKind::FunctionDefinition(function) => {
@@ -767,6 +824,7 @@ fn collect_declarations(
             StatementKind::Expression(_)
             | StatementKind::IndexAssign { .. }
             | StatementKind::PropertyAssign { .. }
+            | StatementKind::Raise { .. }
             | StatementKind::Return(_)
             | StatementKind::NativeLibraryDefinition(_)
             | StatementKind::Empty => {}
@@ -823,6 +881,15 @@ fn collect_goida_files(roots: &[PathBuf]) -> Vec<PathBuf> {
 }
 
 fn walk_goida_files(dir: &Path, files: &mut Vec<PathBuf>) {
+    if dir
+        .file_name()
+        .and_then(|name| name.to_str())
+        .map(|name| matches!(name, ".git" | "target" | "node_modules" | ".idea"))
+        .unwrap_or(false)
+    {
+        return;
+    }
+
     let entries = match fs::read_dir(dir) {
         Ok(v) => v,
         Err(_) => return,
@@ -1002,6 +1069,7 @@ fn char_range_to_semantic_token(
 
 fn encode_semantic_tokens(mut tokens: Vec<SemanticTokenAbsolute>) -> Vec<SemanticToken> {
     tokens.sort_by_key(|tok| (tok.line, tok.start, tok.length, tok.token_type));
+    tokens.dedup_by_key(|tok| (tok.line, tok.start, tok.length, tok.token_type));
 
     let mut encoded = Vec::with_capacity(tokens.len());
     let mut prev_line = 0u32;

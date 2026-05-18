@@ -93,6 +93,9 @@ fn execute_code(code: &str, filename: &str) -> Result<(), (String, ErrorData)> {
                         (format!("Несоответствие типов: {}", err.message), err)
                     }
                     RuntimeError::Panic(err) => (format!("Паника: {}", err.message), err),
+                    RuntimeError::Raised(err, class_name) => {
+                        (format!("{}: {}", class_name, err.message), err)
+                    }
                     RuntimeError::DivisionByZero(err) => ("Деление на ноль".to_string(), err),
                     RuntimeError::InvalidOperation(err) => {
                         (format!("Недопустимая операция: {}", err.message), err)

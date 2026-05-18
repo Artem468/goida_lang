@@ -18,7 +18,7 @@ impl InterpreterFunctions for Interpreter {
         let final_arguments =
             self.bind_call_arguments(&*function, arguments, current_module_id, span, "Функция")?;
 
-        let execution_result = self.scoped_child_environment(
+        let execution_result = self.scoped_child_function_environment(
             |local_env| {
                 for (param, arg_value) in function.params.iter().zip(final_arguments.iter()) {
                     local_env.define(param.name, arg_value.clone());

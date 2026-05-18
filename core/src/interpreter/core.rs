@@ -114,6 +114,42 @@ impl CoreOperations for Interpreter {
 }
 
 impl Interpreter {
+    pub(crate) fn runtime_error_matches(
+        &self,
+        runtime_error_class: &str,
+        handler_class: Symbol,
+        current_module_id: Symbol,
+    ) -> bool {
+        let runtime_symbol = self.interner.read(|i| i.get(runtime_error_class));
+        if runtime_symbol == Some(handler_class) {
+            return true;
+        }
+
+        let generic_error = self.interner.read(|i| i.get("Ошибка"));
+        if generic_error == Some(handler_class) {
+            return true;
+        }
+
+        let Some(runtime_symbol) = runtime_symbol else {
+            return false;
+        };
+
+        let mut current = Some(runtime_symbol);
+        while let Some(class_symbol) = current {
+            if class_symbol == handler_class {
+                return true;
+            }
+
+            current = self
+                .modules
+                .get(&current_module_id)
+                .and_then(|module| module.classes.get(&class_symbol))
+                .and_then(|class| class.read(|class_def| class_def.base_class));
+        }
+
+        false
+    }
+
     fn register_module_tree(&mut self, mut module: Module) {
         let module_path = module.path.to_string_lossy().to_string();
         self.source_manager.load_file(module_path.as_str());
