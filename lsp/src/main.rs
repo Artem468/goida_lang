@@ -362,15 +362,11 @@ impl Backend {
 
     async fn validate(&self, uri: Url, text: String) {
         let Ok(path_buf) = uri.to_file_path() else {
-            self.client
-                .publish_diagnostics(uri, Vec::new(), None)
-                .await;
+            self.client.publish_diagnostics(uri, Vec::new(), None).await;
             return;
         };
         let Some(filename) = path_buf.to_str() else {
-            self.client
-                .publish_diagnostics(uri, Vec::new(), None)
-                .await;
+            self.client.publish_diagnostics(uri, Vec::new(), None).await;
             return;
         };
         let interner = self.interpreter.read().await.interner.clone();
@@ -385,10 +381,9 @@ impl Backend {
             };
 
             let span = err_data.location.as_ariadne(text.as_ref());
-            let start = char_offset_to_position(&text, span.start)
-                .unwrap_or_else(|| Position::new(0, 0));
-            let end = char_offset_to_position(&text, span.end)
-                .unwrap_or(start);
+            let start =
+                char_offset_to_position(&text, span.start).unwrap_or_else(|| Position::new(0, 0));
+            let end = char_offset_to_position(&text, span.end).unwrap_or(start);
 
             let range = Range::new(start, end);
 

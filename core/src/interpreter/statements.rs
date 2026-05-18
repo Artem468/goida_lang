@@ -183,12 +183,15 @@ impl StatementExecutor for Interpreter {
                                 return self.scoped_child_environment(
                                     |local_env| {
                                         if let Some(error_text) = handler.error_text {
-                                            local_env
-                                                .define(error_text, Value::Text(error_message.clone()));
+                                            local_env.define(
+                                                error_text,
+                                                Value::Text(error_message.clone()),
+                                            );
                                         }
                                     },
                                     |interpreter| {
-                                        interpreter.execute_statement(handler.body, current_module_id)
+                                        interpreter
+                                            .execute_statement(handler.body, current_module_id)
                                     },
                                 );
                             }
