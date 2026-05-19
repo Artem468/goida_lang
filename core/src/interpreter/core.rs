@@ -293,6 +293,10 @@ impl Interpreter {
             return Some((module_id, Value::Function(function.clone())));
         }
 
+        if let Some(class) = module.classes.get(&member) {
+            return Some((module_id, Value::Class(class.clone())));
+        }
+
         if let Some(value) = module.globals.get(&member) {
             return Some((module_id, value.clone()));
         }

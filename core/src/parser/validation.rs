@@ -1,6 +1,6 @@
 use crate::ast::prelude::*;
 use crate::ast::program::{FieldData, MethodType};
-use crate::interpreter::prelude::Module;
+use crate::interpreter::prelude::{Module, Value};
 use crate::parser::prelude::{ParseError, Parser as ParserTrait};
 use std::collections::HashSet;
 use string_interner::DefaultSymbol as Symbol;
@@ -353,9 +353,9 @@ impl ParserTrait {
         let Some(name) = self.module.arena.resolve_symbol(&self.interner, symbol) else {
             return false;
         };
-        if let Some((module_name, member_name)) = name.split_once('.') {
-            let module_symbol = self.module.arena.intern_string(&self.interner, module_name);
-            let member_symbol = self.module.arena.intern_string(&self.interner, member_name);
+        let parts = name.split('.').collect::<Vec<_>>();
+        if parts.len() > 1 {
+            let module_symbol = self.module.arena.intern_string(&self.interner, parts[0]);
             if !scopes
                 .iter()
                 .rev()
@@ -364,13 +364,46 @@ impl ParserTrait {
                 return false;
             }
 
-            return self.module.modules.values().any(|module| {
-                module.functions.contains_key(&member_symbol)
-                    || module.classes.contains_key(&member_symbol)
-                    || module.globals.contains_key(&member_symbol)
-            });
+            let member_name = parts.last().copied().unwrap_or_default();
+            let member_symbol = self.module.arena.intern_string(&self.interner, member_name);
+            return self
+                .resolve_module_path_for_validation(&self.module, &parts[..parts.len() - 1])
+                .map(|module| {
+                    module.functions.contains_key(&member_symbol)
+                        || module.classes.contains_key(&member_symbol)
+                        || module.globals.contains_key(&member_symbol)
+                })
+                .unwrap_or(false);
         }
 
         false
+    }
+
+    fn resolve_module_path_for_validation<'a>(
+        &'a self,
+        current_module: &'a Module,
+        parts: &[&str],
+    ) -> Option<&'a Module> {
+        let (first, rest) = parts.split_first()?;
+        let first_symbol = self.module.arena.intern_string(&self.interner, first);
+        let mut module = self.resolve_import_alias_for_validation(current_module, first_symbol)?;
+
+        for part in rest {
+            let part_symbol = self.module.arena.intern_string(&self.interner, part);
+            module = self.resolve_import_alias_for_validation(module, part_symbol)?;
+        }
+
+        Some(module)
+    }
+
+    fn resolve_import_alias_for_validation<'a>(
+        &'a self,
+        module: &'a Module,
+        alias: Symbol,
+    ) -> Option<&'a Module> {
+        match module.globals.get(&alias) {
+            Some(Value::Module(module_symbol)) => module.modules.get(module_symbol),
+            _ => None,
+        }
     }
 }
