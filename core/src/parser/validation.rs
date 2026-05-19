@@ -72,6 +72,9 @@ impl ParserTrait {
             "Система",
             "Терминал",
             "ДатаВремя",
+            "Поток",
+            "Мьютекс",
+            "БлокировкаЧтенияЗаписи",
         ] {
             names.insert(self.module.arena.intern_string(&self.interner, name));
         }
@@ -168,6 +171,7 @@ impl ParserTrait {
                 scopes.pop();
                 Ok(())
             }
+            StatementKind::Thread { body } => self.validate_thread_body_names(*body, scopes),
             StatementKind::Try { body, handlers } => {
                 self.validate_statement_names(*body, scopes)?;
                 for handler in handlers {
@@ -233,6 +237,22 @@ impl ParserTrait {
                 Ok(())
             }
             StatementKind::NativeLibraryDefinition(_) | StatementKind::Empty => Ok(()),
+        }
+    }
+
+    fn validate_thread_body_names(
+        &self,
+        stmt_id: StmtId,
+        scopes: &mut Vec<HashSet<Symbol>>,
+    ) -> Result<(), ParseError> {
+        let stmt = self.module.arena.get_statement(stmt_id).unwrap();
+        if let StatementKind::Block(statements) = &stmt.kind {
+            for stmt_id in statements {
+                self.validate_statement_names(*stmt_id, scopes)?;
+            }
+            Ok(())
+        } else {
+            self.validate_statement_names(stmt_id, scopes)
         }
     }
 

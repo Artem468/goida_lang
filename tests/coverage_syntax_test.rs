@@ -20,7 +20,6 @@ fn test_param_defaults_and_named_args() {
     assert_eq!(out, "5\n7\n11\n");
 }
 
-
 #[test]
 fn test_empty_literal() {
     let (ok, out, err) = run("examples/empty_literal_test.goida");

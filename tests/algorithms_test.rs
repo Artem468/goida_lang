@@ -3,7 +3,15 @@ use std::process::Command;
 #[test]
 fn test_stack_algorithm() {
     let output = Command::new("cargo")
-        .args(["run", "-q", "-p", "cli", "--", "run", "examples/stack_test.goida"]) 
+        .args([
+            "run",
+            "-q",
+            "-p",
+            "cli",
+            "--",
+            "run",
+            "examples/stack_test.goida",
+        ])
         .output()
         .expect("Не удалось запустить stack_test.goida");
 
@@ -20,7 +28,15 @@ fn test_stack_algorithm() {
 #[test]
 fn test_sort_algorithm() {
     let output = Command::new("cargo")
-        .args(["run", "-q", "-p", "cli", "--", "run", "examples/sort_test.goida"]) 
+        .args([
+            "run",
+            "-q",
+            "-p",
+            "cli",
+            "--",
+            "run",
+            "examples/sort_test.goida",
+        ])
         .output()
         .expect("Не удалось запустить sort_test.goida");
 
@@ -37,7 +53,15 @@ fn test_sort_algorithm() {
 #[test]
 fn test_filter_map_algorithm() {
     let output = Command::new("cargo")
-        .args(["run", "-q", "-p", "cli", "--", "run", "examples/filter_test.goida"]) 
+        .args([
+            "run",
+            "-q",
+            "-p",
+            "cli",
+            "--",
+            "run",
+            "examples/filter_test.goida",
+        ])
         .output()
         .expect("Не удалось запустить filter_test.goida");
 
@@ -54,7 +78,15 @@ fn test_filter_map_algorithm() {
 #[test]
 fn test_recursion_factorial() {
     let output = Command::new("cargo")
-        .args(["run", "-q", "-p", "cli", "--", "run", "examples/recursion_test.goida"]) 
+        .args([
+            "run",
+            "-q",
+            "-p",
+            "cli",
+            "--",
+            "run",
+            "examples/recursion_test.goida",
+        ])
         .output()
         .expect("Не удалось запустить recursion_test.goida");
 

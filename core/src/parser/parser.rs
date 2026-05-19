@@ -134,6 +134,10 @@ impl ParserTrait {
                             let stmt_id = self.parse_for_stmt(inner)?;
                             self.module.body.push(stmt_id);
                         }
+                        Rule::thread_stmt => {
+                            let stmt_id = self.parse_thread_stmt(inner)?;
+                            self.module.body.push(stmt_id);
+                        }
                         Rule::return_stmt => {
                             let stmt_id = self.parse_return_stmt(inner)?;
                             self.module.body.push(stmt_id);

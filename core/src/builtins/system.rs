@@ -21,7 +21,7 @@ pub fn setup_system_class(interner_ref: &SharedInterner) -> (Symbol, SharedMut<C
 
     // --- Система.паника(сообщение) ---
     define_method!(class_def, interner_ref, @static "паника" => (_, args, span) {
-        let msg = CallArgListExt::get_value(&args, 1)
+        let msg = CallArgListExt::first_value(&args)
             .map(|v| v.to_string())
             .unwrap_or_else(|| "Неизвестная ошибка".into());
         bail_runtime!(
@@ -60,7 +60,7 @@ pub fn setup_system_class(interner_ref: &SharedInterner) -> (Symbol, SharedMut<C
 
     // --- Система.сон(миллисекунды) ---
     define_method!(class_def, interner_ref, @static "сон" => (_, args, span) {
-        let ms = match CallArgListExt::get_value(&args, 1) {
+        let ms = match CallArgListExt::first_value(&args) {
             Some(Value::Number(n)) => *n,
             _ => {
                 return bail_runtime!(

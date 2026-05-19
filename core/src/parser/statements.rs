@@ -51,6 +51,10 @@ impl ParserTrait {
                     let stmt_id = self.parse_for_stmt(inner)?;
                     statements.push(stmt_id);
                 }
+                Rule::thread_stmt => {
+                    let stmt_id = self.parse_thread_stmt(inner)?;
+                    statements.push(stmt_id);
+                }
                 Rule::return_stmt => {
                     let stmt_id = self.parse_return_stmt(inner)?;
                     statements.push(stmt_id);
@@ -572,5 +576,26 @@ impl ParserTrait {
             .arena
             .add_statement(StatementKind::Return(expr), return_span);
         Ok(stmt_id)
+    }
+
+    pub(crate) fn parse_thread_stmt(
+        &mut self,
+        pair: pest::iterators::Pair<Rule>,
+    ) -> Result<StmtId, ParseError> {
+        let thread_span: Span = (pair.as_span(), self.module.name).into();
+        let mut inner = pair.into_inner();
+        let block_pair = inner.next().ok_or_else(|| {
+            ParseError::InvalidSyntax(ErrorData::new(thread_span, "Ожидался блок потока".into()))
+        })?;
+        let block_stmts = self.parse_block(block_pair)?;
+        let body = self
+            .module
+            .arena
+            .add_statement(StatementKind::Block(block_stmts), thread_span);
+
+        Ok(self
+            .module
+            .arena
+            .add_statement(StatementKind::Thread { body }, thread_span))
     }
 }

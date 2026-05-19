@@ -4,6 +4,7 @@ use crate::shared::SharedMut;
 use crate::traits::prelude::{CoreOperations, ExpressionEvaluator, StatementExecutor};
 use crate::{bail_runtime, runtime_error};
 use std::sync::Arc;
+use std::thread;
 use string_interner::DefaultSymbol;
 
 impl StatementExecutor for Interpreter {
@@ -163,6 +164,24 @@ impl StatementExecutor for Interpreter {
                         Ok(())
                     },
                 )
+            }
+
+            StatementKind::Thread { body } => {
+                let mut thread_interpreter = self.fork_for_thread();
+                let span = stmt_kind.span;
+                let handle = thread::spawn(move || {
+                    let result = match thread_interpreter.execute_thread_body(body, current_module_id)
+                    {
+                        Err(RuntimeError::Return(..)) => Ok(()),
+                        result => result,
+                    };
+
+                    result?;
+                    thread_interpreter.join_background_threads(current_module_id, span)
+                });
+                self.background_threads
+                    .push(crate::interpreter::structs::RuntimeThread::new(handle));
+                Ok(())
             }
 
             StatementKind::Try { body, handlers } => {
@@ -333,5 +352,68 @@ impl StatementExecutor for Interpreter {
             }
             _ => Ok(()),
         }
+    }
+}
+
+impl Interpreter {
+    fn execute_thread_body(
+        &mut self,
+        body: StmtId,
+        current_module_id: DefaultSymbol,
+    ) -> Result<(), RuntimeError> {
+        let stmt_kind = {
+            let module = self.modules.get(&current_module_id).ok_or_else(|| {
+                let module_name = self.resolve_symbol(current_module_id).unwrap();
+                runtime_error!(
+                    InvalidOperation,
+                    Span::default(),
+                    "РњРѕРґСѓР»СЊ {module_name} РЅРµ РЅР°Р№РґРµРЅ"
+                )
+            })?;
+            module.arena.get_statement(body).unwrap().clone()
+        };
+
+        if let StatementKind::Block(statements) = stmt_kind.kind {
+            for stmt_id in statements {
+                self.execute_statement(stmt_id, current_module_id)?;
+            }
+            Ok(())
+        } else {
+            self.execute_statement(body, current_module_id)
+        }
+    }
+
+    pub(crate) fn join_thread_handle(
+        &self,
+        thread_value: &crate::interpreter::structs::RuntimeThread,
+        span: Span,
+    ) -> Result<Value, RuntimeError> {
+        let handle = thread_value
+            .handle
+            .lock()
+            .map_err(|_| runtime_error!(InvalidOperation, span, "Блокировка потока повреждена"))?
+            .take();
+
+        if let Some(handle) = handle {
+            match handle.join() {
+                Ok(Ok(())) => Ok(Value::Empty),
+                Ok(Err(err)) => Err(err),
+                Err(_) => bail_runtime!(Panic, span, "Поток завершился паникой"),
+            }
+        } else {
+            Ok(Value::Empty)
+        }
+    }
+
+    pub(crate) fn join_background_threads(
+        &mut self,
+        _current_module_id: DefaultSymbol,
+        span: Span,
+    ) -> Result<(), RuntimeError> {
+        let threads = std::mem::take(&mut self.background_threads);
+        for thread_value in threads {
+            self.join_thread_handle(&thread_value, span)?;
+        }
+        Ok(())
     }
 }

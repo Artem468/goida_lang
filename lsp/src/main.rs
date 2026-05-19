@@ -491,6 +491,9 @@ fn collect_statement_tokens(
                 collect_expression_tokens(module, interner, *update, text, out);
                 collect_statement_tokens(module, interner, &[*body], text, out);
             }
+            StatementKind::Thread { body } => {
+                collect_statement_tokens(module, interner, &[*body], text, out);
+            }
             StatementKind::Try { body, handlers } => {
                 collect_statement_tokens(module, interner, &[*body], text, out);
                 for handler in handlers {
@@ -751,6 +754,7 @@ fn collect_declarations(
             StatementKind::While { body, .. } => {
                 collect_declarations(module, interner, &[*body], out)
             }
+            StatementKind::Thread { body } => collect_declarations(module, interner, &[*body], out),
             StatementKind::Try { body, handlers } => {
                 collect_declarations(module, interner, &[*body], out);
                 for handler in handlers {

@@ -11,7 +11,8 @@ use crate::shared::SharedMut;
 use libloading::Library;
 use std::fmt::Debug;
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::sync::{Arc, Condvar, Mutex, RwLock};
+use std::thread::{JoinHandle, ThreadId};
 use string_interner::backend::StringBackend;
 use string_interner::{DefaultSymbol as Symbol, StringInterner};
 
@@ -29,9 +30,68 @@ pub enum Value {
     List(SharedMut<Vec<Value>>),
     Array(Arc<Vec<Value>>),
     Dict(SharedMut<HashMap<String, Value>>),
+    Thread(RuntimeThread),
+    Mutex(RuntimeMutex),
+    RwLock(RuntimeRwLock),
     NativeResource(SharedMut<Box<dyn Any + Send + Sync>>),
     NativeGlobal(Arc<NativeGlobalBinding>),
     Empty,
+}
+
+#[derive(Clone, Debug)]
+pub struct RuntimeThread {
+    pub handle: Arc<Mutex<Option<JoinHandle<Result<(), RuntimeError>>>>>,
+}
+
+impl RuntimeThread {
+    pub fn new(handle: JoinHandle<Result<(), RuntimeError>>) -> Self {
+        Self {
+            handle: Arc::new(Mutex::new(Some(handle))),
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct RuntimeMutex {
+    pub value: Arc<Mutex<Value>>,
+    pub state: Arc<(Mutex<MutexLockState>, Condvar)>,
+}
+
+impl RuntimeMutex {
+    pub fn new(value: Value) -> Self {
+        Self {
+            value: Arc::new(Mutex::new(value)),
+            state: Arc::new((Mutex::new(MutexLockState::default()), Condvar::new())),
+        }
+    }
+}
+
+#[derive(Debug, Default)]
+pub struct MutexLockState {
+    pub owner: Option<ThreadId>,
+    pub depth: usize,
+}
+
+#[derive(Clone, Debug)]
+pub struct RuntimeRwLock {
+    pub value: Arc<RwLock<Value>>,
+    pub state: Arc<(Mutex<RwLockState>, Condvar)>,
+}
+
+impl RuntimeRwLock {
+    pub fn new(value: Value) -> Self {
+        Self {
+            value: Arc::new(RwLock::new(value)),
+            state: Arc::new((Mutex::new(RwLockState::default()), Condvar::new())),
+        }
+    }
+}
+
+#[derive(Debug, Default)]
+pub struct RwLockState {
+    pub writer: Option<ThreadId>,
+    pub writer_depth: usize,
+    pub readers: HashMap<ThreadId, usize>,
 }
 
 #[derive(Clone, Debug)]
@@ -172,6 +232,7 @@ pub struct Interpreter {
     pub(crate) native_libraries: HashMap<PathBuf, SharedMut<LoadedNativeLibrary>>,
     pub interner: SharedInterner,
     pub(crate) environment: SharedMut<Environment>,
+    pub(crate) background_threads: Vec<RuntimeThread>,
     pub(crate) method_depth: usize,
     pub source_manager: SourceManager,
 }

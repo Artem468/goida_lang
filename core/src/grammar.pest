@@ -73,6 +73,7 @@ class_method = {
 
 // === Statements ===
 statement = _{
+    thread_stmt |
     assignment |
     property_assign |
     if_stmt |
@@ -126,6 +127,10 @@ while_stmt = {
 
 for_stmt = {
     "для" ~ "(" ~ for_init ~ ";" ~ for_condition ~ ";" ~ for_update ~ ")" ~ block
+}
+
+thread_stmt = {
+    "поток" ~ block
 }
 
 for_init = {

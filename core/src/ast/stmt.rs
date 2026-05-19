@@ -40,6 +40,9 @@ pub enum StatementKind {
         update: ExprId,
         body: StmtId,
     },
+    Thread {
+        body: StmtId,
+    },
     Try {
         body: StmtId,
         handlers: Vec<TryHandler>,

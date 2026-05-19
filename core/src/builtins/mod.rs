@@ -14,6 +14,7 @@ mod number;
 mod system;
 mod terminal;
 mod text;
+mod thread;
 
 impl Interpreter {
     pub fn define_builtins(&mut self) {
@@ -47,5 +48,11 @@ impl Interpreter {
         self.std_classes.insert(color_name, color_class);
         let (datetime_name, datetime_class) = datetime::setup_datetime_class(&interner);
         self.std_classes.insert(datetime_name, datetime_class);
+        let (thread_name, thread_class) = thread::setup_thread_class(&interner);
+        self.std_classes.insert(thread_name, thread_class);
+        let (mutex_name, mutex_class) = thread::setup_mutex_class(&interner);
+        self.std_classes.insert(mutex_name, mutex_class);
+        let (rwlock_name, rwlock_class) = thread::setup_rwlock_class(&interner);
+        self.std_classes.insert(rwlock_name, rwlock_class);
     }
 }

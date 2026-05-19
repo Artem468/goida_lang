@@ -190,6 +190,18 @@ impl AstArena {
                 "ДатаВремя",
                 DataType::Object(self.intern_string(interner, "ДатаВремя")),
             ),
+            (
+                "Поток",
+                DataType::Object(self.intern_string(interner, "Поток")),
+            ),
+            (
+                "Мьютекс",
+                DataType::Object(self.intern_string(interner, "Мьютекс")),
+            ),
+            (
+                "БлокировкаЧтенияЗаписи",
+                DataType::Object(self.intern_string(interner, "БлокировкаЧтенияЗаписи")),
+            ),
             ("модуль", DataType::Runtime(RuntimeType::Module)),
             ("ресурс", DataType::Runtime(RuntimeType::Resource)),
             ("класс", DataType::Runtime(RuntimeType::Class)),
