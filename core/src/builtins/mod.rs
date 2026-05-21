@@ -8,6 +8,7 @@ mod dict;
 mod file;
 mod float;
 mod io;
+pub(crate) mod iterator;
 mod json;
 mod list;
 mod number;
@@ -23,6 +24,7 @@ impl Interpreter {
         list::setup_list_func(self, &interner);
         array::setup_array_func(self, &interner);
         dict::setup_dict_func(self, &interner);
+        iterator::setup_iterator_func(self, &interner);
         text::setup_text_func(self, &interner);
         number::setup_number_func(self, &interner);
         float::setup_float_func(self, &interner);
@@ -40,6 +42,8 @@ impl Interpreter {
         self.std_classes.insert(array_name, array_class);
         let (dict_name, dict_class) = dict::setup_dict_class(&interner);
         self.std_classes.insert(dict_name, dict_class);
+        let (iterator_name, iterator_class) = iterator::setup_iterator_class(&interner);
+        self.std_classes.insert(iterator_name, iterator_class);
         let (file_name, file_class) = file::setup_file_class(&interner);
         self.std_classes.insert(file_name, file_class);
         let (system_name, system_class) = system::setup_system_class(&interner);

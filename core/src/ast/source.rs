@@ -56,6 +56,12 @@ impl SourceManager {
     }
 }
 
+impl Default for SourceManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<'a> Cache<&'a String> for &SourceManager {
     type Storage = String;
 

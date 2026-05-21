@@ -242,20 +242,7 @@ impl Interpreter {
         let module_dir = module_path.parent().unwrap_or_else(|| Path::new("."));
         let full_path = module_dir.join(relative_path);
 
-        if full_path.exists() {
-            return full_path.canonicalize().map_err(|err| {
-                runtime_error!(
-                    IOError,
-                    span,
-                    "Failed to normalize native library path '{}': {}",
-                    full_path.display(),
-                    err
-                )
-            });
-        }
-
-        if full_path.extension().is_none() {
-            let candidate = full_path.with_extension(std::env::consts::DLL_EXTENSION);
+        for candidate in native_library_path_candidates(&full_path) {
             if candidate.exists() {
                 return candidate.canonicalize().map_err(|err| {
                     runtime_error!(
@@ -268,6 +255,7 @@ impl Interpreter {
                 });
             }
         }
+
         bail_runtime!(
             IOError,
             span,
@@ -733,6 +721,67 @@ impl Interpreter {
             DataType::Any => "неизвестно".into(),
             DataType::Unit => "пустота".into(),
         }
+    }
+}
+
+fn native_library_path_candidates(path: &Path) -> Vec<PathBuf> {
+    let mut candidates = vec![path.to_path_buf()];
+    if path.extension().is_some() {
+        return candidates;
+    }
+
+    candidates.push(path.with_extension(std::env::consts::DLL_EXTENSION));
+
+    if let (Some(parent), Some(file_name)) = (path.parent(), path.file_name()) {
+        let platform_name = format!(
+            "{}{}{}",
+            std::env::consts::DLL_PREFIX,
+            file_name.to_string_lossy(),
+            std::env::consts::DLL_SUFFIX
+        );
+        let platform_path = parent.join(platform_name);
+        if !candidates
+            .iter()
+            .any(|candidate| candidate == &platform_path)
+        {
+            candidates.push(platform_path);
+        }
+    }
+
+    candidates
+}
+
+#[cfg(test)]
+mod tests {
+    use super::native_library_path_candidates;
+    use std::path::Path;
+
+    #[test]
+    fn native_library_candidates_include_platform_name_for_stem_paths() {
+        let candidates = native_library_path_candidates(Path::new("target/debug/demo"));
+        let extension_path =
+            Path::new("target/debug").join(format!("demo.{}", std::env::consts::DLL_EXTENSION));
+        let platform_path = Path::new("target/debug").join(format!(
+            "{}demo{}",
+            std::env::consts::DLL_PREFIX,
+            std::env::consts::DLL_SUFFIX
+        ));
+
+        assert!(candidates
+            .iter()
+            .any(|path| path == Path::new("target/debug/demo")));
+        assert!(candidates.iter().any(|path| path == &extension_path));
+        assert!(candidates.iter().any(|path| path == &platform_path));
+    }
+
+    #[test]
+    fn native_library_candidates_keep_explicit_filenames_exact() {
+        let path = Path::new("target/debug/demo.custom");
+
+        assert_eq!(
+            native_library_path_candidates(path),
+            vec![path.to_path_buf()]
+        );
     }
 }
 

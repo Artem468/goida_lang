@@ -16,6 +16,10 @@ use std::thread::{JoinHandle, ThreadId};
 use string_interner::backend::StringBackend;
 use string_interner::{DefaultSymbol as Symbol, StringInterner};
 
+pub type ThreadJoinState = Arc<Mutex<Option<JoinHandle<Result<(), RuntimeError>>>>>;
+pub type BuiltinCallback =
+    dyn Fn(&Interpreter, Vec<CallArgValue>, Span) -> Result<Value, RuntimeError> + Send + Sync;
+
 #[derive(Clone, Debug)]
 /// Runtime value representation used by the interpreter and built-ins.
 pub enum Value {
@@ -31,6 +35,7 @@ pub enum Value {
     List(SharedMut<Vec<Value>>),
     Array(Arc<Vec<Value>>),
     Dict(SharedMut<HashMap<String, Value>>),
+    Iterator(RuntimeIterator),
     Thread(RuntimeThread),
     Mutex(RuntimeMutex),
     RwLock(RuntimeRwLock),
@@ -40,9 +45,41 @@ pub enum Value {
 }
 
 #[derive(Clone, Debug)]
+/// Lazy iterator pipeline over runtime values.
+pub struct RuntimeIterator {
+    pub source: Arc<Vec<Value>>,
+    pub steps: Arc<Vec<IteratorStep>>,
+}
+
+impl RuntimeIterator {
+    pub fn new(source: Vec<Value>) -> Self {
+        Self {
+            source: Arc::new(source),
+            steps: Arc::new(Vec::new()),
+        }
+    }
+
+    pub fn with_step(&self, step: IteratorStep) -> Self {
+        let mut steps = self.steps.as_ref().clone();
+        steps.push(step);
+        Self {
+            source: self.source.clone(),
+            steps: Arc::new(steps),
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+/// Single lazy iterator transformation.
+pub enum IteratorStep {
+    Map(Value),
+    Filter(Value),
+}
+
+#[derive(Clone, Debug)]
 /// Join handle for a language-level background thread.
 pub struct RuntimeThread {
-    pub handle: Arc<Mutex<Option<JoinHandle<Result<(), RuntimeError>>>>>,
+    pub handle: ThreadJoinState,
 }
 
 impl RuntimeThread {
@@ -163,11 +200,7 @@ impl CallArgListExt for Vec<CallArgValue> {
 
 #[derive(Clone)]
 /// Native/built-in function callable from Goida code.
-pub struct BuiltinFn(
-    pub  Arc<
-        dyn Fn(&Interpreter, Vec<CallArgValue>, Span) -> Result<Value, RuntimeError> + Send + Sync,
-    >,
-);
+pub struct BuiltinFn(pub Arc<BuiltinCallback>);
 
 #[derive(Debug)]
 /// Runtime failures surfaced by the interpreter.
@@ -237,6 +270,7 @@ impl RuntimeError {
 /// Lexical environment frame.
 pub struct Environment {
     pub(crate) variables: HashMap<Symbol, Value>,
+    pub(crate) constants: HashMap<Symbol, ()>,
     pub(crate) parent: Option<SharedMut<Environment>>,
     pub(crate) is_function: bool,
 }

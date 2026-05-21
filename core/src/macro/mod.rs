@@ -84,7 +84,7 @@ macro_rules! bail_runtime {
 macro_rules! expect_args {
     ($args:expr, $n:expr, $span:expr, $name:expr) => {
         if $args.len() != $n {
-            return crate::bail_runtime!(
+            return $crate::bail_runtime!(
                 InvalidOperation,
                 $span,
                 "{} ожидает {} аргументов, получено {}",

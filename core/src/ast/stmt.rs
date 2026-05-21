@@ -20,6 +20,7 @@ pub enum StatementKind {
     Expression(ExprId),
     Assign {
         name: Symbol,
+        is_const: bool,
         type_hint: Option<TypeId>,
         value: ExprId,
     },
@@ -48,6 +49,11 @@ pub enum StatementKind {
         init: ExprId,
         condition: ExprId,
         update: StmtId,
+        body: StmtId,
+    },
+    ForEach {
+        variable: Symbol,
+        iterable: ExprId,
         body: StmtId,
     },
     Thread {

@@ -86,6 +86,7 @@ impl CoreOperations for Interpreter {
             Value::List(_) => "Список",
             Value::Array(_) => "Массив",
             Value::Dict(_) => "Словарь",
+            Value::Iterator(_) => "Итератор",
             Value::Thread(_) => "Поток",
             Value::Mutex(_) => "Мьютекс",
             Value::RwLock(_) => "БлокировкаЧтенияЗаписи",

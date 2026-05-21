@@ -46,7 +46,7 @@ impl ParserTrait {
             names.insert(import.item.alias);
         }
         for module in self.module.modules.values() {
-            self.collect_module_exported_names(module, &mut names);
+            Self::collect_module_exported_names(module, &mut names);
         }
 
         for name in [
@@ -61,12 +61,14 @@ impl ParserTrait {
             "список",
             "массив",
             "словарь",
+            "итератор",
             "из_json",
             "в_json",
             "строка_из_указателя",
             "Список",
             "Массив",
             "Словарь",
+            "Итератор",
             "Строка",
             "Файл",
             "Система",
@@ -82,11 +84,7 @@ impl ParserTrait {
         names
     }
 
-    pub(crate) fn collect_module_exported_names(
-        &self,
-        module: &Module,
-        names: &mut HashSet<Symbol>,
-    ) {
+    pub(crate) fn collect_module_exported_names(module: &Module, names: &mut HashSet<Symbol>) {
         for name in module.functions.keys() {
             names.insert(*name);
         }
@@ -109,7 +107,7 @@ impl ParserTrait {
             }
         }
         for nested in module.modules.values() {
-            self.collect_module_exported_names(nested, names);
+            Self::collect_module_exported_names(nested, names);
         }
     }
 
@@ -171,6 +169,18 @@ impl ParserTrait {
                 scopes.last_mut().unwrap().insert(*variable);
                 self.validate_expression_names(*condition, scopes)?;
                 self.validate_statement_names(*update, scopes)?;
+                self.validate_statement_names(*body, scopes)?;
+                scopes.pop();
+                Ok(())
+            }
+            StatementKind::ForEach {
+                variable,
+                iterable,
+                body,
+            } => {
+                self.validate_expression_names(*iterable, scopes)?;
+                scopes.push(HashSet::new());
+                scopes.last_mut().unwrap().insert(*variable);
                 self.validate_statement_names(*body, scopes)?;
                 scopes.pop();
                 Ok(())

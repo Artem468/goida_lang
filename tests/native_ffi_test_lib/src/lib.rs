@@ -73,6 +73,8 @@ pub extern "C" fn ffi_create_demo_text() -> *mut c_void {
 }
 
 #[no_mangle]
+/// # Safety
+/// `ptr` must be null or a pointer returned by `ffi_create_demo_text`.
 pub unsafe extern "C" fn ffi_text_len(ptr: *mut c_void) -> i64 {
     as_ref::<NativeText>(ptr)
         .map(|value| value.bytes.len() as i64)
@@ -80,6 +82,8 @@ pub unsafe extern "C" fn ffi_text_len(ptr: *mut c_void) -> i64 {
 }
 
 #[no_mangle]
+/// # Safety
+/// `ptr` must be null or a pointer returned by `ffi_create_demo_text`.
 pub unsafe extern "C" fn ffi_text_byte_at(ptr: *mut c_void, index: i64) -> i64 {
     if index < 0 {
         return i64::MIN;
@@ -91,6 +95,8 @@ pub unsafe extern "C" fn ffi_text_byte_at(ptr: *mut c_void, index: i64) -> i64 {
 }
 
 #[no_mangle]
+/// # Safety
+/// `ptr` must be null or a pointer returned by `ffi_create_demo_text` and not freed yet.
 pub unsafe extern "C" fn ffi_text_free(ptr: *mut c_void) {
     if !ptr.is_null() {
         drop(Box::from_raw(ptr as *mut NativeText));
@@ -106,6 +112,8 @@ pub extern "C" fn ffi_create_list3(a: i64, b: i64, c: i64) -> *mut c_void {
 }
 
 #[no_mangle]
+/// # Safety
+/// `ptr` must be null or a pointer returned by `ffi_create_list3`.
 pub unsafe extern "C" fn ffi_list_len(ptr: *mut c_void) -> i64 {
     as_ref::<NativeList>(ptr)
         .map(|value| value.items.len() as i64)
@@ -113,6 +121,8 @@ pub unsafe extern "C" fn ffi_list_len(ptr: *mut c_void) -> i64 {
 }
 
 #[no_mangle]
+/// # Safety
+/// `ptr` must be null or a pointer returned by `ffi_create_list3`.
 pub unsafe extern "C" fn ffi_list_i64_at(ptr: *mut c_void, index: i64) -> i64 {
     if index < 0 {
         return i64::MIN;
@@ -124,6 +134,8 @@ pub unsafe extern "C" fn ffi_list_i64_at(ptr: *mut c_void, index: i64) -> i64 {
 }
 
 #[no_mangle]
+/// # Safety
+/// `ptr` must be null or a pointer returned by `ffi_create_list3` and not freed yet.
 pub unsafe extern "C" fn ffi_list_free(ptr: *mut c_void) {
     if !ptr.is_null() {
         drop(Box::from_raw(ptr as *mut NativeList));
@@ -139,6 +151,8 @@ pub extern "C" fn ffi_create_array3(a: i64, b: i64, c: i64) -> *mut c_void {
 }
 
 #[no_mangle]
+/// # Safety
+/// `ptr` must be null or a pointer returned by `ffi_create_array3`.
 pub unsafe extern "C" fn ffi_array_len(ptr: *mut c_void) -> i64 {
     as_ref::<NativeArray>(ptr)
         .map(|value| value.items.len() as i64)
@@ -146,6 +160,8 @@ pub unsafe extern "C" fn ffi_array_len(ptr: *mut c_void) -> i64 {
 }
 
 #[no_mangle]
+/// # Safety
+/// `ptr` must be null or a pointer returned by `ffi_create_array3`.
 pub unsafe extern "C" fn ffi_array_i64_at(ptr: *mut c_void, index: i64) -> i64 {
     if index < 0 {
         return i64::MIN;
@@ -157,6 +173,8 @@ pub unsafe extern "C" fn ffi_array_i64_at(ptr: *mut c_void, index: i64) -> i64 {
 }
 
 #[no_mangle]
+/// # Safety
+/// `ptr` must be null or a pointer returned by `ffi_create_array3` and not freed yet.
 pub unsafe extern "C" fn ffi_array_free(ptr: *mut c_void) {
     if !ptr.is_null() {
         drop(Box::from_raw(ptr as *mut NativeArray));
@@ -175,6 +193,8 @@ pub extern "C" fn ffi_create_demo_dict() -> *mut c_void {
 }
 
 #[no_mangle]
+/// # Safety
+/// `ptr` must be null or a pointer returned by `ffi_create_demo_dict`.
 pub unsafe extern "C" fn ffi_dict_len(ptr: *mut c_void) -> i64 {
     as_ref::<NativeDict>(ptr)
         .map(|value| value.map.len() as i64)
@@ -182,6 +202,8 @@ pub unsafe extern "C" fn ffi_dict_len(ptr: *mut c_void) -> i64 {
 }
 
 #[no_mangle]
+/// # Safety
+/// `ptr` must be null or a pointer returned by `ffi_create_demo_dict`.
 pub unsafe extern "C" fn ffi_dict_get_i64_known_key(ptr: *mut c_void, key_id: i64) -> i64 {
     let key = match key_id {
         1 => "ключ",
@@ -194,6 +216,8 @@ pub unsafe extern "C" fn ffi_dict_get_i64_known_key(ptr: *mut c_void, key_id: i6
 }
 
 #[no_mangle]
+/// # Safety
+/// `ptr` must be null or a pointer returned by `ffi_create_demo_dict`.
 pub unsafe extern "C" fn ffi_dict_get_text_len_known_key(ptr: *mut c_void, key_id: i64) -> i64 {
     let key = match key_id {
         2 => "текст",
@@ -206,6 +230,8 @@ pub unsafe extern "C" fn ffi_dict_get_text_len_known_key(ptr: *mut c_void, key_i
 }
 
 #[no_mangle]
+/// # Safety
+/// `ptr` must be null or a pointer returned by `ffi_create_demo_dict` and not freed yet.
 pub unsafe extern "C" fn ffi_dict_free(ptr: *mut c_void) {
     if !ptr.is_null() {
         drop(Box::from_raw(ptr as *mut NativeDict));

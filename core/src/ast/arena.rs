@@ -234,3 +234,9 @@ impl AstArena {
         }
     }
 }
+
+impl Default for AstArena {
+    fn default() -> Self {
+        Self::new()
+    }
+}

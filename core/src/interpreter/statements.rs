@@ -1,4 +1,5 @@
 use crate::ast::prelude::{BinaryOperator, ErrorData, ExpressionKind, Span, StatementKind, StmtId};
+use crate::builtins::iterator::collect_iterator;
 use crate::interpreter::prelude::{Interpreter, RuntimeError, Value};
 use crate::shared::SharedMut;
 use crate::traits::prelude::{
@@ -33,9 +34,18 @@ impl StatementExecutor for Interpreter {
                 Ok(())
             }
 
-            StatementKind::Assign { name, value, .. } => {
+            StatementKind::Assign {
+                name,
+                is_const,
+                value,
+                ..
+            } => {
                 let val = self.evaluate_expression(value, current_module_id)?;
-                self.assign_identifier(name, val, current_module_id, stmt_kind.span)
+                if is_const {
+                    self.define_constant(name, val, current_module_id, stmt_kind.span)
+                } else {
+                    self.assign_identifier(name, val, current_module_id, stmt_kind.span)
+                }
             }
 
             StatementKind::CompoundAssign { target, op, value } => self
@@ -87,6 +97,28 @@ impl StatementExecutor for Interpreter {
                             interpreter.execute_statement(body, current_module_id)?;
 
                             interpreter.execute_statement(update, current_module_id)?;
+                        }
+                        Ok(())
+                    },
+                )
+            }
+
+            StatementKind::ForEach {
+                variable,
+                iterable,
+                body,
+            } => {
+                let iterable_value = self.evaluate_expression(iterable, current_module_id)?;
+                let items = self.iterable_values(iterable_value, stmt_kind.span)?;
+
+                self.scoped_child_environment(
+                    |_| {},
+                    |interpreter| {
+                        for item in items {
+                            interpreter
+                                .environment
+                                .write(|env| env.define(variable, item));
+                            interpreter.execute_statement(body, current_module_id)?;
                         }
                         Ok(())
                     },
@@ -319,6 +351,9 @@ impl Interpreter {
         }
 
         if let Some(target_env) = found_env {
+            if target_env.read(|env| env.is_constant(name)) {
+                return bail_runtime!(InvalidOperation, span, "Нельзя изменить константу");
+            }
             target_env.write(|env| {
                 env.variables.insert(name, val.clone());
             });
@@ -343,6 +378,51 @@ impl Interpreter {
         }
 
         Ok(())
+    }
+
+    fn define_constant(
+        &mut self,
+        name: DefaultSymbol,
+        val: Value,
+        current_module_id: DefaultSymbol,
+        span: Span,
+    ) -> Result<(), RuntimeError> {
+        if self
+            .environment
+            .read(|env| env.variables.contains_key(&name))
+        {
+            return bail_runtime!(InvalidOperation, span, "Нельзя изменить константу");
+        }
+
+        self.environment
+            .write(|env| env.define_const(name, val.clone()));
+
+        if self.environment.read(|env| env.parent.is_none()) {
+            if let Some(module) = self.modules.get_mut(&current_module_id) {
+                module.globals.insert(name, val);
+            }
+        }
+
+        Ok(())
+    }
+
+    fn iterable_values(&self, value: Value, span: Span) -> Result<Vec<Value>, RuntimeError> {
+        match value {
+            Value::List(list) => Ok(list.read(|items| items.clone())),
+            Value::Array(items) => Ok(items.as_ref().clone()),
+            Value::Text(text) => Ok(text.chars().map(|ch| Value::Text(ch.to_string())).collect()),
+            Value::Dict(dict) => Ok(dict.read(|items| {
+                let mut keys: Vec<_> = items.keys().cloned().collect();
+                keys.sort();
+                keys.into_iter().map(Value::Text).collect()
+            })),
+            Value::Iterator(iterator) => collect_iterator(self, &iterator, span),
+            _ => bail_runtime!(
+                TypeError,
+                span,
+                "Значение не поддерживает перебор в цикле для"
+            ),
+        }
     }
 
     fn apply_compound_operator(

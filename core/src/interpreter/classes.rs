@@ -127,7 +127,7 @@ impl ClassInstance {
 
                 match data {
                     FieldData::Expression(opt_expr) => {
-                        fields.insert(*name, opt_expr.clone());
+                        fields.insert(*name, *opt_expr);
                     }
                     FieldData::Value(val_lock) => {
                         let value = val_lock.read(|v| v.clone());

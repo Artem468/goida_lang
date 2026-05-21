@@ -1,4 +1,4 @@
-библиотека "../target/debug/native_ffi_test_lib.dll" {
+библиотека "../target/debug/native_ffi_test_lib" {
     функция add(a: число, b: число) -> число {}
     функция minus(a: число, b: число) -> число {}
     переменная COUNTER: число
