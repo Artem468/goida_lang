@@ -110,6 +110,10 @@ impl ParserTrait {
                             let stmt_id = self.parse_assignment(inner)?;
                             self.module.body.push(stmt_id);
                         }
+                        Rule::compound_assignment => {
+                            let stmt_id = self.parse_compound_assignment(inner)?;
+                            self.module.body.push(stmt_id);
+                        }
                         Rule::property_assign => {
                             let stmt_id = self.parse_property_assign(inner)?;
                             self.module.body.push(stmt_id);

@@ -21,25 +21,25 @@
     функция ffi_dict_free(ptr: указатель) {}
 }
 
-печать("=== чистое чтение коллекций внутри DLL ===");
+печать("=== чистое чтение коллекций внутри DLL ===")
 
-текст1 = ffi_create_demo_text();
-печать("text.len = " + ffi_text_len(текст1));
-печать("text.byte[0] = " + ffi_text_byte_at(текст1, 0));
-ffi_text_free(текст1);
+текст1 = ffi_create_demo_text()
+печать("text.len = " + ffi_text_len(текст1))
+печать("text.byte[0] = " + ffi_text_byte_at(текст1, 0))
+ffi_text_free(текст1)
 
-список_ptr = ffi_create_list3(1, 2, 3);
-печать("list.len = " + ffi_list_len(список_ptr));
-печать("list[1] = " + ffi_list_i64_at(список_ptr, 1));
-ffi_list_free(список_ptr);
+список_ptr = ffi_create_list3(1, 2, 3)
+печать("list.len = " + ffi_list_len(список_ptr))
+печать("list[1] = " + ffi_list_i64_at(список_ptr, 1))
+ffi_list_free(список_ptr)
 
-массив_ptr = ffi_create_array3(10, 20, 30);
-печать("array.len = " + ffi_array_len(массив_ptr));
-печать("array[1] = " + ffi_array_i64_at(массив_ptr, 1));
-ffi_array_free(массив_ptr);
+массив_ptr = ffi_create_array3(10, 20, 30)
+печать("array.len = " + ffi_array_len(массив_ptr))
+печать("array[1] = " + ffi_array_i64_at(массив_ptr, 1))
+ffi_array_free(массив_ptr)
 
-словарь_ptr = ffi_create_demo_dict();
-печать("dict.len = " + ffi_dict_len(словарь_ptr));
-печать("dict['ключ'] = " + ffi_dict_get_i64_known_key(словарь_ptr, 1));
-печать("len(dict['текст']) = " + ffi_dict_get_text_len_known_key(словарь_ptr, 2));
-ffi_dict_free(словарь_ptr);
+словарь_ptr = ffi_create_demo_dict()
+печать("dict.len = " + ffi_dict_len(словарь_ptr))
+печать("dict['ключ'] = " + ffi_dict_get_i64_known_key(словарь_ptr, 1))
+печать("len(dict['текст']) = " + ffi_dict_get_text_len_known_key(словарь_ptr, 2))
+ffi_dict_free(словарь_ptr)

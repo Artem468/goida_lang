@@ -3,7 +3,15 @@ use std::process::Command;
 #[test]
 fn test_control_flow_example() {
     let output = Command::new("cargo")
-        .args(["run", "-q", "-p", "cli", "--", "run", "examples/control_flow_test.goida"]) 
+        .args([
+            "run",
+            "-q",
+            "-p",
+            "cli",
+            "--",
+            "run",
+            "examples/control_flow_test.goida",
+        ])
         .output()
         .expect("Не удалось запустить control_flow_test.goida");
 
@@ -23,7 +31,15 @@ fn test_control_flow_example() {
 #[test]
 fn test_classes_example() {
     let output = Command::new("cargo")
-        .args(["run", "-q", "-p", "cli", "--", "run", "examples/classes_test.goida"]) 
+        .args([
+            "run",
+            "-q",
+            "-p",
+            "cli",
+            "--",
+            "run",
+            "examples/classes_test.goida",
+        ])
         .output()
         .expect("Не удалось запустить classes_test.goida");
 
@@ -40,7 +56,15 @@ fn test_classes_example() {
 #[test]
 fn test_queue_example() {
     let output = Command::new("cargo")
-        .args(["run", "-q", "-p", "cli", "--", "run", "examples/queue_test.goida"]) 
+        .args([
+            "run",
+            "-q",
+            "-p",
+            "cli",
+            "--",
+            "run",
+            "examples/queue_test.goida",
+        ])
         .output()
         .expect("Не удалось запустить queue_test.goida");
 
@@ -57,7 +81,15 @@ fn test_queue_example() {
 #[test]
 fn test_json_roundtrip_example() {
     let output = Command::new("cargo")
-        .args(["run", "-q", "-p", "cli", "--", "run", "examples/json_roundtrip_test.goida"]) 
+        .args([
+            "run",
+            "-q",
+            "-p",
+            "cli",
+            "--",
+            "run",
+            "examples/json_roundtrip_test.goida",
+        ])
         .output()
         .expect("Не удалось запустить json_roundtrip_test.goida");
 
@@ -102,12 +134,12 @@ fn test_top_level_thread_block_executes_and_updates_outer_variable() {
     std::fs::create_dir_all(dir).expect("Не удалось создать временную папку теста");
 
     let source = r#"
-значение = 1;
+значение = 1
 поток {
-    значение = 2;
+    значение = 2
 }
-Система.сон(50);
-печать(значение);
+Система.сон(50)
+печать(значение)
 "#;
     let main_file = dir.join("main.goida");
     std::fs::write(&main_file, source).expect("Не удалось записать временный файл");

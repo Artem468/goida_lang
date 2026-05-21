@@ -126,6 +126,10 @@ impl ParserTrait {
                 scopes.last_mut().unwrap().insert(*name);
                 Ok(())
             }
+            StatementKind::CompoundAssign { target, value, .. } => {
+                self.validate_expression_names(*target, scopes)?;
+                self.validate_expression_names(*value, scopes)
+            }
             StatementKind::IndexAssign {
                 object,
                 index,
@@ -166,7 +170,7 @@ impl ParserTrait {
                 scopes.push(HashSet::new());
                 scopes.last_mut().unwrap().insert(*variable);
                 self.validate_expression_names(*condition, scopes)?;
-                self.validate_expression_names(*update, scopes)?;
+                self.validate_statement_names(*update, scopes)?;
                 self.validate_statement_names(*body, scopes)?;
                 scopes.pop();
                 Ok(())

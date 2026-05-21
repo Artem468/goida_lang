@@ -1,5 +1,6 @@
 use crate::ast::prelude::{
-    ClassDefinition, ExprId, FunctionDefinition, NativeLibraryDefinition, Span, TypeId,
+    BinaryOperator, ClassDefinition, ExprId, FunctionDefinition, NativeLibraryDefinition, Span,
+    TypeId,
 };
 use string_interner::DefaultSymbol as Symbol;
 
@@ -22,6 +23,12 @@ pub enum StatementKind {
         type_hint: Option<TypeId>,
         value: ExprId,
     },
+    /// In-place arithmetic assignment such as `x += 1` or `obj.field *= 2`.
+    CompoundAssign {
+        target: ExprId,
+        op: BinaryOperator,
+        value: ExprId,
+    },
     IndexAssign {
         object: ExprId,
         index: ExprId,
@@ -40,7 +47,7 @@ pub enum StatementKind {
         variable: Symbol,
         init: ExprId,
         condition: ExprId,
-        update: ExprId,
+        update: StmtId,
         body: StmtId,
     },
     Thread {

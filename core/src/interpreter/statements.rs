@@ -1,7 +1,9 @@
-use crate::ast::prelude::{ErrorData, ExpressionKind, Span, StatementKind, StmtId};
+use crate::ast::prelude::{BinaryOperator, ErrorData, ExpressionKind, Span, StatementKind, StmtId};
 use crate::interpreter::prelude::{Interpreter, RuntimeError, Value};
 use crate::shared::SharedMut;
-use crate::traits::prelude::{CoreOperations, ExpressionEvaluator, StatementExecutor};
+use crate::traits::prelude::{
+    CoreOperations, ExpressionEvaluator, StatementExecutor, ValueOperations,
+};
 use crate::{bail_runtime, runtime_error};
 use std::sync::Arc;
 use std::thread;
@@ -32,83 +34,12 @@ impl StatementExecutor for Interpreter {
             }
 
             StatementKind::Assign { name, value, .. } => {
-                let target_env = self.environment.clone();
                 let val = self.evaluate_expression(value, current_module_id)?;
-
-                if self.try_assign_native_identifier(
-                    name,
-                    val.clone(),
-                    current_module_id,
-                    stmt_kind.span,
-                )? {
-                    return Ok(());
-                }
-
-                self.environment = target_env;
-                // Debug: log whether we set or define the variable and which environment is root
-                let _var_name = self.resolve_symbol(name).unwrap_or_default();
-                let _is_root_env = self.environment.read(|env| env.parent.is_none());
-                // Try to set the variable in the nearest environment where it exists;
-                // if not found, define it in the current environment. This preserves
-                // expected behavior for block-scoped code that assigns to outer
-                // variables while still creating new locals when the variable is new.
-                // We need nuanced assignment semantics:
-                // - Search for the variable in the chain up to the nearest function environment
-                //   (inclusive). If found, update that environment.
-                // - If not found but a containing function environment exists, define the
-                //   variable in that function environment (so nested functions don't
-                //   accidentally update outer function variables with the same name).
-                // - If no function environment exists in the chain, fall back to the
-                //   original set-then-define semantics.
-                let mut search_env = self.environment.clone();
-                let mut found_env: Option<SharedMut<crate::interpreter::structs::Environment>> =
-                    None;
-                let mut function_env: Option<SharedMut<crate::interpreter::structs::Environment>> =
-                    None;
-
-                loop {
-                    if search_env.read(|env| env.variables.contains_key(&name)) {
-                        found_env = Some(search_env.clone());
-                        break;
-                    }
-                    if search_env.read(|env| env.is_function) {
-                        function_env = Some(search_env.clone());
-                        break;
-                    }
-                    let parent_opt = search_env.read(|env| env.parent.clone());
-                    if let Some(parent) = parent_opt {
-                        search_env = parent;
-                    } else {
-                        break;
-                    }
-                }
-
-                if let Some(target_env) = found_env {
-                    target_env.write(|env| {
-                        env.variables.insert(name, val.clone());
-                    });
-                } else if let Some(fn_env) = function_env {
-                    fn_env.write(|env| {
-                        env.define(name, val.clone());
-                    });
-                } else {
-                    let set_result = self
-                        .environment
-                        .write(|env| env.set(name, val.clone(), stmt_kind.span));
-
-                    if set_result.is_err() {
-                        self.environment.write(|env| env.define(name, val.clone()));
-                    }
-                }
-
-                if self.environment.read(|env| env.parent.is_none()) {
-                    if let Some(module) = self.modules.get_mut(&current_module_id) {
-                        module.globals.insert(name, val.clone());
-                    }
-                }
-
-                Ok(())
+                self.assign_identifier(name, val, current_module_id, stmt_kind.span)
             }
+
+            StatementKind::CompoundAssign { target, op, value } => self
+                .execute_compound_assignment(target, op, value, current_module_id, stmt_kind.span),
 
             StatementKind::If {
                 condition,
@@ -155,11 +86,7 @@ impl StatementExecutor for Interpreter {
                             }
                             interpreter.execute_statement(body, current_module_id)?;
 
-                            let update_val =
-                                interpreter.evaluate_expression(update, current_module_id)?;
-                            interpreter
-                                .environment
-                                .write(|env| env.define(variable, update_val));
+                            interpreter.execute_statement(update, current_module_id)?;
                         }
                         Ok(())
                     },
@@ -356,6 +283,198 @@ impl StatementExecutor for Interpreter {
 }
 
 impl Interpreter {
+    fn assign_identifier(
+        &mut self,
+        name: DefaultSymbol,
+        val: Value,
+        current_module_id: DefaultSymbol,
+        span: Span,
+    ) -> Result<(), RuntimeError> {
+        let target_env = self.environment.clone();
+
+        if self.try_assign_native_identifier(name, val.clone(), current_module_id, span)? {
+            return Ok(());
+        }
+
+        self.environment = target_env;
+        let mut search_env = self.environment.clone();
+        let mut found_env: Option<SharedMut<crate::interpreter::structs::Environment>> = None;
+        let mut function_env: Option<SharedMut<crate::interpreter::structs::Environment>> = None;
+
+        loop {
+            if search_env.read(|env| env.variables.contains_key(&name)) {
+                found_env = Some(search_env.clone());
+                break;
+            }
+            if search_env.read(|env| env.is_function) {
+                function_env = Some(search_env.clone());
+                break;
+            }
+            let parent_opt = search_env.read(|env| env.parent.clone());
+            if let Some(parent) = parent_opt {
+                search_env = parent;
+            } else {
+                break;
+            }
+        }
+
+        if let Some(target_env) = found_env {
+            target_env.write(|env| {
+                env.variables.insert(name, val.clone());
+            });
+        } else if let Some(fn_env) = function_env {
+            fn_env.write(|env| {
+                env.define(name, val.clone());
+            });
+        } else {
+            let set_result = self
+                .environment
+                .write(|env| env.set(name, val.clone(), span));
+
+            if set_result.is_err() {
+                self.environment.write(|env| env.define(name, val.clone()));
+            }
+        }
+
+        if self.environment.read(|env| env.parent.is_none()) {
+            if let Some(module) = self.modules.get_mut(&current_module_id) {
+                module.globals.insert(name, val);
+            }
+        }
+
+        Ok(())
+    }
+
+    fn apply_compound_operator(
+        &self,
+        op: BinaryOperator,
+        left: Value,
+        right: Value,
+        span: Span,
+    ) -> Result<Value, RuntimeError> {
+        match op {
+            BinaryOperator::Add => self.add_values(left, right, span),
+            BinaryOperator::Sub => self.subtract_values(left, right, span),
+            BinaryOperator::Mul => self.multiply_values(left, right, span),
+            BinaryOperator::Div => self.divide_values(left, right, span),
+            BinaryOperator::Mod => self.modulo_values(left, right, span),
+            _ => bail_runtime!(
+                InvalidOperation,
+                span,
+                "Оператор не поддерживает составное присваивание"
+            ),
+        }
+    }
+
+    fn execute_compound_assignment(
+        &mut self,
+        target: crate::ast::prelude::ExprId,
+        op: BinaryOperator,
+        value: crate::ast::prelude::ExprId,
+        current_module_id: DefaultSymbol,
+        span: Span,
+    ) -> Result<(), RuntimeError> {
+        let target_expr = {
+            let module = self.modules.get(&current_module_id).ok_or_else(|| {
+                let module_name = self.resolve_symbol(current_module_id).unwrap();
+                runtime_error!(InvalidOperation, span, "Модуль {module_name} не найден")
+            })?;
+            module.arena.get_expression(target).unwrap().clone()
+        };
+        let right = self.evaluate_expression(value, current_module_id)?;
+
+        match target_expr.kind {
+            ExpressionKind::Identifier(name) => {
+                let left = self.evaluate_expression(target, current_module_id)?;
+                let result = self.apply_compound_operator(op, left, right, span)?;
+                self.assign_identifier(name, result, current_module_id, span)
+            }
+            ExpressionKind::PropertyAccess { object, property } => {
+                let property_name = self.resolve_symbol(property).unwrap_or_default();
+                let obj_expr = {
+                    let module = self.modules.get(&current_module_id).ok_or_else(|| {
+                        let module_name = self.resolve_symbol(current_module_id).unwrap();
+                        runtime_error!(InvalidOperation, span, "Модуль {module_name} не найден")
+                    })?;
+                    module.arena.get_expression(object).unwrap().clone()
+                };
+                let is_external =
+                    !matches!(obj_expr.kind, ExpressionKind::This) && self.method_depth == 0;
+                let obj_value = self.evaluate_expression(object, current_module_id)?;
+
+                if let Value::Object(instance_ref) = obj_value {
+                    let current = instance_ref.read(|instance| {
+                        if !instance.is_field_accessible(&property, is_external) {
+                            return bail_runtime!(
+                                InvalidOperation,
+                                obj_expr.span,
+                                "Поле '{}' недоступно",
+                                property_name
+                            );
+                        }
+
+                        if let Some(value) = instance.field_values.get(&property) {
+                            Ok(Some(Ok(value.clone())))
+                        } else {
+                            Ok(instance.get_field(&property).cloned().map(Err))
+                        }
+                    })?;
+
+                    let left = match current {
+                        Some(Ok(value)) => value,
+                        Some(Err(Some(expr))) => {
+                            self.evaluate_expression(expr, current_module_id)?
+                        }
+                        _ => Value::Empty,
+                    };
+                    let result = self.apply_compound_operator(op, left, right, span)?;
+                    instance_ref.write(|instance| {
+                        instance.set_field_value(property, result);
+                    });
+                    Ok(())
+                } else {
+                    bail_runtime!(TypeMismatch, obj_expr.span, "Ожидался объект")
+                }
+            }
+            ExpressionKind::Index { object, index } => {
+                let target_obj = self.evaluate_expression(object, current_module_id)?;
+                let idx_val = self.evaluate_expression(index, current_module_id)?;
+
+                match target_obj {
+                    Value::List(list) => list.write(|vec| {
+                        let i = idx_val.resolve_index(vec.len(), span)?;
+                        let left = vec[i].clone();
+                        vec[i] = self.apply_compound_operator(op, left, right, span)?;
+                        Ok(())
+                    }),
+                    Value::Dict(dict) => dict.write(|d| {
+                        let key = idx_val.to_string();
+                        let left = d.get(&key).cloned().ok_or_else(|| {
+                            runtime_error!(
+                                InvalidOperation,
+                                span,
+                                "Ключ '{}' не найден в словаре",
+                                key
+                            )
+                        })?;
+                        d.insert(key, self.apply_compound_operator(op, left, right, span)?);
+                        Ok(())
+                    }),
+                    _ => bail_runtime!(
+                        TypeError,
+                        span,
+                        "Нельзя присвоить по индексу для этого типа"
+                    ),
+                }
+            }
+            _ => bail_runtime!(
+                InvalidOperation,
+                span,
+                "Левая часть составного присваивания должна быть переменной, полем или индексом"
+            ),
+        }
+    }
+
     fn execute_thread_body(
         &mut self,
         body: StmtId,
