@@ -438,6 +438,10 @@ fn collect_statement_tokens(
                 }
                 collect_expression_tokens(module, interner, *value, text, out);
             }
+            StatementKind::CompoundAssign { target, value, .. } => {
+                collect_expression_tokens(module, interner, *target, text, out);
+                collect_expression_tokens(module, interner, *value, text, out);
+            }
             StatementKind::IndexAssign {
                 object,
                 index,
@@ -826,6 +830,7 @@ fn collect_declarations(
                 }
             }
             StatementKind::Expression(_)
+            | StatementKind::CompoundAssign { .. }
             | StatementKind::IndexAssign { .. }
             | StatementKind::PropertyAssign { .. }
             | StatementKind::Raise { .. }

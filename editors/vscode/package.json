@@ -11,7 +11,9 @@
     "main": "./out/extension.js",
     "scripts": {
         "vscode:prepublish": "npm run compile",
-        "compile": "tsc -p ./",
+        "build:lsp": "cargo build -p lsp",
+        "copy:lsp": "node ./scripts/copy-lsp.js",
+        "compile": "npm run build:lsp && tsc -p ./ && npm run copy:lsp",
         "watch": "tsc -watch -p ./",
         "pretest": "npm run compile && npm run lint",
         "lint": "eslint src --ext ts",
