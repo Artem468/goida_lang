@@ -124,7 +124,7 @@ impl ParserTrait {
             .interner
             .write(|i| i.get_or_intern(normalized_full_path.as_str()));
 
-        if self.module.modules.get(&module_symbol).is_some() {
+        if self.module.modules.contains_key(&module_symbol) {
             return Ok(module_symbol);
         }
 
@@ -142,7 +142,7 @@ impl ParserTrait {
         );
         let new_module = sub_parser.parse(&code)?;
 
-        for (class_name_symbol, _) in &new_module.classes {
+        for class_name_symbol in new_module.classes.keys() {
             let class_name = self.interner.read(|i| {
                 i.resolve(*class_name_symbol)
                     .unwrap_or_default()

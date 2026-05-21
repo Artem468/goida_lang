@@ -164,7 +164,7 @@ pub fn setup_datetime_class(interner_ref: &SharedInterner) -> (Symbol, SharedMut
             .map(|s| s.as_str())
             .unwrap_or("%d.%m.%Y %H:%M:%S");
 
-        Ok(Value::Text(dt.format(&pattern).to_string()))
+        Ok(Value::Text(dt.format(pattern).to_string()))
     });
 
     (name_sym, SharedMut::new(class_def))

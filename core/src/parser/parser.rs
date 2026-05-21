@@ -59,8 +59,7 @@ impl ParserTrait {
                             found.to_string()
                         };
 
-                        let expected: Vec<String> =
-                            positives.iter().map(|r| translate_rule(r)).collect();
+                        let expected: Vec<String> = positives.iter().map(translate_rule).collect();
                         parts.push(format!(
                             "ожидалось: \n{} получено {}",
                             expected.join("\n"),
@@ -70,7 +69,7 @@ impl ParserTrait {
 
                     if !negatives.is_empty() {
                         let unexpected: Vec<String> =
-                            negatives.iter().map(|r| translate_rule(r)).collect();
+                            negatives.iter().map(translate_rule).collect();
                         parts.push(format!("неожиданный токен: \n{}", unexpected.join("\n")));
                     }
 

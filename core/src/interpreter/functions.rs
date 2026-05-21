@@ -16,7 +16,7 @@ impl InterpreterFunctions for Interpreter {
         span: Span,
     ) -> Result<Value, RuntimeError> {
         let final_arguments =
-            self.bind_call_arguments(&*function, arguments, current_module_id, span, "Функция")?;
+            self.bind_call_arguments(&function, arguments, current_module_id, span, "Функция")?;
 
         let execution_result = self.scoped_child_function_environment(
             |local_env| {

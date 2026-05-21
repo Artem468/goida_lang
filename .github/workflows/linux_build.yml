@@ -52,6 +52,9 @@ jobs:
       - name: Check formatting
         run: cargo fmt --all --check
 
+      - name: Build native FFI test library
+        run: cargo build -p native_ffi_test_lib
+
       - name: Run tests
         run: cargo test --workspace --all-targets
 

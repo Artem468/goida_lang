@@ -46,7 +46,7 @@ impl ParserTrait {
             names.insert(import.item.alias);
         }
         for module in self.module.modules.values() {
-            self.collect_module_exported_names(module, &mut names);
+            Self::collect_module_exported_names(module, &mut names);
         }
 
         for name in [
@@ -82,11 +82,7 @@ impl ParserTrait {
         names
     }
 
-    pub(crate) fn collect_module_exported_names(
-        &self,
-        module: &Module,
-        names: &mut HashSet<Symbol>,
-    ) {
+    pub(crate) fn collect_module_exported_names(module: &Module, names: &mut HashSet<Symbol>) {
         for name in module.functions.keys() {
             names.insert(*name);
         }
@@ -109,7 +105,7 @@ impl ParserTrait {
             }
         }
         for nested in module.modules.values() {
-            self.collect_module_exported_names(nested, names);
+            Self::collect_module_exported_names(nested, names);
         }
     }
 

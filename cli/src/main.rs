@@ -32,13 +32,12 @@ enum Commands {
 fn main() {
     let cli = Cli::parse();
     match &cli.command {
-        Some(Commands::Run { file, .. }) => match run_file(file) {
-            Err((err, _)) => {
+        Some(Commands::Run { file, .. }) => {
+            if let Err((err, _)) = run_file(file) {
                 println!("{}", err);
                 std::process::exit(1);
             }
-            _ => {}
-        },
+        }
         Some(Commands::Repl) => run_repl(),
         None => {
             println!("Добро пожаловать в Гойда! Используйте --help для справки.");
@@ -128,7 +127,7 @@ fn execute_code(code: &str, filename: &str) -> Result<(), (String, ErrorData)> {
                 ParseError::InvalidSyntax(e) => ("Ошибка синтаксиса", e),
                 ParseError::ImportError(e) => ("Ошибка импорта", e),
             };
-            render_error(&msg, &data);
+            render_error(msg, &data);
             return Err((msg.to_string(), data));
         }
     }

@@ -74,7 +74,7 @@ pub fn setup_io_func(interpreter: &mut Interpreter, interner: &SharedInterner) {
         let _ = io::stdout().flush();
 
         let mut input = String::new();
-        if let Ok(_) = io::stdin().read_line(&mut input) {
+        if io::stdin().read_line(&mut input).is_ok() {
             Ok(Value::Text(input.trim().to_string()))
         } else {
             bail_runtime!(

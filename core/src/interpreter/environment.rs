@@ -2,7 +2,7 @@ use crate::ast::prelude::{ErrorData, Span};
 use crate::interpreter::prelude::{Environment, Interpreter, RuntimeError, Value};
 use crate::shared::SharedMut;
 use crate::{bail_runtime, runtime_error};
-use std::collections::HashMap;
+use std::collections::{hash_map::Entry, HashMap};
 use string_interner::DefaultSymbol as Symbol;
 
 impl Environment {
@@ -52,8 +52,8 @@ impl Environment {
         value: Value,
         span: Span,
     ) -> Result<(), RuntimeError> {
-        if self.variables.contains_key(&name) {
-            self.variables.insert(name, value);
+        if let Entry::Occupied(mut entry) = self.variables.entry(name) {
+            entry.insert(value);
             return Ok(());
         }
 

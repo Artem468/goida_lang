@@ -16,6 +16,10 @@ use std::thread::{JoinHandle, ThreadId};
 use string_interner::backend::StringBackend;
 use string_interner::{DefaultSymbol as Symbol, StringInterner};
 
+pub type ThreadJoinState = Arc<Mutex<Option<JoinHandle<Result<(), RuntimeError>>>>>;
+pub type BuiltinCallback =
+    dyn Fn(&Interpreter, Vec<CallArgValue>, Span) -> Result<Value, RuntimeError> + Send + Sync;
+
 #[derive(Clone, Debug)]
 /// Runtime value representation used by the interpreter and built-ins.
 pub enum Value {
@@ -42,7 +46,7 @@ pub enum Value {
 #[derive(Clone, Debug)]
 /// Join handle for a language-level background thread.
 pub struct RuntimeThread {
-    pub handle: Arc<Mutex<Option<JoinHandle<Result<(), RuntimeError>>>>>,
+    pub handle: ThreadJoinState,
 }
 
 impl RuntimeThread {
@@ -163,11 +167,7 @@ impl CallArgListExt for Vec<CallArgValue> {
 
 #[derive(Clone)]
 /// Native/built-in function callable from Goida code.
-pub struct BuiltinFn(
-    pub  Arc<
-        dyn Fn(&Interpreter, Vec<CallArgValue>, Span) -> Result<Value, RuntimeError> + Send + Sync,
-    >,
-);
+pub struct BuiltinFn(pub Arc<BuiltinCallback>);
 
 #[derive(Debug)]
 /// Runtime failures surfaced by the interpreter.

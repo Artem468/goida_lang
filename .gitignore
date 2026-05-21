@@ -2,4 +2,6 @@
 .idea/
 editors/vscode/node_modules
 editors/vscode/out
+editors/vscode/lsp
+editors/vscode/lsp.exe
 *.vsix

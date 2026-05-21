@@ -517,43 +517,39 @@ impl ExpressionEvaluator for Interpreter {
                         }
                     }
 
-                    match target_value {
-                        Value::Module(mod_symbol) => {
-                            if let Some((definition_module_id, value)) =
-                                interpreter.resolve_module_member_value(mod_symbol, method)
-                            {
-                                return match value {
-                                    Value::Function(function) => interpreter.call_function(
-                                        function.clone(),
-                                        arguments,
-                                        definition_module_id,
-                                        obj_expr.span,
-                                    ),
-                                    Value::Builtin(builtin) => {
-                                        builtin(interpreter, arguments, obj_expr.span)
-                                    }
-                                    Value::Class(class_def) => interpreter.instantiate_class(
-                                        class_def.clone(),
-                                        definition_module_id,
-                                        arguments,
-                                        obj_expr.span,
-                                    ),
-                                    _ => {
-                                        let m_name = interpreter.resolve_symbol(method).unwrap();
-                                        let mod_name =
-                                            interpreter.resolve_symbol(mod_symbol).unwrap();
-                                        bail_runtime!(
-                                            UndefinedFunction,
-                                            expr_kind.span,
-                                            "Функция '{}' не найдена в модуле '{}'",
-                                            m_name,
-                                            mod_name
-                                        )
-                                    }
-                                };
-                            }
+                    if let Value::Module(mod_symbol) = target_value {
+                        if let Some((definition_module_id, value)) =
+                            interpreter.resolve_module_member_value(mod_symbol, method)
+                        {
+                            return match value {
+                                Value::Function(function) => interpreter.call_function(
+                                    function.clone(),
+                                    arguments,
+                                    definition_module_id,
+                                    obj_expr.span,
+                                ),
+                                Value::Builtin(builtin) => {
+                                    builtin(interpreter, arguments, obj_expr.span)
+                                }
+                                Value::Class(class_def) => interpreter.instantiate_class(
+                                    class_def.clone(),
+                                    definition_module_id,
+                                    arguments,
+                                    obj_expr.span,
+                                ),
+                                _ => {
+                                    let m_name = interpreter.resolve_symbol(method).unwrap();
+                                    let mod_name = interpreter.resolve_symbol(mod_symbol).unwrap();
+                                    bail_runtime!(
+                                        UndefinedFunction,
+                                        expr_kind.span,
+                                        "Функция '{}' не найдена в модуле '{}'",
+                                        m_name,
+                                        mod_name
+                                    )
+                                }
+                            };
                         }
-                        _ => {}
                     }
 
                     let m_name = interpreter.resolve_symbol(method).unwrap();
