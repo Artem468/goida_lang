@@ -575,109 +575,10 @@ impl ExpressionEvaluator for Interpreter {
                         value,
                     });
                 }
-                if !self.modules.is_empty() {
-                    let (class_rc, definition_module) = self.resolve_class_for_creation(
-                        class_name,
-                        current_module_id,
-                        expr_kind.span,
-                    )?;
-                    return self.instantiate_class(
-                        class_rc,
-                        definition_module,
-                        arguments,
-                        expr_kind.span,
-                    );
-                }
 
-                let (class_rc, definition_module) = if let Some(Value::Class(cls)) =
-                    self.environment.read(|env| env.get(&class_name))
-                {
-                    (cls.clone(), current_module_id)
-                } else {
-                    let name_str = self.resolve_symbol(class_name).unwrap();
-
-                    if let Some(dot_pos) = name_str.find('.') {
-                        let mod_name = &name_str[..dot_pos];
-                        let class_simple_name = &name_str[dot_pos + 1..];
-                        let mod_sym = self.intern_string(mod_name);
-                        let class_sym = self.intern_string(class_simple_name);
-
-                        let current_mod = self.modules.get(&current_module_id).unwrap();
-                        let target_module_symbol =
-                            self.resolve_import_alias_symbol(current_mod, mod_sym);
-
-                        let target_module = target_module_symbol
-                            .and_then(|sym| self.modules.get(&sym))
-                            .ok_or_else(|| {
-                                runtime_error!(
-                                    InvalidOperation,
-                                    expr_kind.span,
-                                    "Модуль '{}' не найден",
-                                    mod_name
-                                )
-                            })?;
-
-                        let class = target_module.classes.get(&class_sym).ok_or_else(|| {
-                            runtime_error!(
-                                UndefinedVariable,
-                                expr_kind.span,
-                                "Класс '{}' не найден в модуле '{}'",
-                                class_simple_name,
-                                mod_name
-                            )
-                        })?;
-
-                        (class.clone(), target_module.name)
-                    } else {
-                        let current_mod = self.modules.get(&current_module_id).unwrap();
-
-                        let found = current_mod
-                            .classes
-                            .get(&class_name)
-                            .map(|class| (class.clone(), current_module_id));
-
-                        let final_found = found.or_else(|| {
-                            self.std_classes
-                                .get(&class_name)
-                                .map(|c| (c.clone(), current_module_id))
-                        });
-
-                        final_found.ok_or_else(|| {
-                            runtime_error!(
-                                UndefinedVariable,
-                                expr_kind.span,
-                                "Класс '{}' не найден",
-                                name_str
-                            )
-                        })?
-                    }
-                };
-
-                let class_rc = self.set_class_module(class_rc, definition_module);
-                let instance = ClassDefinition::create_instance(class_rc.clone());
-                let instance_ref = SharedMut::new(instance);
-
-                let constructor_opt = class_rc.read(|c| c.constructor.clone());
-
-                if let Some(constructor) = constructor_opt {
-                    let constructor_module = constructor.get_module().unwrap_or(definition_module);
-                    self.call_method(
-                        constructor,
-                        arguments,
-                        Value::Object(instance_ref.clone()),
-                        constructor_module,
-                        expr_kind.span,
-                    )?;
-                }
-
-                let data_key = self.interner.write(|i| i.get_or_intern("__data"));
-                let internal_value =
-                    instance_ref.write(|instance| instance.field_values.remove(&data_key));
-
-                match internal_value {
-                    Some(val) => Ok(val),
-                    None => Ok(Value::Object(instance_ref)),
-                }
+                let (class_rc, definition_module) =
+                    self.resolve_class_for_creation(class_name, current_module_id, expr_kind.span)?;
+                self.instantiate_class(class_rc, definition_module, arguments, expr_kind.span)
             }
 
             ExpressionKind::This => bail_runtime!(
@@ -730,27 +631,17 @@ impl Interpreter {
             let target_module_id = self
                 .resolve_module_path(current_mod, module_parts)
                 .ok_or_else(|| {
-                    runtime_error!(
-                        InvalidOperation,
-                        span,
-                        "РњРѕРґСѓР»СЊ '{}' РЅРµ РЅР°Р№РґРµРЅ",
-                        module_name
-                    )
+                    runtime_error!(InvalidOperation, span, "Модуль '{}' не найден", module_name)
                 })?;
             let target_module = self.modules.get(&target_module_id).ok_or_else(|| {
-                runtime_error!(
-                    InvalidOperation,
-                    span,
-                    "РњРѕРґСѓР»СЊ '{}' РЅРµ РЅР°Р№РґРµРЅ",
-                    module_name
-                )
+                runtime_error!(InvalidOperation, span, "Модуль '{}' не найден", module_name)
             })?;
             let class_sym = self.intern_string(class_simple_name);
             let class = target_module.classes.get(&class_sym).ok_or_else(|| {
                 runtime_error!(
                     UndefinedVariable,
                     span,
-                    "РљР»Р°СЃСЃ '{}' РЅРµ РЅР°Р№РґРµРЅ РІ РјРѕРґСѓР»Рµ '{}'",
+                    "Класс '{}' не найден в модуле '{}'",
                     class_simple_name,
                     module_name
                 )
@@ -771,12 +662,7 @@ impl Interpreter {
         });
 
         final_found.ok_or_else(|| {
-            runtime_error!(
-                UndefinedVariable,
-                span,
-                "РљР»Р°СЃСЃ '{}' РЅРµ РЅР°Р№РґРµРЅ",
-                name_str
-            )
+            runtime_error!(UndefinedVariable, span, "Класс '{}' не найден", name_str)
         })
     }
 

@@ -8,14 +8,23 @@ use crate::ast::prelude::{
 use crate::interpreter::prelude::SharedInterner;
 
 #[derive(Debug, Clone)]
+/// Compact storage for AST nodes created during parsing.
+///
+/// Expressions, statements, and type descriptors are addressed by small integer
+/// ids. This keeps nodes cheap to clone and lets parser/interpreter code pass
+/// references to syntax without owning large recursive structures.
 pub struct AstArena {
+    /// Expression nodes indexed by [`ExprId`].
     pub expressions: Vec<ExpressionNode>,
+    /// Statement nodes indexed by [`StmtId`].
     pub statements: Vec<StatementNode>,
+    /// Type descriptors indexed by [`TypeId`].
     pub types: Vec<DataType>,
     type_cache: HashMap<Symbol, TypeId>,
 }
 
 impl AstArena {
+    /// Creates an empty arena with no registered built-in types.
     pub fn new() -> Self {
         Self {
             expressions: Vec::new(),
@@ -25,6 +34,7 @@ impl AstArena {
         }
     }
 
+    /// Stores an expression and returns its stable id.
     pub fn add_expression(&mut self, kind: ExpressionKind, span: Span) -> ExprId {
         let id = self.expressions.len() as ExprId;
         self.expressions.push(ExpressionNode {
@@ -35,18 +45,21 @@ impl AstArena {
         id
     }
 
+    /// Stores a statement and returns its stable id.
     pub fn add_statement(&mut self, kind: StatementKind, span: Span) -> StmtId {
         let id = self.statements.len() as StmtId;
         self.statements.push(StatementNode { kind, span });
         id
     }
 
+    /// Stores a type descriptor and returns its stable id.
     pub fn add_type(&mut self, data_type: DataType) -> TypeId {
         let id = self.types.len() as TypeId;
         self.types.push(data_type);
         id
     }
 
+    /// Registers or reuses a named object type.
     pub fn register_custom_type(&mut self, interner: &SharedInterner, name: &str) -> TypeId {
         let symbol = self.intern_string(interner, name);
         if let Some(&id) = self.type_cache.get(&symbol) {
@@ -58,28 +71,34 @@ impl AstArena {
         id
     }
 
+    /// Returns an expression by id.
     pub fn get_expression(&self, id: ExprId) -> Option<&ExpressionNode> {
         self.expressions.get(id as usize)
     }
 
+    /// Returns a statement by id.
     pub fn get_statement(&self, id: StmtId) -> Option<&StatementNode> {
         self.statements.get(id as usize)
     }
 
+    /// Finds a registered type by its source-level name.
     pub fn find_type_by_name(&self, interner: &SharedInterner, name: &str) -> Option<TypeId> {
         let symbol = interner.read(|i| i.get(name))?;
 
         self.type_cache.get(&symbol).copied()
     }
 
+    /// Interns a string in the shared module interner.
     pub fn intern_string(&self, interner: &SharedInterner, s: &str) -> Symbol {
         interner.write(|i| i.get_or_intern(s))
     }
 
+    /// Resolves an interned symbol into an owned string.
     pub fn resolve_symbol(&self, interner: &SharedInterner, symbol: Symbol) -> Option<String> {
         interner.read(|i| i.resolve(symbol).map(|s| s.to_string()))
     }
 
+    /// Applies cheap AST-level optimizations, currently constant folding.
     pub fn optimize_all(&mut self, interner: &SharedInterner) {
         for i in 0..self.expressions.len() {
             self.optimize_expression(i as ExprId, interner);
@@ -139,6 +158,7 @@ impl AstArena {
         }
     }
 
+    /// Registers built-in language and runtime types in the arena cache.
     pub fn init_builtin_types(&mut self, interner: &SharedInterner) {
         let builtins = [
             ("число", DataType::Primitive(PrimitiveType::Number)),

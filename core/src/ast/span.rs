@@ -2,6 +2,7 @@ use std::ops::Range;
 use string_interner::{DefaultSymbol, Symbol};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+/// Source range in byte offsets plus the interned file/module id.
 pub struct Span {
     pub start: u32,
     pub end: u32,
@@ -19,6 +20,7 @@ impl Default for Span {
 }
 
 impl Span {
+    /// Creates a span from byte offsets and a file id.
     pub fn new(start: usize, end: usize, file_id: DefaultSymbol) -> Self {
         Self {
             start: start as u32,
@@ -27,6 +29,7 @@ impl Span {
         }
     }
 
+    /// Returns a copy of this span with another file id.
     pub fn set_file_id(&mut self, file_id: DefaultSymbol) -> Self {
         self.file_id = file_id;
         *self
@@ -49,6 +52,7 @@ impl From<Span> for Range<usize> {
 }
 
 impl Span {
+    /// Converts byte offsets into character offsets expected by ariadne labels.
     pub fn as_ariadne(&self, code: &str) -> Range<usize> {
         let start = self.start as usize;
         let end = self.end as usize;

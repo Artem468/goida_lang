@@ -1,8 +1,27 @@
 use crate::ast::prelude::*;
 use crate::parser::parser::Rule;
 use crate::parser::prelude::{ParseError, Parser as ParserTrait};
+use pest::iterators::{Pair, Pairs};
+
+const EXPECTED_EXPRESSION: &str = "Ожидалось выражение";
 
 impl ParserTrait {
+    fn syntax_error(&self, span: Span, message: impl Into<String>) -> ParseError {
+        ParseError::InvalidSyntax(ErrorData::new(span, message.into()))
+    }
+
+    fn expected_expression(&self, span: Span) -> ParseError {
+        self.syntax_error(span, EXPECTED_EXPRESSION)
+    }
+
+    fn next_required<'a>(
+        &self,
+        inner: &mut Pairs<'a, Rule>,
+        span: Span,
+    ) -> Result<Pair<'a, Rule>, ParseError> {
+        inner.next().ok_or_else(|| self.expected_expression(span))
+    }
+
     pub(crate) fn parse_expr_stmt(
         &mut self,
         pair: pest::iterators::Pair<Rule>,
@@ -21,10 +40,7 @@ impl ParserTrait {
             }
         }
 
-        Err(ParseError::InvalidSyntax(ErrorData::new(
-            expr_span,
-            "Ожидалось выражение".into(),
-        )))
+        Err(self.expected_expression(expr_span))
     }
 
     pub(crate) fn parse_expression(
@@ -37,10 +53,7 @@ impl ParserTrait {
         if let Some(first_token) = inner.next() {
             return self.parse_logical_or(first_token);
         }
-        Err(ParseError::InvalidSyntax(ErrorData::new(
-            expr_span,
-            "Ожидалось выражение".into(),
-        )))
+        Err(self.expected_expression(expr_span))
     }
 
     pub(crate) fn parse_logical_or(
@@ -49,15 +62,13 @@ impl ParserTrait {
     ) -> Result<ExprId, ParseError> {
         let or_span = (pair.as_span(), self.module.name).into();
         let mut inner = pair.into_inner();
-        let mut left = self.parse_logical_and(inner.next().ok_or_else(|| {
-            ParseError::InvalidSyntax(ErrorData::new(or_span, "Ожидалось выражение".into()))
-        })?)?;
+        let first = self.next_required(&mut inner, or_span)?;
+        let mut left = self.parse_logical_and(first)?;
 
         while let Some(token) = inner.next() {
             if token.as_rule() == Rule::logical_or_op {
-                let right = self.parse_logical_and(inner.next().ok_or_else(|| {
-                    ParseError::InvalidSyntax(ErrorData::new(or_span, "Ожидалось выражение".into()))
-                })?)?;
+                let next = self.next_required(&mut inner, or_span)?;
+                let right = self.parse_logical_and(next)?;
                 left = self.module.arena.add_expression(
                     ExpressionKind::Binary {
                         op: BinaryOperator::Or,
@@ -78,18 +89,13 @@ impl ParserTrait {
     ) -> Result<ExprId, ParseError> {
         let and_span = (pair.as_span(), self.module.name).into();
         let mut inner = pair.into_inner();
-        let mut left = self.parse_comparison(inner.next().ok_or_else(|| {
-            ParseError::InvalidSyntax(ErrorData::new(and_span, "Ожидалось выражение".into()))
-        })?)?;
+        let first = self.next_required(&mut inner, and_span)?;
+        let mut left = self.parse_comparison(first)?;
 
         while let Some(token) = inner.next() {
             if token.as_rule() == Rule::logical_and_op {
-                let right = self.parse_comparison(inner.next().ok_or_else(|| {
-                    ParseError::InvalidSyntax(ErrorData::new(
-                        and_span,
-                        "Ожидалось выражение".into(),
-                    ))
-                })?)?;
+                let next = self.next_required(&mut inner, and_span)?;
+                let right = self.parse_comparison(next)?;
                 left = self.module.arena.add_expression(
                     ExpressionKind::Binary {
                         op: BinaryOperator::And,
@@ -110,9 +116,8 @@ impl ParserTrait {
     ) -> Result<ExprId, ParseError> {
         let cmp_span = (pair.as_span(), self.module.name).into();
         let mut inner = pair.into_inner();
-        let mut left = self.parse_addition(inner.next().ok_or_else(|| {
-            ParseError::InvalidSyntax(ErrorData::new(cmp_span, "Ожидалось выражение".into()))
-        })?)?;
+        let first = self.next_required(&mut inner, cmp_span)?;
+        let mut left = self.parse_addition(first)?;
 
         while let Some(token) = inner.next() {
             if token.as_rule() == Rule::comp_op {
@@ -130,12 +135,8 @@ impl ParserTrait {
                         )))
                     }
                 };
-                let right = self.parse_addition(inner.next().ok_or_else(|| {
-                    ParseError::InvalidSyntax(ErrorData::new(
-                        cmp_span,
-                        "Ожидалось выражение".into(),
-                    ))
-                })?)?;
+                let next = self.next_required(&mut inner, cmp_span)?;
+                let right = self.parse_addition(next)?;
                 left = self
                     .module
                     .arena
@@ -152,9 +153,8 @@ impl ParserTrait {
     ) -> Result<ExprId, ParseError> {
         let add_span = (pair.as_span(), self.module.name).into();
         let mut inner = pair.into_inner();
-        let mut left = self.parse_multiplication(inner.next().ok_or_else(|| {
-            ParseError::InvalidSyntax(ErrorData::new(add_span, "Ожидалось выражение".into()))
-        })?)?;
+        let first = self.next_required(&mut inner, add_span)?;
+        let mut left = self.parse_multiplication(first)?;
 
         while let Some(token) = inner.next() {
             if token.as_rule() == Rule::add_op {
@@ -168,12 +168,8 @@ impl ParserTrait {
                         )))
                     }
                 };
-                let right = self.parse_multiplication(inner.next().ok_or_else(|| {
-                    ParseError::InvalidSyntax(ErrorData::new(
-                        add_span,
-                        "Ожидалось выражение".into(),
-                    ))
-                })?)?;
+                let next = self.next_required(&mut inner, add_span)?;
+                let right = self.parse_multiplication(next)?;
                 left = self
                     .module
                     .arena
@@ -190,9 +186,8 @@ impl ParserTrait {
     ) -> Result<ExprId, ParseError> {
         let mul_span = (pair.as_span(), self.module.name).into();
         let mut inner = pair.into_inner();
-        let mut left = self.parse_unary(inner.next().ok_or_else(|| {
-            ParseError::InvalidSyntax(ErrorData::new(mul_span, "Ожидалось выражение".into()))
-        })?)?;
+        let first = self.next_required(&mut inner, mul_span)?;
+        let mut left = self.parse_unary(first)?;
 
         while let Some(token) = inner.next() {
             if token.as_rule() == Rule::mul_op {
@@ -207,12 +202,8 @@ impl ParserTrait {
                         )))
                     }
                 };
-                let right = self.parse_unary(inner.next().ok_or_else(|| {
-                    ParseError::InvalidSyntax(ErrorData::new(
-                        mul_span,
-                        "Ожидалось выражение".into(),
-                    ))
-                })?)?;
+                let next = self.next_required(&mut inner, mul_span)?;
+                let right = self.parse_unary(next)?;
                 left = self
                     .module
                     .arena
@@ -254,10 +245,7 @@ impl ParserTrait {
             }
         }
 
-        Err(ParseError::InvalidSyntax(ErrorData::new(
-            unary_span,
-            "Ожидалось выражение".into(),
-        )))
+        Err(self.expected_expression(unary_span))
     }
 
     pub(crate) fn parse_postfix(
@@ -266,9 +254,8 @@ impl ParserTrait {
     ) -> Result<ExprId, ParseError> {
         let expr_span = (pair.as_span(), self.module.name).into();
         let mut inner = pair.into_inner();
-        let mut expr = self.parse_primary(inner.next().ok_or_else(|| {
-            ParseError::InvalidSyntax(ErrorData::new(expr_span, "Ожидалось выражение".into()))
-        })?)?;
+        let first = self.next_required(&mut inner, expr_span)?;
+        let mut expr = self.parse_primary(first)?;
 
         for token in inner {
             let postfix_span = (token.as_span(), self.module.name).into();

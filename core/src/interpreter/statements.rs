@@ -170,11 +170,11 @@ impl StatementExecutor for Interpreter {
                 let mut thread_interpreter = self.fork_for_thread();
                 let span = stmt_kind.span;
                 let handle = thread::spawn(move || {
-                    let result = match thread_interpreter.execute_thread_body(body, current_module_id)
-                    {
-                        Err(RuntimeError::Return(..)) => Ok(()),
-                        result => result,
-                    };
+                    let result =
+                        match thread_interpreter.execute_thread_body(body, current_module_id) {
+                            Err(RuntimeError::Return(..)) => Ok(()),
+                            result => result,
+                        };
 
                     result?;
                     thread_interpreter.join_background_threads(current_module_id, span)
