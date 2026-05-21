@@ -9,6 +9,7 @@ impl Environment {
     pub(crate) fn new() -> Self {
         Environment {
             variables: HashMap::new(),
+            constants: HashMap::new(),
             parent: None,
             is_function: false,
         }
@@ -17,6 +18,7 @@ impl Environment {
     pub(crate) fn with_parent(parent: SharedMut<Environment>) -> Self {
         Environment {
             variables: HashMap::new(),
+            constants: HashMap::new(),
             parent: Some(parent),
             is_function: false,
         }
@@ -25,6 +27,7 @@ impl Environment {
     pub(crate) fn with_parent_function(parent: SharedMut<Environment>) -> Self {
         Environment {
             variables: HashMap::new(),
+            constants: HashMap::new(),
             parent: Some(parent),
             is_function: true,
         }
@@ -32,6 +35,15 @@ impl Environment {
 
     pub(crate) fn define(&mut self, name: Symbol, value: Value) {
         self.variables.insert(name, value);
+    }
+
+    pub(crate) fn define_const(&mut self, name: Symbol, value: Value) {
+        self.variables.insert(name, value);
+        self.constants.insert(name, ());
+    }
+
+    pub(crate) fn is_constant(&self, name: Symbol) -> bool {
+        self.constants.contains_key(&name)
     }
 
     pub(crate) fn get(&self, name: &Symbol) -> Option<Value> {
@@ -53,6 +65,9 @@ impl Environment {
         span: Span,
     ) -> Result<(), RuntimeError> {
         if let Entry::Occupied(mut entry) = self.variables.entry(name) {
+            if self.constants.contains_key(&name) {
+                return bail_runtime!(InvalidOperation, span, "Нельзя изменить константу");
+            }
             entry.insert(value);
             return Ok(());
         }

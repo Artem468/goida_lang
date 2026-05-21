@@ -39,6 +39,7 @@ pub fn setup_type_func(interpreter: &mut Interpreter, interner: &SharedInterner)
             Value::List(_) => Ok(Value::Text("список".into())),
             Value::Array(_) => Ok(Value::Text("массив".into())),
             Value::Dict(_) => Ok(Value::Text("словарь".into())),
+            Value::Iterator(_) => Ok(Value::Text("итератор".into())),
             Value::Thread(_) => Ok(Value::Text("Поток".into())),
             Value::Mutex(_) => Ok(Value::Text("Мьютекс".into())),
             Value::RwLock(_) => Ok(Value::Text("БлокировкаЧтенияЗаписи".into())),

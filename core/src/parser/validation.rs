@@ -61,12 +61,14 @@ impl ParserTrait {
             "список",
             "массив",
             "словарь",
+            "итератор",
             "из_json",
             "в_json",
             "строка_из_указателя",
             "Список",
             "Массив",
             "Словарь",
+            "Итератор",
             "Строка",
             "Файл",
             "Система",
@@ -167,6 +169,18 @@ impl ParserTrait {
                 scopes.last_mut().unwrap().insert(*variable);
                 self.validate_expression_names(*condition, scopes)?;
                 self.validate_statement_names(*update, scopes)?;
+                self.validate_statement_names(*body, scopes)?;
+                scopes.pop();
+                Ok(())
+            }
+            StatementKind::ForEach {
+                variable,
+                iterable,
+                body,
+            } => {
+                self.validate_expression_names(*iterable, scopes)?;
+                scopes.push(HashSet::new());
+                scopes.last_mut().unwrap().insert(*variable);
                 self.validate_statement_names(*body, scopes)?;
                 scopes.pop();
                 Ok(())

@@ -101,3 +101,253 @@ fn test_compound_assignment_in_statements() {
     );
     assert_eq!("1\n10\n10\n3\n", String::from_utf8_lossy(&output.stdout));
 }
+
+#[test]
+fn test_foreach_statement_iterates_collections() {
+    let dir = std::path::Path::new("target/foreach_statement_test");
+    std::fs::create_dir_all(dir).expect("Не удалось создать временную папку теста");
+
+    let source = r#"
+сумма = 0
+для элемент в список(1, 2, 3) {
+    сумма += элемент
+}
+печать(сумма)
+
+текст = ""
+для буква в "аб" {
+    текст += буква
+}
+печать(текст)
+"#;
+    let main_file = dir.join("main.goida");
+    std::fs::write(&main_file, source).expect("Не удалось записать временный файл");
+
+    let output = Command::new("cargo")
+        .args([
+            "run",
+            "-q",
+            "-p",
+            "cli",
+            "--",
+            "run",
+            main_file.to_str().unwrap(),
+        ])
+        .output()
+        .expect("Не удалось запустить cargo run");
+
+    assert!(
+        output.status.success(),
+        "foreach завершился с ошибкой\nSTDOUT: {}\nSTDERR: {}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!("6\nаб\n", String::from_utf8_lossy(&output.stdout));
+}
+
+#[test]
+fn test_constant_assignment_cannot_be_changed() {
+    let dir = std::path::Path::new("target/constant_assignment_test");
+    std::fs::create_dir_all(dir).expect("Не удалось создать временную папку теста");
+
+    let main_file = dir.join("main.goida");
+    std::fs::write(
+        &main_file,
+        "константа лимит = 3\nлимит = 4\nпечать(лимит)\n",
+    )
+    .expect("Не удалось записать временный файл");
+
+    let output = Command::new("cargo")
+        .args([
+            "run",
+            "-q",
+            "-p",
+            "cli",
+            "--",
+            "run",
+            main_file.to_str().unwrap(),
+        ])
+        .output()
+        .expect("Не удалось запустить cargo run");
+
+    assert!(
+        !output.status.success(),
+        "изменение константы должно завершаться ошибкой\nSTDOUT: {}\nSTDERR: {}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        String::from_utf8_lossy(&output.stdout).contains("Нельзя изменить константу")
+            || String::from_utf8_lossy(&output.stderr).contains("Нельзя изменить константу"),
+        "ошибка должна сообщать о запрете изменения константы\nSTDOUT: {}\nSTDERR: {}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+#[test]
+fn test_lazy_iterator_map_filter_reduce() {
+    let dir = std::path::Path::new("target/lazy_iterator_test");
+    std::fs::create_dir_all(dir).expect("Не удалось создать временную папку теста");
+
+    let source = r#"
+функция удвоить(x) {
+    вернуть x * 2
+}
+
+функция больше_пяти(x) {
+    вернуть x > 5
+}
+
+функция сложить(a, b) {
+    вернуть a + b
+}
+
+результат = список(1, 2, 3, 4).итератор().преобразовать(удвоить).отфильтровать(больше_пяти).свернуть(сложить, 0)
+печать(результат)
+
+через_цикл = 0
+для x в список(1, 2, 3, 4).итератор().преобразовать(удвоить).отфильтровать(больше_пяти) {
+    через_цикл += x
+}
+печать(через_цикл)
+
+готовый = итератор("аб").преобразовать(строка).список()
+печать(готовый.объединить("-"))
+"#;
+    let main_file = dir.join("main.goida");
+    std::fs::write(&main_file, source).expect("Не удалось записать временный файл");
+
+    let output = Command::new("cargo")
+        .args([
+            "run",
+            "-q",
+            "-p",
+            "cli",
+            "--",
+            "run",
+            main_file.to_str().unwrap(),
+        ])
+        .output()
+        .expect("Не удалось запустить cargo run");
+
+    assert!(
+        output.status.success(),
+        "итераторы завершились с ошибкой\nSTDOUT: {}\nSTDERR: {}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!("14\n14\nа-б\n", String::from_utf8_lossy(&output.stdout));
+}
+
+#[test]
+fn test_string_utilities_and_regular_expressions() {
+    let dir = std::path::Path::new("target/string_regex_test");
+    std::fs::create_dir_all(dir).expect("Не удалось создать временную папку теста");
+
+    let source = r##"
+текст = "  abc-123 def-45  "
+чистый = текст.обрезать()
+печать(чистый.начинается_с("abc"))
+печать(чистый.заканчивается_на("45"))
+"##;
+    let main_file = dir.join("main.goida");
+    std::fs::write(&main_file, source).expect("Не удалось записать временный файл");
+
+    let output = Command::new("cargo")
+        .args([
+            "run",
+            "-q",
+            "-p",
+            "cli",
+            "--",
+            "run",
+            main_file.to_str().unwrap(),
+        ])
+        .output()
+        .expect("Не удалось запустить cargo run");
+
+    assert!(
+        output.status.success(),
+        "строковые утилиты завершились с ошибкой\nSTDOUT: {}\nSTDERR: {}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(
+        "истина\nистина\n",
+        String::from_utf8_lossy(&output.stdout)
+    );
+}
+
+#[test]
+fn test_foreach_array_dict_and_constant_compound_assignment() {
+    let dir = std::path::Path::new("target/foreach_constant_extended_test");
+    std::fs::create_dir_all(dir).expect("Не удалось создать временную папку теста");
+
+    let ok_source = r#"
+сумма = 0
+для x в массив(2, 4, 6) {
+    сумма += x
+}
+печать(сумма)
+
+ключи = ""
+для ключ в словарь("b", 2, "a", 1) {
+    ключи += ключ
+}
+печать(ключи)
+"#;
+    let ok_file = dir.join("ok.goida");
+    std::fs::write(&ok_file, ok_source).expect("Не удалось записать временный файл");
+
+    let ok_output = Command::new("cargo")
+        .args([
+            "run",
+            "-q",
+            "-p",
+            "cli",
+            "--",
+            "run",
+            ok_file.to_str().unwrap(),
+        ])
+        .output()
+        .expect("Не удалось запустить cargo run");
+
+    assert!(
+        ok_output.status.success(),
+        "foreach по массиву/словарю завершился с ошибкой\nSTDOUT: {}\nSTDERR: {}",
+        String::from_utf8_lossy(&ok_output.stdout),
+        String::from_utf8_lossy(&ok_output.stderr)
+    );
+    assert_eq!("12\nab\n", String::from_utf8_lossy(&ok_output.stdout));
+
+    let fail_file = dir.join("fail.goida");
+    std::fs::write(&fail_file, "константа x = 1\nx += 1\n")
+        .expect("Не удалось записать временный файл");
+    let fail_output = Command::new("cargo")
+        .args([
+            "run",
+            "-q",
+            "-p",
+            "cli",
+            "--",
+            "run",
+            fail_file.to_str().unwrap(),
+        ])
+        .output()
+        .expect("Не удалось запустить cargo run");
+
+    assert!(
+        !fail_output.status.success(),
+        "составное изменение константы должно завершаться ошибкой\nSTDOUT: {}\nSTDERR: {}",
+        String::from_utf8_lossy(&fail_output.stdout),
+        String::from_utf8_lossy(&fail_output.stderr)
+    );
+    assert!(
+        String::from_utf8_lossy(&fail_output.stdout).contains("Нельзя изменить константу")
+            || String::from_utf8_lossy(&fail_output.stderr).contains("Нельзя изменить константу"),
+        "ошибка должна сообщать о запрете изменения константы\nSTDOUT: {}\nSTDERR: {}",
+        String::from_utf8_lossy(&fail_output.stdout),
+        String::from_utf8_lossy(&fail_output.stderr)
+    );
+}

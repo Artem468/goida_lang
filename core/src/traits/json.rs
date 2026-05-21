@@ -69,6 +69,7 @@ impl JsonParsable for Value {
             Value::Builtin(_) => Err("Нельзя сериализовать встроенную функцию в JSON".into()),
             Value::Module(_) => Err("Нельзя сериализовать модуль в JSON".into()),
             Value::Thread(_) => Err("Нельзя сериализовать поток в JSON".into()),
+            Value::Iterator(_) => Err("Нельзя сериализовать итератор в JSON".into()),
             Value::Mutex(_) => Err("Нельзя сериализовать мьютекс в JSON".into()),
             Value::RwLock(_) => Err("Нельзя сериализовать блокировку чтения-записи в JSON".into()),
             Value::NativeResource(_) => Err("Нельзя сериализовать нативный ресурс в JSON".into()),

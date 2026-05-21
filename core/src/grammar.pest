@@ -81,6 +81,7 @@ statement = _{
     try_stmt |
     raise_stmt |
     while_stmt |
+    foreach_stmt |
     for_stmt |
     return_stmt |
     expr_stmt
@@ -103,7 +104,7 @@ raise_stmt = {
 }
 
 assignment = {
-    identifier ~ type_hint? ~ "=" ~ expression
+    const_mod? ~ identifier ~ type_hint? ~ "=" ~ expression
 }
 
 property_assign = {
@@ -132,6 +133,10 @@ while_stmt = {
 
 for_stmt = {
     "для" ~ "(" ~ for_init ~ "," ~ for_condition ~ "," ~ for_update ~ ")" ~ block
+}
+
+foreach_stmt = {
+    "для" ~ identifier ~ in_op ~ expression ~ block
 }
 
 thread_stmt = {
@@ -189,6 +194,10 @@ logical_or_op = @{
 
 logical_and_op = @{
     "и" ~ !identifier_part
+}
+
+in_op = @{
+    "в" ~ !identifier_part
 }
 
 comparison = {
@@ -304,6 +313,8 @@ type_name = @{
 }
 
 static_mod = @{ "статичный" }
+
+const_mod = @{ "константа" }
 
 visibility = @{
     "публичный" | "приватный"

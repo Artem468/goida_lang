@@ -1,6 +1,7 @@
 use crate::ast::prelude::{ClassDefinition, ErrorData, Span};
+use crate::builtins::iterator::values_from_iterable;
 use crate::interpreter::prelude::{
-    CallArgListExt, Interpreter, RuntimeError, SharedInterner, Value,
+    CallArgListExt, Interpreter, RuntimeError, RuntimeIterator, SharedInterner, Value,
 };
 use crate::shared::SharedMut;
 use crate::{bail_runtime, define_builtin, define_constructor, define_method, runtime_error};
@@ -74,6 +75,13 @@ pub fn setup_array_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassD
                 "Использование: array.get(number)"
             )
         }
+    });
+
+    define_method!(class_def, interner, "итератор" => (_, args, span) {
+        let Some(value) = CallArgListExt::first_value(&args) else {
+            return bail_runtime!(TypeError, span, "Ожидался массив");
+        };
+        Ok(Value::Iterator(RuntimeIterator::new(values_from_iterable(value, span)?)))
     });
 
     (name, SharedMut::new(class_def))

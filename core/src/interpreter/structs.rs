@@ -35,12 +35,45 @@ pub enum Value {
     List(SharedMut<Vec<Value>>),
     Array(Arc<Vec<Value>>),
     Dict(SharedMut<HashMap<String, Value>>),
+    Iterator(RuntimeIterator),
     Thread(RuntimeThread),
     Mutex(RuntimeMutex),
     RwLock(RuntimeRwLock),
     NativeResource(SharedMut<Box<dyn Any + Send + Sync>>),
     NativeGlobal(Arc<NativeGlobalBinding>),
     Empty,
+}
+
+#[derive(Clone, Debug)]
+/// Lazy iterator pipeline over runtime values.
+pub struct RuntimeIterator {
+    pub source: Arc<Vec<Value>>,
+    pub steps: Arc<Vec<IteratorStep>>,
+}
+
+impl RuntimeIterator {
+    pub fn new(source: Vec<Value>) -> Self {
+        Self {
+            source: Arc::new(source),
+            steps: Arc::new(Vec::new()),
+        }
+    }
+
+    pub fn with_step(&self, step: IteratorStep) -> Self {
+        let mut steps = self.steps.as_ref().clone();
+        steps.push(step);
+        Self {
+            source: self.source.clone(),
+            steps: Arc::new(steps),
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+/// Single lazy iterator transformation.
+pub enum IteratorStep {
+    Map(Value),
+    Filter(Value),
 }
 
 #[derive(Clone, Debug)]
@@ -237,6 +270,7 @@ impl RuntimeError {
 /// Lexical environment frame.
 pub struct Environment {
     pub(crate) variables: HashMap<Symbol, Value>,
+    pub(crate) constants: HashMap<Symbol, ()>,
     pub(crate) parent: Option<SharedMut<Environment>>,
     pub(crate) is_function: bool,
 }

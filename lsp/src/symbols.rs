@@ -110,6 +110,15 @@ pub(crate) fn collect_declarations(
                 }
                 collect_declarations(module, interner, &[*body], out);
             }
+            StatementKind::ForEach { variable, body, .. } => {
+                if let Some(name) = module.arena.resolve_symbol(interner, *variable) {
+                    out.push(ResolvedSymbol {
+                        name,
+                        span: statement.span,
+                    });
+                }
+                collect_declarations(module, interner, &[*body], out);
+            }
             StatementKind::If {
                 then_body,
                 else_body,

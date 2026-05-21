@@ -1,6 +1,7 @@
 use crate::ast::prelude::{ClassDefinition, ErrorData, Span};
+use crate::builtins::iterator::values_from_iterable;
 use crate::interpreter::prelude::{
-    CallArgListExt, Interpreter, RuntimeError, SharedInterner, Value,
+    CallArgListExt, Interpreter, RuntimeError, RuntimeIterator, SharedInterner, Value,
 };
 use crate::shared::SharedMut;
 use crate::{
@@ -120,6 +121,43 @@ pub fn setup_text_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassDe
                 "Использование: str.replace(old, new)"
             )
         }
+    });
+
+    define_method!(class_def, interner, "обрезать" => (_interp, args, span) {
+        if let Some(Value::Text(s)) = CallArgListExt::first_value(&args) {
+            Ok(Value::Text(s.trim().to_string()))
+        } else {
+            bail_runtime!(TypeError, span, "Ожидалась строка")
+        }
+    });
+
+    define_method!(class_def, interner, "начинается_с" => (_interp, args, span) {
+        if let (Some(Value::Text(s)), Some(Value::Text(prefix))) = (
+            CallArgListExt::first_value(&args),
+            CallArgListExt::get_value(&args, 1),
+        ) {
+            Ok(Value::Boolean(s.starts_with(prefix)))
+        } else {
+            bail_runtime!(TypeError, span, "Использование: str.начинается_с(prefix)")
+        }
+    });
+
+    define_method!(class_def, interner, "заканчивается_на" => (_interp, args, span) {
+        if let (Some(Value::Text(s)), Some(Value::Text(suffix))) = (
+            CallArgListExt::first_value(&args),
+            CallArgListExt::get_value(&args, 1),
+        ) {
+            Ok(Value::Boolean(s.ends_with(suffix)))
+        } else {
+            bail_runtime!(TypeError, span, "Использование: str.заканчивается_на(suffix)")
+        }
+    });
+
+    define_method!(class_def, interner, "итератор" => (_, args, span) {
+        let Some(value) = CallArgListExt::first_value(&args) else {
+            return bail_runtime!(TypeError, span, "Ожидалась строка");
+        };
+        Ok(Value::Iterator(RuntimeIterator::new(values_from_iterable(value, span)?)))
     });
 
     (name, SharedMut::new(class_def))

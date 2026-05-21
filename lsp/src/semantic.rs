@@ -181,7 +181,18 @@ fn collect_statement_tokens(
                 }
                 collect_expression_tokens(module, interner, *init, text, line_starts, out);
                 collect_expression_tokens(module, interner, *condition, text, line_starts, out);
-                collect_expression_tokens(module, interner, *update, text, line_starts, out);
+                collect_statement_tokens(module, interner, &[*update], text, line_starts, out);
+                collect_statement_tokens(module, interner, &[*body], text, line_starts, out);
+            }
+            StatementKind::ForEach {
+                variable,
+                iterable,
+                body,
+            } => {
+                if let Some(name) = module.arena.resolve_symbol(interner, *variable) {
+                    push_name_token(out, text, line_starts, statement.span, &name, 1, true);
+                }
+                collect_expression_tokens(module, interner, *iterable, text, line_starts, out);
                 collect_statement_tokens(module, interner, &[*body], text, line_starts, out);
             }
             StatementKind::Thread { body } => {

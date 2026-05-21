@@ -1,6 +1,7 @@
 use crate::ast::prelude::{ClassDefinition, ErrorData, Span};
+use crate::builtins::iterator::values_from_iterable;
 use crate::interpreter::prelude::{
-    CallArgListExt, Interpreter, RuntimeError, SharedInterner, Value,
+    CallArgListExt, Interpreter, RuntimeError, RuntimeIterator, SharedInterner, Value,
 };
 use crate::shared::SharedMut;
 use crate::traits::prelude::CoreOperations;
@@ -130,6 +131,13 @@ pub fn setup_list_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassDe
         } else {
             bail_runtime!(TypeError, span, "Использование: list.get(number)")
         }
+    });
+
+    define_method!(class_def, interner, "итератор" => (_, args, span) {
+        let Some(value) = CallArgListExt::first_value(&args) else {
+            return bail_runtime!(TypeError, span, "Ожидался список");
+        };
+        Ok(Value::Iterator(RuntimeIterator::new(values_from_iterable(value, span)?)))
     });
 
     (name, SharedMut::new(class_def))

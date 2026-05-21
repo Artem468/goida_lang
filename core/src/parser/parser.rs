@@ -133,6 +133,10 @@ impl ParserTrait {
                             let stmt_id = self.parse_while_stmt(inner)?;
                             self.module.body.push(stmt_id);
                         }
+                        Rule::foreach_stmt => {
+                            let stmt_id = self.parse_foreach_stmt(inner)?;
+                            self.module.body.push(stmt_id);
+                        }
                         Rule::for_stmt => {
                             let stmt_id = self.parse_for_stmt(inner)?;
                             self.module.body.push(stmt_id);

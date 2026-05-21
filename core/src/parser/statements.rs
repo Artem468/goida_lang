@@ -51,6 +51,10 @@ impl ParserTrait {
                     let stmt_id = self.parse_while_stmt(inner)?;
                     statements.push(stmt_id);
                 }
+                Rule::foreach_stmt => {
+                    let stmt_id = self.parse_foreach_stmt(inner)?;
+                    statements.push(stmt_id);
+                }
                 Rule::for_stmt => {
                     let stmt_id = self.parse_for_stmt(inner)?;
                     statements.push(stmt_id);
@@ -80,16 +84,25 @@ impl ParserTrait {
     ) -> Result<StmtId, ParseError> {
         let assignment_span: Span = (pair.as_span(), self.module.name).into();
         let mut inner = pair.into_inner();
-        let name_str = inner
-            .next()
-            .ok_or_else(|| {
+        let mut is_const = false;
+        let first = inner.next().ok_or_else(|| {
+            ParseError::InvalidSyntax(ErrorData::new(
+                assignment_span,
+                "Ожидалось имя переменной".into(),
+            ))
+        })?;
+        let name_token = if first.as_rule() == Rule::const_mod {
+            is_const = true;
+            inner.next().ok_or_else(|| {
                 ParseError::InvalidSyntax(ErrorData::new(
                     assignment_span,
                     "Ожидалось имя переменной".into(),
                 ))
             })?
-            .as_str()
-            .to_string();
+        } else {
+            first
+        };
+        let name_str = name_token.as_str().to_string();
         let name = self.module.arena.intern_string(&self.interner, &name_str);
 
         let mut type_hint = None;
@@ -124,6 +137,7 @@ impl ParserTrait {
         let stmt_id = self.module.arena.add_statement(
             StatementKind::Assign {
                 name,
+                is_const,
                 type_hint,
                 value: value.ok_or_else(|| {
                     ParseError::TypeError(ErrorData::new(
@@ -559,6 +573,7 @@ impl ParserTrait {
                 self.module.arena.add_statement(
                     StatementKind::Assign {
                         name,
+                        is_const: false,
                         type_hint: None,
                         value,
                     },
@@ -570,6 +585,7 @@ impl ParserTrait {
                 self.module.arena.add_statement(
                     StatementKind::Assign {
                         name: variable,
+                        is_const: false,
                         type_hint: None,
                         value,
                     },
@@ -597,6 +613,53 @@ impl ParserTrait {
             for_span,
         );
         Ok(stmt_id)
+    }
+
+    pub(crate) fn parse_foreach_stmt(
+        &mut self,
+        pair: pest::iterators::Pair<Rule>,
+    ) -> Result<StmtId, ParseError> {
+        let foreach_span = (pair.as_span(), self.module.name).into();
+        let mut inner = pair.into_inner();
+
+        let variable_token = inner.next().ok_or_else(|| {
+            ParseError::InvalidSyntax(ErrorData::new(
+                foreach_span,
+                "Ожидалось имя переменной".into(),
+            ))
+        })?;
+        let variable = self
+            .module
+            .arena
+            .intern_string(&self.interner, variable_token.as_str());
+
+        let _in_op = inner.next().ok_or_else(|| {
+            ParseError::InvalidSyntax(ErrorData::new(
+                foreach_span,
+                "Ожидалось ключевое слово 'в'".into(),
+            ))
+        })?;
+
+        let iterable = self.parse_expression(inner.next().ok_or_else(|| {
+            ParseError::InvalidSyntax(ErrorData::new(foreach_span, "Ожидалось выражение".into()))
+        })?)?;
+
+        let block_stmts = self.parse_block(inner.next().ok_or_else(|| {
+            ParseError::InvalidSyntax(ErrorData::new(foreach_span, "Ожидался блок".into()))
+        })?)?;
+        let body = self
+            .module
+            .arena
+            .add_statement(StatementKind::Block(block_stmts), foreach_span);
+
+        Ok(self.module.arena.add_statement(
+            StatementKind::ForEach {
+                variable,
+                iterable,
+                body,
+            },
+            foreach_span,
+        ))
     }
 
     pub(crate) fn parse_return_stmt(
