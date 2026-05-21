@@ -2,6 +2,12 @@
     "name": "goida-vscode",
     "displayName": "Goida Language Support",
     "version": "0.0.1",
+    "license": "Apache-2.0",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/Artem468/goida_lang.git",
+        "directory": "editors/vscode"
+    },
     "engines": {
         "vscode": "^1.75.0"
     },
@@ -13,7 +19,9 @@
         "vscode:prepublish": "npm run compile",
         "build:lsp": "cargo build -p lsp",
         "copy:lsp": "node ./scripts/copy-lsp.js",
-        "compile": "npm run build:lsp && tsc -p ./ && npm run copy:lsp",
+        "typecheck": "tsc -p ./ --noEmit",
+        "bundle": "esbuild src/extension.ts --bundle --platform=node --format=cjs --external:vscode --sourcemap --outfile=out/extension.js",
+        "compile": "npm run build:lsp && npm run typecheck && npm run bundle && npm run copy:lsp",
         "watch": "tsc -watch -p ./",
         "pretest": "npm run compile && npm run lint",
         "lint": "eslint src --ext ts",
@@ -53,6 +61,7 @@
     "devDependencies": {
         "@types/node": "^25.5.0",
         "@types/vscode": "^1.75.0",
+        "esbuild": "^0.28.0",
         "typescript": "^6.0.2"
     }
 }
