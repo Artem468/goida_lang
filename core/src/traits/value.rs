@@ -47,6 +47,9 @@ impl Value {
             Value::List(list) => !list.read(|l| l.is_empty()),
             Value::Array(array) => !array.is_empty(),
             Value::Dict(dict) => !dict.read(|d| d.is_empty()),
+            Value::Thread(_) => true,
+            Value::Mutex(_) => true,
+            Value::RwLock(_) => true,
             Value::NativeResource(_) => true,
             Value::NativeGlobal(_) => true,
             Value::Empty => false,
@@ -184,6 +187,9 @@ impl fmt::Display for Value {
                 }
                 write!(f, "}}")
             }),
+            Value::Thread(thread) => write!(f, "<Поток {:p}>", thread),
+            Value::Mutex(mutex) => write!(f, "<Мьютекс {:p}>", mutex),
+            Value::RwLock(rwlock) => write!(f, "<БлокировкаЧтенияЗаписи {:p}>", rwlock),
             Value::NativeResource(resource) => write!(f, "<Ресурс {:p}>", resource),
             Value::NativeGlobal(binding) => INTERNER.read(|i| {
                 let binding_name = i.resolve(binding.symbol_name).unwrap_or("неизвестно");
@@ -247,6 +253,7 @@ impl TryFrom<Value> for bool {
             Value::List(list) => Ok(!list.read(|l| l.is_empty())),
             Value::Array(array) => Ok(!array.is_empty()),
             Value::Dict(dict) => Ok(!dict.read(|d| d.is_empty())),
+            Value::Thread(_) | Value::Mutex(_) | Value::RwLock(_) => Ok(true),
             Value::Object(_)
             | Value::Class(_)
             | Value::Function(_)
@@ -273,6 +280,9 @@ impl PartialEq for Value {
             (Value::List(a), Value::List(b)) => a.ptr_eq(b),
             (Value::Array(a), Value::Array(b)) => Arc::ptr_eq(a, b),
             (Value::Dict(a), Value::Dict(b)) => a.ptr_eq(b),
+            (Value::Thread(a), Value::Thread(b)) => Arc::ptr_eq(&a.handle, &b.handle),
+            (Value::Mutex(a), Value::Mutex(b)) => Arc::ptr_eq(&a.value, &b.value),
+            (Value::RwLock(a), Value::RwLock(b)) => Arc::ptr_eq(&a.value, &b.value),
             (Value::NativeGlobal(a), Value::NativeGlobal(b)) => Arc::ptr_eq(a, b),
             (Value::Empty, Value::Empty) => true,
             _ => false,

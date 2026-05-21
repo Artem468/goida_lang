@@ -1,13 +1,16 @@
 use std::sync::{Arc, RwLock};
 
 #[derive(Debug)]
+/// Small cloneable wrapper around `Arc<RwLock<T>>`.
 pub struct SharedMut<T>(Arc<RwLock<T>>);
 
 impl<T> SharedMut<T> {
+    /// Wraps a value in shared mutable storage.
     pub fn new(value: T) -> Self {
         Self(Arc::new(RwLock::new(value)))
     }
 
+    /// Borrows the value immutably for the duration of the callback.
     pub fn read<F, R>(&self, f: F) -> R
     where
         F: FnOnce(&T) -> R,
@@ -16,6 +19,7 @@ impl<T> SharedMut<T> {
         f(&*guard)
     }
 
+    /// Borrows the value mutably for the duration of the callback.
     pub fn write<F, R>(&self, f: F) -> R
     where
         F: FnOnce(&mut T) -> R,
@@ -24,6 +28,7 @@ impl<T> SharedMut<T> {
         f(&mut *guard)
     }
 
+    /// Checks whether two wrappers point to the same allocation.
     pub fn ptr_eq(&self, other: &Self) -> bool {
         Arc::ptr_eq(&self.0, &other.0)
     }

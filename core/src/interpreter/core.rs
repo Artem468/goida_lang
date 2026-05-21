@@ -1,4 +1,4 @@
-use crate::ast::prelude::ClassDefinition;
+use crate::ast::prelude::{ClassDefinition, Span};
 use crate::ast::program::FieldData;
 use crate::ast::source::SourceManager;
 use crate::interpreter::prelude::{Environment, SharedInterner};
@@ -18,6 +18,7 @@ impl CoreOperations for Interpreter {
             native_libraries: HashMap::new(),
             interner,
             environment: SharedMut::new(Environment::new()),
+            background_threads: Vec::new(),
             method_depth: 0,
             source_manager: SourceManager::new(),
         }
@@ -85,6 +86,9 @@ impl CoreOperations for Interpreter {
             Value::List(_) => "Список",
             Value::Array(_) => "Массив",
             Value::Dict(_) => "Словарь",
+            Value::Thread(_) => "Поток",
+            Value::Mutex(_) => "Мьютекс",
+            Value::RwLock(_) => "БлокировкаЧтенияЗаписи",
             Value::Float(_) => "Дробь",
             Value::Number(_) => "Число",
             Value::Boolean(_) => "Логический",
@@ -250,10 +254,15 @@ impl Interpreter {
             for &stmt_id in &module.body {
                 match interpreter.execute_statement(stmt_id, module.name) {
                     Err(RuntimeError::Return(..)) => {}
-                    Err(e) => return Err(e),
+                    Err(e) => {
+                        interpreter.join_background_threads(module.name, Span::default())?;
+                        return Err(e);
+                    }
                     Ok(()) => {}
                 }
             }
+
+            interpreter.join_background_threads(module.name, Span::default())?;
 
             Ok(())
         })
@@ -284,6 +293,10 @@ impl Interpreter {
             return Some((module_id, Value::Function(function.clone())));
         }
 
+        if let Some(class) = module.classes.get(&member) {
+            return Some((module_id, Value::Class(class.clone())));
+        }
+
         if let Some(value) = module.globals.get(&member) {
             return Some((module_id, value.clone()));
         }
@@ -298,5 +311,19 @@ impl Interpreter {
         }
 
         None
+    }
+
+    pub(crate) fn fork_for_thread(&self) -> Self {
+        Self {
+            std_classes: self.std_classes.clone(),
+            builtins: self.builtins.clone(),
+            modules: self.modules.clone(),
+            native_libraries: self.native_libraries.clone(),
+            interner: self.interner.clone(),
+            environment: self.environment.clone(),
+            background_threads: Vec::new(),
+            method_depth: self.method_depth,
+            source_manager: SourceManager::new(),
+        }
     }
 }

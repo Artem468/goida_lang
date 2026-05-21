@@ -1,6 +1,6 @@
 use crate::ast::prelude::*;
 use crate::ast::program::{FieldData, MethodType};
-use crate::interpreter::prelude::Module;
+use crate::interpreter::prelude::{Module, Value};
 use crate::parser::prelude::{ParseError, Parser as ParserTrait};
 use std::collections::HashSet;
 use string_interner::DefaultSymbol as Symbol;
@@ -72,6 +72,9 @@ impl ParserTrait {
             "Система",
             "Терминал",
             "ДатаВремя",
+            "Поток",
+            "Мьютекс",
+            "БлокировкаЧтенияЗаписи",
         ] {
             names.insert(self.module.arena.intern_string(&self.interner, name));
         }
@@ -123,6 +126,10 @@ impl ParserTrait {
                 scopes.last_mut().unwrap().insert(*name);
                 Ok(())
             }
+            StatementKind::CompoundAssign { target, value, .. } => {
+                self.validate_expression_names(*target, scopes)?;
+                self.validate_expression_names(*value, scopes)
+            }
             StatementKind::IndexAssign {
                 object,
                 index,
@@ -163,11 +170,12 @@ impl ParserTrait {
                 scopes.push(HashSet::new());
                 scopes.last_mut().unwrap().insert(*variable);
                 self.validate_expression_names(*condition, scopes)?;
-                self.validate_expression_names(*update, scopes)?;
+                self.validate_statement_names(*update, scopes)?;
                 self.validate_statement_names(*body, scopes)?;
                 scopes.pop();
                 Ok(())
             }
+            StatementKind::Thread { body } => self.validate_thread_body_names(*body, scopes),
             StatementKind::Try { body, handlers } => {
                 self.validate_statement_names(*body, scopes)?;
                 for handler in handlers {
@@ -233,6 +241,22 @@ impl ParserTrait {
                 Ok(())
             }
             StatementKind::NativeLibraryDefinition(_) | StatementKind::Empty => Ok(()),
+        }
+    }
+
+    fn validate_thread_body_names(
+        &self,
+        stmt_id: StmtId,
+        scopes: &mut Vec<HashSet<Symbol>>,
+    ) -> Result<(), ParseError> {
+        let stmt = self.module.arena.get_statement(stmt_id).unwrap();
+        if let StatementKind::Block(statements) = &stmt.kind {
+            for stmt_id in statements {
+                self.validate_statement_names(*stmt_id, scopes)?;
+            }
+            Ok(())
+        } else {
+            self.validate_statement_names(stmt_id, scopes)
         }
     }
 
@@ -333,9 +357,9 @@ impl ParserTrait {
         let Some(name) = self.module.arena.resolve_symbol(&self.interner, symbol) else {
             return false;
         };
-        if let Some((module_name, member_name)) = name.split_once('.') {
-            let module_symbol = self.module.arena.intern_string(&self.interner, module_name);
-            let member_symbol = self.module.arena.intern_string(&self.interner, member_name);
+        let parts = name.split('.').collect::<Vec<_>>();
+        if parts.len() > 1 {
+            let module_symbol = self.module.arena.intern_string(&self.interner, parts[0]);
             if !scopes
                 .iter()
                 .rev()
@@ -344,13 +368,46 @@ impl ParserTrait {
                 return false;
             }
 
-            return self.module.modules.values().any(|module| {
-                module.functions.contains_key(&member_symbol)
-                    || module.classes.contains_key(&member_symbol)
-                    || module.globals.contains_key(&member_symbol)
-            });
+            let member_name = parts.last().copied().unwrap_or_default();
+            let member_symbol = self.module.arena.intern_string(&self.interner, member_name);
+            return self
+                .resolve_module_path_for_validation(&self.module, &parts[..parts.len() - 1])
+                .map(|module| {
+                    module.functions.contains_key(&member_symbol)
+                        || module.classes.contains_key(&member_symbol)
+                        || module.globals.contains_key(&member_symbol)
+                })
+                .unwrap_or(false);
         }
 
         false
+    }
+
+    fn resolve_module_path_for_validation<'a>(
+        &'a self,
+        current_module: &'a Module,
+        parts: &[&str],
+    ) -> Option<&'a Module> {
+        let (first, rest) = parts.split_first()?;
+        let first_symbol = self.module.arena.intern_string(&self.interner, first);
+        let mut module = self.resolve_import_alias_for_validation(current_module, first_symbol)?;
+
+        for part in rest {
+            let part_symbol = self.module.arena.intern_string(&self.interner, part);
+            module = self.resolve_import_alias_for_validation(module, part_symbol)?;
+        }
+
+        Some(module)
+    }
+
+    fn resolve_import_alias_for_validation<'a>(
+        &'a self,
+        module: &'a Module,
+        alias: Symbol,
+    ) -> Option<&'a Module> {
+        match module.globals.get(&alias) {
+            Some(Value::Module(module_symbol)) => module.modules.get(module_symbol),
+            _ => None,
+        }
     }
 }

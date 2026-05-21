@@ -4,17 +4,20 @@ use std::fmt::{Debug, Display};
 use std::sync::RwLock;
 
 #[derive(Debug)]
+/// File cache used by diagnostics to retrieve source text by path.
 pub struct SourceManager {
     pub files: RwLock<HashMap<String, Source<String>>>,
 }
 
 impl SourceManager {
+    /// Creates an empty source cache.
     pub fn new() -> Self {
         Self {
             files: RwLock::new(HashMap::new()),
         }
     }
 
+    /// Loads a file into the cache if it is not present yet.
     pub fn load_file(&self, path: &str) {
         let mut files = self.files.write().unwrap();
         if !files.contains_key(path) {
@@ -25,6 +28,7 @@ impl SourceManager {
         }
     }
 
+    /// Reads the current file content from disk.
     pub fn get_file_content(&self, path: &str) -> String {
         if self.files.read().unwrap().get(path).is_some() {
             return std::fs::read_to_string(path).unwrap_or_default();
@@ -32,6 +36,7 @@ impl SourceManager {
         std::fs::read_to_string(path).unwrap_or_default()
     }
 
+    /// Converts a character offset into zero-based line and column.
     pub fn get_line_col_from_char_offset(&self, code: &str, char_offset: usize) -> (usize, usize) {
         let mut line = 0;
         let mut col = 0;

@@ -27,6 +27,10 @@ impl ParserTrait {
                     let stmt_id = self.parse_assignment(inner)?;
                     statements.push(stmt_id);
                 }
+                Rule::compound_assignment => {
+                    let stmt_id = self.parse_compound_assignment(inner)?;
+                    statements.push(stmt_id);
+                }
                 Rule::property_assign => {
                     let stmt_id = self.parse_property_assign(inner)?;
                     statements.push(stmt_id);
@@ -49,6 +53,10 @@ impl ParserTrait {
                 }
                 Rule::for_stmt => {
                     let stmt_id = self.parse_for_stmt(inner)?;
+                    statements.push(stmt_id);
+                }
+                Rule::thread_stmt => {
+                    let stmt_id = self.parse_thread_stmt(inner)?;
                     statements.push(stmt_id);
                 }
                 Rule::return_stmt => {
@@ -127,6 +135,75 @@ impl ParserTrait {
             assignment_span,
         );
         Ok(stmt_id)
+    }
+
+    pub(crate) fn parse_compound_assignment(
+        &mut self,
+        pair: pest::iterators::Pair<Rule>,
+    ) -> Result<StmtId, ParseError> {
+        let span: Span = (pair.as_span(), self.module.name).into();
+        let compound_pair = pair.into_inner().next().ok_or_else(|| {
+            ParseError::InvalidSyntax(ErrorData::new(span, "Ожидалось присваивание".into()))
+        })?;
+
+        self.parse_compound_assign_pair(compound_pair, span)
+    }
+
+    fn parse_compound_assign_pair(
+        &mut self,
+        pair: pest::iterators::Pair<Rule>,
+        span: Span,
+    ) -> Result<StmtId, ParseError> {
+        let mut inner = pair.into_inner();
+        let target_pair = inner.next().ok_or_else(|| {
+            ParseError::InvalidSyntax(ErrorData::new(
+                span,
+                "Ожидалась левая часть присваивания".into(),
+            ))
+        })?;
+        let target = self.parse_postfix(target_pair)?;
+
+        let op_token = inner.next().ok_or_else(|| {
+            ParseError::InvalidSyntax(ErrorData::new(
+                span,
+                "Ожидался оператор присваивания".into(),
+            ))
+        })?;
+        let op = match op_token.as_str() {
+            "+=" => BinaryOperator::Add,
+            "-=" => BinaryOperator::Sub,
+            "*=" => BinaryOperator::Mul,
+            "/=" => BinaryOperator::Div,
+            "%=" => BinaryOperator::Mod,
+            _ => {
+                return Err(ParseError::InvalidSyntax(ErrorData::new(
+                    span,
+                    "Неподдерживаемый оператор присваивания".into(),
+                )))
+            }
+        };
+
+        let value = self.parse_expression(inner.next().ok_or_else(|| {
+            ParseError::InvalidSyntax(ErrorData::new(span, "Ожидалось выражение".into()))
+        })?)?;
+
+        let target_expr = self.module.arena.get_expression(target).ok_or_else(|| {
+            ParseError::InvalidSyntax(ErrorData::new(span, "Не найдена нода для выражения".into()))
+        })?;
+
+        match target_expr.kind {
+            ExpressionKind::Identifier(_)
+            | ExpressionKind::PropertyAccess { .. }
+            | ExpressionKind::Index { .. } => Ok(self
+                .module
+                .arena
+                .add_statement(StatementKind::CompoundAssign { target, op, value }, span)),
+            _ => Err(ParseError::InvalidSyntax(ErrorData::new(
+                span,
+                "Левая часть составного присваивания должна быть переменной, полем или индексом"
+                    .into(),
+            ))),
+        }
     }
 
     pub(crate) fn parse_property_assign(
@@ -455,66 +532,17 @@ impl ParserTrait {
             ParseError::InvalidSyntax(ErrorData::new(for_span, "Ожидалось выражение".into()))
         })?;
 
-        let upd_span = (for_upd_token.as_span(), self.module.name).into();
+        let upd_span: Span = (for_upd_token.as_span(), self.module.name).into();
         let mut upd_inner = for_upd_token.into_inner();
         let first_upd_token = upd_inner.next().ok_or_else(|| {
             ParseError::InvalidSyntax(ErrorData::new(upd_span, "Ожидалось выражение".into()))
         })?;
-        let ca_span = (first_upd_token.as_span(), self.module.name).into();
-        let update_expr = match first_upd_token.as_rule() {
-            Rule::compound_assign => {
-                let mut ca_inner = first_upd_token.into_inner();
-                let var_str = ca_inner
-                    .next()
-                    .ok_or_else(|| {
-                        ParseError::InvalidSyntax(ErrorData::new(
-                            ca_span,
-                            "Ожидалось выражение".into(),
-                        ))
-                    })?
-                    .as_str()
-                    .to_string();
-                let op_str = ca_inner
-                    .next()
-                    .ok_or_else(|| {
-                        ParseError::InvalidSyntax(ErrorData::new(
-                            ca_span,
-                            "Ожидалось выражение".into(),
-                        ))
-                    })?
-                    .as_str()
-                    .to_string();
-                let val_expr = self.parse_expression(ca_inner.next().ok_or_else(|| {
-                    ParseError::InvalidSyntax(ErrorData::new(ca_span, "Ожидалось выражение".into()))
-                })?)?;
-
-                let var_sym = self.module.arena.intern_string(&self.interner, &var_str);
-                let var_expr = self
-                    .module
-                    .arena
-                    .add_expression(ExpressionKind::Identifier(var_sym), ca_span);
-
-                let bin_op = match op_str.as_str() {
-                    "+=" => BinaryOperator::Add,
-                    "-=" => BinaryOperator::Sub,
-                    "*=" => BinaryOperator::Mul,
-                    "/=" => BinaryOperator::Div,
-                    _ => BinaryOperator::Add,
-                };
-
-                self.module.arena.add_expression(
-                    ExpressionKind::Binary {
-                        left: var_expr,
-                        op: bin_op,
-                        right: val_expr,
-                    },
-                    ca_span,
-                )
-            }
+        let update = match first_upd_token.as_rule() {
+            Rule::compound_assign => self.parse_compound_assign_pair(first_upd_token, upd_span)?,
             Rule::assignment_expr => {
                 let ae_span = (first_upd_token.as_span(), self.module.name).into();
                 let mut ae_inner = first_upd_token.into_inner();
-                let _var_str = ae_inner
+                let var_str = ae_inner
                     .next()
                     .ok_or_else(|| {
                         ParseError::InvalidSyntax(ErrorData::new(
@@ -524,11 +552,30 @@ impl ParserTrait {
                     })?
                     .as_str()
                     .to_string();
-                self.parse_expression(ae_inner.next().ok_or_else(|| {
+                let name = self.module.arena.intern_string(&self.interner, &var_str);
+                let value = self.parse_expression(ae_inner.next().ok_or_else(|| {
                     ParseError::InvalidSyntax(ErrorData::new(ae_span, "Ожидалось выражение".into()))
-                })?)?
+                })?)?;
+                self.module.arena.add_statement(
+                    StatementKind::Assign {
+                        name,
+                        type_hint: None,
+                        value,
+                    },
+                    ae_span,
+                )
             }
-            _ => self.parse_expression(first_upd_token)?,
+            _ => {
+                let value = self.parse_expression(first_upd_token)?;
+                self.module.arena.add_statement(
+                    StatementKind::Assign {
+                        name: variable,
+                        type_hint: None,
+                        value,
+                    },
+                    upd_span,
+                )
+            }
         };
 
         let block_stmts = self.parse_block(inner.next().ok_or_else(|| {
@@ -544,7 +591,7 @@ impl ParserTrait {
                 variable,
                 init: init_expr,
                 condition: condition_expr,
-                update: update_expr,
+                update,
                 body,
             },
             for_span,
@@ -572,5 +619,26 @@ impl ParserTrait {
             .arena
             .add_statement(StatementKind::Return(expr), return_span);
         Ok(stmt_id)
+    }
+
+    pub(crate) fn parse_thread_stmt(
+        &mut self,
+        pair: pest::iterators::Pair<Rule>,
+    ) -> Result<StmtId, ParseError> {
+        let thread_span: Span = (pair.as_span(), self.module.name).into();
+        let mut inner = pair.into_inner();
+        let block_pair = inner.next().ok_or_else(|| {
+            ParseError::InvalidSyntax(ErrorData::new(thread_span, "Ожидался блок потока".into()))
+        })?;
+        let block_stmts = self.parse_block(block_pair)?;
+        let body = self
+            .module
+            .arena
+            .add_statement(StatementKind::Block(block_stmts), thread_span);
+
+        Ok(self
+            .module
+            .arena
+            .add_statement(StatementKind::Thread { body }, thread_span))
     }
 }

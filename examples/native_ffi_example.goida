@@ -1,17 +1,17 @@
 библиотека "../target/debug/native_ffi_test_lib.dll" {
     функция add(a: число, b: число) -> число {}
     функция minus(a: число, b: число) -> число {}
-    переменная COUNTER: число;
-    переменная RATIO: дробь;
-    переменная HANDLE: пустота;
+    переменная COUNTER: число
+    переменная RATIO: дробь
+    переменная HANDLE: пустота
 }
 
-сложение = add;
-вычитание = minus;
+сложение = add
+вычитание = minus
 
 
-печать("add(10, 5) = " + сложение(10, 5));
-печать("minus(10, 5) = " + вычитание(10, 5));
-печать("counter before = " + COUNTER);
-COUNTER = 42;
-печать("counter after = " + COUNTER);
+печать("add(10, 5) = " + сложение(10, 5))
+печать("minus(10, 5) = " + вычитание(10, 5))
+печать("counter before = " + COUNTER)
+COUNTER = 42
+печать("counter after = " + COUNTER)

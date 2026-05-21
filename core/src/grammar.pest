@@ -11,7 +11,7 @@ item = _{
 
 // === Import statements ===
 import_stmt = {
-    "подключить" ~ (NEWLINE | COMMENT)* ~ string_literal ~ (NEWLINE | COMMENT)* ~ "в" ~ (NEWLINE | COMMENT)* ~ identifier ~ (NEWLINE | COMMENT)* ~ ";"
+    "подключить" ~ (NEWLINE | COMMENT)* ~ string_literal ~ (NEWLINE | COMMENT)* ~ "в" ~ (NEWLINE | COMMENT)* ~ identifier
 }
 
 // === Functions ===
@@ -33,7 +33,7 @@ library_function = {
 }
 
 library_global = {
-    "переменная" ~ identifier ~ ":" ~ type_name ~ ";"
+    "переменная" ~ identifier ~ ":" ~ type_name
 }
 
 library_param_list = {
@@ -60,7 +60,7 @@ class_item = _{
 }
 
 class_field = {
-    visibility? ~ static_mod? ~ identifier ~ ":" ~ type_name ~ ("=" ~ expression)? ~ ";"
+    visibility? ~ static_mod? ~ identifier ~ ":" ~ type_name ~ ("=" ~ expression)?
 }
 
 constructor = {
@@ -73,6 +73,8 @@ class_method = {
 
 // === Statements ===
 statement = _{
+    thread_stmt |
+    compound_assignment |
     assignment |
     property_assign |
     if_stmt |
@@ -97,15 +99,19 @@ catch_pattern = {
 }
 
 raise_stmt = {
-    "выбросить" ~ identifier ~ ("(" ~ expression? ~ ")")? ~ ";"
+    "выбросить" ~ identifier ~ ("(" ~ expression? ~ ")")?
 }
 
 assignment = {
-    identifier ~ type_hint? ~ "=" ~ expression ~ ";"
+    identifier ~ type_hint? ~ "=" ~ expression
 }
 
 property_assign = {
-    postfix ~ "=" ~ expression ~ ";"
+    postfix ~ "=" ~ expression
+}
+
+compound_assignment = {
+    compound_assign
 }
 
 if_stmt = {
@@ -125,7 +131,11 @@ while_stmt = {
 }
 
 for_stmt = {
-    "для" ~ "(" ~ for_init ~ ";" ~ for_condition ~ ";" ~ for_update ~ ")" ~ block
+    "для" ~ "(" ~ for_init ~ "," ~ for_condition ~ "," ~ for_update ~ ")" ~ block
+}
+
+thread_stmt = {
+    "поток" ~ block
 }
 
 for_init = {
@@ -145,19 +155,19 @@ assignment_expr = {
 }
 
 compound_assign = {
-    identifier ~ compound_op ~ expression
+    postfix ~ compound_op ~ expression
 }
 
 compound_op = @{
-    "+=" | "-=" | "*=" | "/="
+    "+=" | "-=" | "*=" | "/=" | "%="
 }
 
 return_stmt = {
-    "вернуть" ~ expression? ~ ";"
+    "вернуть" ~ expression?
 }
 
 expr_stmt = {
-    expression ~ ";"
+    expression
 }
 
 // === Expressions ===

@@ -11,11 +11,13 @@ use crate::shared::SharedMut;
 use libloading::Library;
 use std::fmt::Debug;
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::sync::{Arc, Condvar, Mutex, RwLock};
+use std::thread::{JoinHandle, ThreadId};
 use string_interner::backend::StringBackend;
 use string_interner::{DefaultSymbol as Symbol, StringInterner};
 
 #[derive(Clone, Debug)]
+/// Runtime value representation used by the interpreter and built-ins.
 pub enum Value {
     Number(i64),
     Float(f64),
@@ -29,12 +31,80 @@ pub enum Value {
     List(SharedMut<Vec<Value>>),
     Array(Arc<Vec<Value>>),
     Dict(SharedMut<HashMap<String, Value>>),
+    Thread(RuntimeThread),
+    Mutex(RuntimeMutex),
+    RwLock(RuntimeRwLock),
     NativeResource(SharedMut<Box<dyn Any + Send + Sync>>),
     NativeGlobal(Arc<NativeGlobalBinding>),
     Empty,
 }
 
 #[derive(Clone, Debug)]
+/// Join handle for a language-level background thread.
+pub struct RuntimeThread {
+    pub handle: Arc<Mutex<Option<JoinHandle<Result<(), RuntimeError>>>>>,
+}
+
+impl RuntimeThread {
+    /// Wraps a spawned Rust thread as a Goida runtime thread.
+    pub fn new(handle: JoinHandle<Result<(), RuntimeError>>) -> Self {
+        Self {
+            handle: Arc::new(Mutex::new(Some(handle))),
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+/// Runtime mutex value with reentrant ownership tracking.
+pub struct RuntimeMutex {
+    pub value: Arc<Mutex<Value>>,
+    pub state: Arc<(Mutex<MutexLockState>, Condvar)>,
+}
+
+impl RuntimeMutex {
+    /// Creates a mutex around an initial runtime value.
+    pub fn new(value: Value) -> Self {
+        Self {
+            value: Arc::new(Mutex::new(value)),
+            state: Arc::new((Mutex::new(MutexLockState::default()), Condvar::new())),
+        }
+    }
+}
+
+#[derive(Debug, Default)]
+/// Ownership state for a runtime mutex.
+pub struct MutexLockState {
+    pub owner: Option<ThreadId>,
+    pub depth: usize,
+}
+
+#[derive(Clone, Debug)]
+/// Runtime read/write lock value with per-thread lock tracking.
+pub struct RuntimeRwLock {
+    pub value: Arc<RwLock<Value>>,
+    pub state: Arc<(Mutex<RwLockState>, Condvar)>,
+}
+
+impl RuntimeRwLock {
+    /// Creates a read/write lock around an initial runtime value.
+    pub fn new(value: Value) -> Self {
+        Self {
+            value: Arc::new(RwLock::new(value)),
+            state: Arc::new((Mutex::new(RwLockState::default()), Condvar::new())),
+        }
+    }
+}
+
+#[derive(Debug, Default)]
+/// Ownership state for a runtime read/write lock.
+pub struct RwLockState {
+    pub writer: Option<ThreadId>,
+    pub writer_depth: usize,
+    pub readers: HashMap<ThreadId, usize>,
+}
+
+#[derive(Clone, Debug)]
+/// Binding to a function exported by a native dynamic library.
 pub struct NativeFunctionBinding {
     pub module_id: Symbol,
     pub library_path: Arc<PathBuf>,
@@ -44,6 +114,7 @@ pub struct NativeFunctionBinding {
 }
 
 #[derive(Clone, Debug)]
+/// Binding to a global exported by a native dynamic library.
 pub struct NativeGlobalBinding {
     pub module_id: Symbol,
     pub library_path: Arc<PathBuf>,
@@ -52,16 +123,19 @@ pub struct NativeGlobalBinding {
 }
 
 #[derive(Debug)]
+/// Loaded native dynamic library handle kept alive while bindings exist.
 pub struct LoadedNativeLibrary {
     pub handle: Library,
 }
 
 #[derive(Clone, Debug)]
+/// Runtime call argument with optional source-level name.
 pub struct CallArgValue {
     pub name: Option<Symbol>,
     pub value: Value,
 }
 
+/// Convenience accessors for positional call arguments.
 pub trait CallArgListExt {
     fn first_value(&self) -> Option<&Value>;
     fn get_value(&self, index: usize) -> Option<&Value>;
@@ -88,6 +162,7 @@ impl CallArgListExt for Vec<CallArgValue> {
 }
 
 #[derive(Clone)]
+/// Native/built-in function callable from Goida code.
 pub struct BuiltinFn(
     pub  Arc<
         dyn Fn(&Interpreter, Vec<CallArgValue>, Span) -> Result<Value, RuntimeError> + Send + Sync,
@@ -95,6 +170,7 @@ pub struct BuiltinFn(
 );
 
 #[derive(Debug)]
+/// Runtime failures surfaced by the interpreter.
 pub enum RuntimeError {
     UndefinedVariable(ErrorData),
     UndefinedFunction(ErrorData),
@@ -111,6 +187,7 @@ pub enum RuntimeError {
 }
 
 impl RuntimeError {
+    /// Returns the Goida error class name corresponding to this runtime error.
     pub fn error_class_name(&self) -> String {
         match self {
             RuntimeError::UndefinedVariable(_) => "ОшибкаПеременной".to_string(),
@@ -127,6 +204,7 @@ impl RuntimeError {
         }
     }
 
+    /// Returns a human-readable message for diagnostics and catch bindings.
     pub fn error_message(&self) -> String {
         match self {
             RuntimeError::UndefinedVariable(err)
@@ -156,15 +234,18 @@ impl RuntimeError {
 }
 
 #[derive(Debug)]
+/// Lexical environment frame.
 pub struct Environment {
     pub(crate) variables: HashMap<Symbol, Value>,
     pub(crate) parent: Option<SharedMut<Environment>>,
     pub(crate) is_function: bool,
 }
 
+/// Shared string interner used by parser, arena and interpreter.
 pub type SharedInterner = SharedMut<StringInterner<StringBackend>>;
 
 #[derive(Debug)]
+/// Main interpreter state.
 pub struct Interpreter {
     pub(crate) std_classes: HashMap<Symbol, SharedMut<ClassDefinition>>,
     pub(crate) builtins: HashMap<Symbol, BuiltinFn>,
@@ -172,11 +253,13 @@ pub struct Interpreter {
     pub(crate) native_libraries: HashMap<PathBuf, SharedMut<LoadedNativeLibrary>>,
     pub interner: SharedInterner,
     pub(crate) environment: SharedMut<Environment>,
+    pub(crate) background_threads: Vec<RuntimeThread>,
     pub(crate) method_depth: usize,
     pub source_manager: SourceManager,
 }
 
 #[derive(Clone, Debug)]
+/// Parsed module plus runtime declarations and globals.
 pub struct Module {
     pub name: Symbol,
     pub path: PathBuf,
