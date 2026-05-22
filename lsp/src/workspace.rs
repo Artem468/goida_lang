@@ -1,26 +1,29 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use goida_core::import_paths::resolve_import_path as resolve_core_import_path;
+
 pub(crate) fn resolve_import_path(
     current_file: &Path,
     import_path: &str,
     workspace_roots: &[PathBuf],
 ) -> Option<PathBuf> {
-    let normalized = import_path.replace('/', std::path::MAIN_SEPARATOR_STR);
-    let mut with_ext = PathBuf::from(normalized);
+    let core_candidate = resolve_core_import_path(current_file, import_path);
+    if core_candidate.exists() {
+        return Some(core_candidate);
+    }
+
+    let mut with_ext = PathBuf::from(import_path);
     if with_ext.extension().is_none() {
         with_ext.set_extension("goida");
     }
-
     let mut candidates = Vec::new();
     if with_ext.is_absolute() {
         candidates.push(with_ext);
     } else {
-        if let Some(parent) = current_file.parent() {
-            candidates.push(parent.join(&with_ext));
-        }
         for root in workspace_roots {
             candidates.push(root.join(&with_ext));
+            candidates.push(root.join(".goida").join("deps").join(&with_ext));
         }
     }
 
@@ -66,5 +69,45 @@ fn walk_goida_files(dir: &Path, files: &mut Vec<PathBuf>) {
         {
             files.push(path);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::resolve_import_path;
+    use std::fs;
+    use std::path::PathBuf;
+
+    #[test]
+    fn resolves_short_import_from_project_deps() {
+        let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("..")
+            .join("target")
+            .join("lsp_workspace_import_test");
+        if root.exists() {
+            fs::remove_dir_all(&root).expect("failed to clear lsp import test dir");
+        }
+
+        let deps_dir = root.join(".goida/deps/harpoon");
+        fs::create_dir_all(&deps_dir).expect("failed to create deps dir");
+        fs::write(
+            root.join("main.goida"),
+            "подключить \"harpoon/главный\" в web\n",
+        )
+        .expect("failed to write main file");
+        fs::write(deps_dir.join("главный.goida"), "значение = 1\n")
+            .expect("failed to write dep module");
+
+        let resolved = resolve_import_path(
+            &root.join("main.goida"),
+            "harpoon/главный",
+            std::slice::from_ref(&root),
+        )
+        .expect("short import should resolve from .goida/deps");
+
+        assert_eq!(
+            deps_dir.join("главный.goida").canonicalize().unwrap(),
+            resolved.canonicalize().unwrap()
+        );
     }
 }

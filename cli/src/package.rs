@@ -6,9 +6,12 @@ use std::{
     process::Command,
 };
 
+use goida_core::import_paths::GOIDA_VENV_ENV;
+
 const MANIFEST_FILE: &str = "goida.toml";
 const LOCK_FILE: &str = "goida.lock";
 const DEPS_DIR: &str = ".goida/deps";
+const VENV_CONFIG_FILE: &str = "goida-venv.toml";
 
 #[derive(Debug, Serialize, Deserialize)]
 struct Manifest {
@@ -55,6 +58,7 @@ struct LockedPackage {
 struct ResolvedDependency {
     source: String,
     revision: String,
+    path: String,
 }
 
 pub(crate) fn new_project(name: &str, description: &str, version: &str) -> Result<(), String> {
@@ -127,7 +131,7 @@ pub(crate) fn add_dependency(
         name: name.to_string(),
         source: resolved.source,
         revision: resolved.revision,
-        path: format!("{DEPS_DIR}/{name}"),
+        path: resolved.path,
     });
     lock.package
         .sort_by(|left, right| left.name.cmp(&right.name));
@@ -146,12 +150,25 @@ pub(crate) fn remove_dependency(name: &str) -> Result<(), String> {
     write_manifest(&root, &manifest)?;
 
     let mut lock = read_lock(&root)?;
+    let locked_path = lock
+        .package
+        .iter()
+        .find(|package| package.name == name)
+        .map(|package| package.path.clone());
     lock.package.retain(|package| package.name != name);
     write_lock(&root, &lock)?;
 
-    let dep_path = root.join(DEPS_DIR).join(name);
+    let dep_path = locked_path
+        .as_deref()
+        .and_then(|path| resolve_locked_dep_path(&root, path))
+        .unwrap_or_else(|| root.join(DEPS_DIR).join(name));
     if dep_path.exists() {
-        ensure_inside(&root.join(DEPS_DIR), &dep_path)?;
+        let dep_root = locked_path
+            .as_deref()
+            .filter(|path| path.starts_with("$GOIDA_VENV/"))
+            .map(|_| dependency_install_root(&root))
+            .unwrap_or_else(|| root.join(DEPS_DIR));
+        ensure_inside(&dep_root, &dep_path)?;
         fs::remove_dir_all(&dep_path)
             .map_err(|err| format!("Не удалось удалить '{}': {err}", dep_path.display()))?;
     }
@@ -160,8 +177,156 @@ pub(crate) fn remove_dependency(name: &str) -> Result<(), String> {
     Ok(())
 }
 
+pub(crate) fn create_venv(path: &str) -> Result<(), String> {
+    let root = PathBuf::from(path);
+    fs::create_dir_all(root.join("deps"))
+        .map_err(|err| format!("Не удалось создать каталог зависимостей окружения: {err}"))?;
+    fs::create_dir_all(root.join("Scripts"))
+        .map_err(|err| format!("Не удалось создать каталог Scripts: {err}"))?;
+    fs::create_dir_all(root.join("bin"))
+        .map_err(|err| format!("Не удалось создать каталог bin: {err}"))?;
+
+    let absolute_root = root.canonicalize().map_err(|err| {
+        format!(
+            "Не удалось определить путь окружения '{}': {err}",
+            root.display()
+        )
+    })?;
+    let absolute = absolute_root.to_string_lossy().replace('\\', "\\\\");
+    let shell_absolute = absolute_root.to_string_lossy().replace('\\', "/");
+
+    fs::write(
+        root.join(VENV_CONFIG_FILE),
+        format!(
+            "[venv]\nversion = \"1\"\ndeps = \"{}\"\n",
+            absolute_root.join("deps").display()
+        ),
+    )
+    .map_err(|err| format!("Не удалось записать {VENV_CONFIG_FILE}: {err}"))?;
+
+    fs::write(
+        root.join("Scripts").join("Activate.ps1"),
+        powershell_activate(&absolute),
+    )
+    .map_err(|err| format!("Не удалось записать Activate.ps1: {err}"))?;
+    fs::write(
+        root.join("Scripts").join("Deactivate.ps1"),
+        powershell_deactivate(),
+    )
+    .map_err(|err| format!("Не удалось записать Deactivate.ps1: {err}"))?;
+    fs::write(
+        root.join("Scripts").join("activate.bat"),
+        cmd_activate(&absolute),
+    )
+    .map_err(|err| format!("Не удалось записать activate.bat: {err}"))?;
+    fs::write(
+        root.join("Scripts").join("deactivate.bat"),
+        cmd_deactivate(),
+    )
+    .map_err(|err| format!("Не удалось записать deactivate.bat: {err}"))?;
+    fs::write(
+        root.join("bin").join("activate"),
+        sh_activate(&shell_absolute),
+    )
+    .map_err(|err| format!("Не удалось записать bin/activate: {err}"))?;
+    fs::write(root.join("bin").join("deactivate"), sh_deactivate())
+        .map_err(|err| format!("Не удалось записать bin/deactivate: {err}"))?;
+
+    println!(
+        "Создано виртуальное окружение '{}'",
+        absolute_root.display()
+    );
+    println!(
+        "PowerShell: . '{}'",
+        absolute_root.join("Scripts/Activate.ps1").display()
+    );
+    println!(
+        "cmd.exe:    {}",
+        absolute_root.join("Scripts/activate.bat").display()
+    );
+    println!(
+        "sh/bash:    source '{}'",
+        absolute_root.join("bin/activate").display()
+    );
+    Ok(())
+}
+
 fn starter_source() -> &'static str {
     "функция привет_мир() {\n    печать(\"Привет, мир!\")\n}\n\nпривет_мир()\n"
+}
+
+fn powershell_activate(venv_path: &str) -> String {
+    format!(
+        r#"$env:GOIDA_OLD_VENV = $env:GOIDA_VENV
+$env:GOIDA_VENV = "{venv_path}"
+
+function global:deactivate {{
+    if ($env:GOIDA_OLD_VENV) {{
+        $env:GOIDA_VENV = $env:GOIDA_OLD_VENV
+        Remove-Item Env:GOIDA_OLD_VENV -ErrorAction SilentlyContinue
+    }} else {{
+        Remove-Item Env:GOIDA_VENV -ErrorAction SilentlyContinue
+    }}
+    Remove-Item Function:deactivate -ErrorAction SilentlyContinue
+}}
+
+Write-Host "Activated Goida venv: $env:GOIDA_VENV"
+"#
+    )
+}
+
+fn powershell_deactivate() -> &'static str {
+    r#"if ($env:GOIDA_OLD_VENV) {
+    $env:GOIDA_VENV = $env:GOIDA_OLD_VENV
+    Remove-Item Env:GOIDA_OLD_VENV -ErrorAction SilentlyContinue
+} else {
+    Remove-Item Env:GOIDA_VENV -ErrorAction SilentlyContinue
+}
+Remove-Item Function:deactivate -ErrorAction SilentlyContinue
+Write-Host "Deactivated Goida venv"
+"#
+}
+
+fn cmd_activate(venv_path: &str) -> String {
+    format!(
+        "@echo off\r\nset GOIDA_OLD_VENV=%GOIDA_VENV%\r\nset GOIDA_VENV={venv_path}\r\necho Activated Goida venv: %GOIDA_VENV%\r\n"
+    )
+}
+
+fn cmd_deactivate() -> &'static str {
+    "@echo off\r\nif defined GOIDA_OLD_VENV (set GOIDA_VENV=%GOIDA_OLD_VENV%) else (set GOIDA_VENV=)\r\nset GOIDA_OLD_VENV=\r\necho Deactivated Goida venv\r\n"
+}
+
+fn sh_activate(venv_path: &str) -> String {
+    format!(
+        r#"export GOIDA_OLD_VENV="${{GOIDA_VENV-}}"
+export GOIDA_VENV="{venv_path}"
+
+deactivate() {{
+    if [ -n "${{GOIDA_OLD_VENV-}}" ]; then
+        export GOIDA_VENV="$GOIDA_OLD_VENV"
+        unset GOIDA_OLD_VENV
+    else
+        unset GOIDA_VENV
+    fi
+    unset -f deactivate
+}}
+
+echo "Activated Goida venv: $GOIDA_VENV"
+"#
+    )
+}
+
+fn sh_deactivate() -> &'static str {
+    r#"if [ -n "${GOIDA_OLD_VENV-}" ]; then
+    export GOIDA_VENV="$GOIDA_OLD_VENV"
+else
+    unset GOIDA_VENV
+fi
+unset GOIDA_OLD_VENV
+unset -f deactivate 2>/dev/null || true
+echo "Deactivated Goida venv"
+"#
 }
 
 fn read_manifest(root: &Path) -> Result<Manifest, String> {
@@ -202,10 +367,11 @@ fn resolve_dependency(
 ) -> Result<ResolvedDependency, String> {
     if let Some(git) = &dependency.git {
         let revision = resolve_git_revision(git, dependency)?;
-        checkout_git_dependency(root, name, git, &revision)?;
+        let dep_path = checkout_git_dependency(root, name, git, &revision)?;
         return Ok(ResolvedDependency {
             source: format!("git+{git}"),
             revision,
+            path: lock_dep_path(root, &dep_path),
         });
     }
 
@@ -213,10 +379,11 @@ fn resolve_dependency(
         return Err("У зависимости не указан источник".into());
     };
     let source_path = resolve_local_source_path(root, path)?;
-    copy_local_dependency(root, name, &source_path)?;
+    let dep_path = copy_local_dependency(root, name, &source_path)?;
     Ok(ResolvedDependency {
         source: format!("path+{}", source_path.display()),
         revision: "local".into(),
+        path: lock_dep_path(root, &dep_path),
     })
 }
 
@@ -264,8 +431,8 @@ fn checkout_git_dependency(
     name: &str,
     git: &str,
     revision: &str,
-) -> Result<(), String> {
-    let deps_root = root.join(DEPS_DIR);
+) -> Result<PathBuf, String> {
+    let deps_root = dependency_install_root(root);
     fs::create_dir_all(&deps_root)
         .map_err(|err| format!("Не удалось создать '{}': {err}", deps_root.display()))?;
     let dep_path = deps_root.join(name);
@@ -282,7 +449,7 @@ fn checkout_git_dependency(
         "git clone",
     )?;
     run_git(&dep_path, &["checkout", revision], "git checkout")?;
-    Ok(())
+    Ok(dep_path)
 }
 
 fn resolve_local_source_path(root: &Path, path: &str) -> Result<PathBuf, String> {
@@ -304,8 +471,8 @@ fn resolve_local_source_path(root: &Path, path: &str) -> Result<PathBuf, String>
     Ok(source_path)
 }
 
-fn copy_local_dependency(root: &Path, name: &str, source_path: &Path) -> Result<(), String> {
-    let deps_root = root.join(DEPS_DIR);
+fn copy_local_dependency(root: &Path, name: &str, source_path: &Path) -> Result<PathBuf, String> {
+    let deps_root = dependency_install_root(root);
     fs::create_dir_all(&deps_root)
         .map_err(|err| format!("Не удалось создать '{}': {err}", deps_root.display()))?;
     let dep_path = deps_root.join(name);
@@ -316,7 +483,8 @@ fn copy_local_dependency(root: &Path, name: &str, source_path: &Path) -> Result<
             .map_err(|err| format!("Не удалось обновить '{}': {err}", dep_path.display()))?;
     }
 
-    copy_dir_all(source_path, &dep_path)
+    copy_dir_all(source_path, &dep_path)?;
+    Ok(dep_path)
 }
 
 fn copy_dir_all(source: &Path, destination: &Path) -> Result<(), String> {
@@ -352,6 +520,43 @@ fn copy_dir_all(source: &Path, destination: &Path) -> Result<(), String> {
     }
 
     Ok(())
+}
+
+fn dependency_install_root(project_root: &Path) -> PathBuf {
+    std::env::var(GOIDA_VENV_ENV)
+        .map(|path| PathBuf::from(path).join("deps"))
+        .unwrap_or_else(|_| project_root.join(DEPS_DIR))
+}
+
+fn lock_dep_path(project_root: &Path, dep_path: &Path) -> String {
+    if let Ok(venv_path) = std::env::var(GOIDA_VENV_ENV) {
+        let venv_deps = Path::new(&venv_path).join("deps");
+        if let Ok(relative) = dep_path.strip_prefix(&venv_deps) {
+            return format!(
+                "$GOIDA_VENV/deps/{}",
+                relative.to_string_lossy().replace('\\', "/")
+            );
+        }
+    }
+
+    dep_path
+        .strip_prefix(project_root)
+        .map(|relative| relative.to_string_lossy().replace('\\', "/"))
+        .unwrap_or_else(|_| dep_path.to_string_lossy().to_string())
+}
+
+fn resolve_locked_dep_path(project_root: &Path, locked_path: &str) -> Option<PathBuf> {
+    if let Some(rest) = locked_path.strip_prefix("$GOIDA_VENV/") {
+        let venv_path = std::env::var(GOIDA_VENV_ENV).ok()?;
+        return Some(PathBuf::from(venv_path).join(rest));
+    }
+
+    let path = PathBuf::from(locked_path);
+    Some(if path.is_absolute() {
+        path
+    } else {
+        project_root.join(path)
+    })
 }
 
 fn run_git(cwd: &Path, args: &[&str], label: &str) -> Result<(), String> {

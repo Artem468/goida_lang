@@ -1,12 +1,12 @@
 use crate::ast::prelude::{ClassDefinition, Span};
 use crate::ast::program::FieldData;
 use crate::ast::source::SourceManager;
+use crate::import_paths::resolve_import_path;
 use crate::interpreter::prelude::{Environment, SharedInterner};
 use crate::interpreter::structs::{Interpreter, Module, RuntimeError, Value};
 use crate::shared::SharedMut;
 use crate::traits::prelude::{CoreOperations, ExpressionEvaluator, StatementExecutor};
 use std::collections::{HashMap, HashSet};
-use std::path::Path;
 use string_interner::DefaultSymbol as Symbol;
 
 impl CoreOperations for Interpreter {
@@ -50,12 +50,7 @@ impl CoreOperations for Interpreter {
                 let path = current_module
                     .arena
                     .resolve_symbol(&self.interner, item.path)?;
-                let full_path = current_module
-                    .path
-                    .parent()
-                    .unwrap_or_else(|| Path::new("."))
-                    .join(Path::new(&path))
-                    .with_extension("goida");
+                let full_path = resolve_import_path(&current_module.path, &path);
                 let normalized_full_path = full_path
                     .canonicalize()
                     .unwrap_or(full_path)

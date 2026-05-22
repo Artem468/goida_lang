@@ -67,6 +67,11 @@ enum Commands {
         #[arg(help = "Имя зависимости")]
         name: String,
     },
+    #[command(about = "Создать виртуальное окружение Гойда")]
+    Venv {
+        #[arg(default_value = ".goida", help = "Путь к каталогу окружения")]
+        path: String,
+    },
     #[command(about = "Запустить интерактивный режим")]
     Repl,
 }
@@ -101,6 +106,7 @@ fn main() {
             tag.clone(),
         )),
         Some(Commands::Remove { name }) => exit_on_package_error(package::remove_dependency(name)),
+        Some(Commands::Venv { path }) => exit_on_package_error(package::create_venv(path)),
         Some(Commands::Repl) => run_repl(),
         None => {
             println!("Добро пожаловать в Гойда! Используйте --help для справки.");

@@ -1,8 +1,8 @@
 use crate::ast::prelude::*;
+use crate::import_paths::resolve_import_path;
 use crate::interpreter::prelude::Value;
 use crate::parser::parser::Rule;
 use crate::parser::prelude::{ParseError, Parser as ParserTrait};
-use std::path::Path;
 use string_interner::DefaultSymbol as Symbol;
 
 impl ParserTrait {
@@ -100,10 +100,7 @@ impl ParserTrait {
                 .unwrap_or_default()
                 .to_string()
         });
-        let relative_path = Path::new(&path_str);
-
-        let module_dir = self.module.path.parent().unwrap_or_else(|| Path::new("."));
-        let full_path = module_dir.join(relative_path).with_extension("goida");
+        let full_path = resolve_import_path(&self.module.path, &path_str);
 
         let _file_stem = full_path
             .file_stem()

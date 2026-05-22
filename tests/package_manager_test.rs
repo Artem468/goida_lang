@@ -104,6 +104,62 @@ fn package_manager_adds_local_path_dependencies() {
     assert!(!project.join(".goida/deps/harpoon/.git").exists());
 }
 
+#[test]
+fn package_manager_creates_venv_and_installs_active_dependencies_there() {
+    let workspace = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let temp = workspace.join("target/package_manager_venv_test");
+    if temp.exists() {
+        fs::remove_dir_all(&temp).expect("failed to clear venv test directory");
+    }
+    fs::create_dir_all(&temp).expect("failed to create venv test directory");
+
+    let new_output = run_goida(&workspace, &temp, &["new", "demo"]);
+    assert_success(&new_output, "goida new");
+    let project = temp.join("demo");
+    let venv = project.join(".goida");
+
+    let venv_output = run_goida(&workspace, &project, &["venv"]);
+    assert_success(&venv_output, "goida venv");
+    assert!(venv.join("deps").exists());
+    assert!(venv.join("Scripts/Activate.ps1").exists());
+    assert!(venv.join("Scripts/Deactivate.ps1").exists());
+    assert!(venv.join("Scripts/activate.bat").exists());
+    assert!(venv.join("Scripts/deactivate.bat").exists());
+    assert!(venv.join("bin/activate").exists());
+    assert!(venv.join("bin/deactivate").exists());
+
+    let local_dep = temp.join("local_dep");
+    fs::create_dir_all(&local_dep).expect("failed to create local dependency");
+    fs::write(local_dep.join("mod.goida"), "значение = 41\n")
+        .expect("failed to write local dependency module");
+
+    let add_output = run_goida_with_env(
+        &workspace,
+        &project,
+        &["add", "lib", "--path", local_dep.to_str().unwrap()],
+        &[("GOIDA_VENV", venv.to_str().unwrap())],
+    );
+    assert_success(&add_output, "goida add with active venv");
+    assert!(venv.join("deps/lib/mod.goida").exists());
+
+    let lock = fs::read_to_string(project.join("goida.lock")).expect("missing lock");
+    assert!(lock.contains("path = \"$GOIDA_VENV/deps/lib\""));
+
+    fs::write(
+        project.join("главный.goida"),
+        "подключить \"lib/mod\" в m\nпечать(m.значение)\n",
+    )
+    .expect("failed to write project main");
+    let run_output = run_goida_with_env(
+        &workspace,
+        &project,
+        &["run", "главный.goida"],
+        &[("GOIDA_VENV", venv.to_str().unwrap())],
+    );
+    assert_success(&run_output, "goida run with active venv import");
+    assert_eq!("41\n", String::from_utf8_lossy(&run_output.stdout));
+}
+
 fn create_git_dependency(path: &Path) {
     fs::create_dir_all(path).expect("failed to create git dependency directory");
     run_git(path, &["init"]);
@@ -115,6 +171,15 @@ fn create_git_dependency(path: &Path) {
 }
 
 fn run_goida(workspace: &Path, cwd: &Path, args: &[&str]) -> std::process::Output {
+    run_goida_with_env(workspace, cwd, args, &[])
+}
+
+fn run_goida_with_env(
+    workspace: &Path,
+    cwd: &Path,
+    args: &[&str],
+    envs: &[(&str, &str)],
+) -> std::process::Output {
     let manifest_path = workspace.join("cli/Cargo.toml");
     let mut command_args = vec![
         "run",
@@ -125,11 +190,12 @@ fn run_goida(workspace: &Path, cwd: &Path, args: &[&str]) -> std::process::Outpu
     ];
     command_args.extend_from_slice(args);
 
-    Command::new("cargo")
-        .current_dir(cwd)
-        .args(command_args)
-        .output()
-        .expect("failed to run goida cli")
+    let mut command = Command::new("cargo");
+    command.current_dir(cwd).args(command_args);
+    for (key, value) in envs {
+        command.env(key, value);
+    }
+    command.output().expect("failed to run goida cli")
 }
 
 fn run_git(cwd: &Path, args: &[&str]) {
