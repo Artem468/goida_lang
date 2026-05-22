@@ -91,5 +91,22 @@ pub fn setup_system_class(interner_ref: &SharedInterner) -> (Symbol, SharedMut<C
         Ok(Value::Empty)
     });
 
+    // --- Система.окружение("SOME") ---
+    define_method!(class_def, interner_ref, @static "окружение" => (_, args, span) {
+        let arg = CallArgListExt::first_value(&args)
+            .map(|v| v.to_string())
+            .unwrap_or_else(|| "Неизвестная ошибка".into());
+        match std::env::var(arg) {
+            Ok(v) => Ok(Value::Text(v)),
+            Err(err) => {
+                    bail_runtime!(
+                    InvalidOperation,
+                    span,
+                    "{}", err.to_string()
+                )
+            }
+        }
+    });
+
     (name, SharedMut::new(class_def))
 }

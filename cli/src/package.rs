@@ -252,7 +252,7 @@ pub(crate) fn create_venv(path: &str) -> Result<(), String> {
 }
 
 fn starter_source() -> &'static str {
-    "функция привет_мир() {\n    печать(\"Привет, мир!\")\n}\n\nпривет_мир()\n"
+    "функция главная() {\n    печать(\"Привет, мир!\")\n}\n\nглавная()\n"
 }
 
 fn powershell_activate(venv_path: &str) -> String {
