@@ -20,10 +20,13 @@ fn package_manager_creates_project_and_updates_git_dependencies() {
     assert_success(&new_output, "goida new");
 
     let project = temp.join("demo");
+    let venv_output = run_goida(&workspace, &project, &["venv"]);
+    assert_success(&venv_output, "goida venv");
+
     let main_source =
         fs::read_to_string(project.join("главный.goida")).expect("missing generated main file");
-    assert!(main_source.contains("функция привет_мир()"));
-    assert!(main_source.contains("привет_мир()"));
+    assert!(main_source.contains("функция главная()"));
+    assert!(main_source.contains("главная()"));
 
     let manifest = fs::read_to_string(project.join("goida.toml")).expect("missing manifest");
     assert!(manifest.contains("name = \"demo\""));
@@ -81,6 +84,9 @@ fn package_manager_adds_local_path_dependencies() {
     assert_success(&new_output, "goida new");
 
     let project = temp.join("demo");
+    let venv_output = run_goida(&workspace, &project, &["venv"]);
+    assert_success(&venv_output, "goida venv");
+
     let add_output = run_goida(
         &workspace,
         &project,
@@ -102,6 +108,66 @@ fn package_manager_adds_local_path_dependencies() {
         .join(".goida/deps/harpoon/target/debug/beacon.dll")
         .exists());
     assert!(!project.join(".goida/deps/harpoon/.git").exists());
+}
+
+#[test]
+fn package_manager_rejects_add_without_venv() {
+    let workspace = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let temp = workspace.join("target/package_manager_requires_venv_test");
+    if temp.exists() {
+        fs::remove_dir_all(&temp).expect("failed to clear requires venv test directory");
+    }
+    fs::create_dir_all(&temp).expect("failed to create requires venv test directory");
+
+    let local_dep = temp.join("local_dep");
+    fs::create_dir_all(&local_dep).expect("failed to create local dependency");
+    fs::write(local_dep.join("mod.goida"), "значение = 7\n")
+        .expect("failed to write local dependency module");
+
+    let new_output = run_goida(&workspace, &temp, &["new", "demo"]);
+    assert_success(&new_output, "goida new");
+    let project = temp.join("demo");
+
+    let add_output = run_goida(
+        &workspace,
+        &project,
+        &["add", "lib", "--path", local_dep.to_str().unwrap()],
+    );
+    assert_failure(&add_output, "goida add without venv");
+    assert!(!project.join(".goida/deps/lib").exists());
+}
+
+#[test]
+fn package_manager_accepts_legacy_active_venv_without_config() {
+    let workspace = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let temp = workspace.join("target/package_manager_legacy_venv_test");
+    if temp.exists() {
+        fs::remove_dir_all(&temp).expect("failed to clear legacy venv test directory");
+    }
+    fs::create_dir_all(&temp).expect("failed to create legacy venv test directory");
+
+    let local_dep = temp.join("local_dep");
+    fs::create_dir_all(&local_dep).expect("failed to create local dependency");
+    fs::write(local_dep.join("mod.goida"), "значение = 9\n")
+        .expect("failed to write local dependency module");
+
+    let new_output = run_goida(&workspace, &temp, &["new", "demo"]);
+    assert_success(&new_output, "goida new");
+    let project = temp.join("demo");
+    let venv = project.join(".goida");
+    fs::create_dir_all(venv.join("deps")).expect("failed to create legacy deps");
+    fs::create_dir_all(venv.join("Scripts")).expect("failed to create legacy scripts");
+    fs::write(venv.join("Scripts/Activate.ps1"), "$env:GOIDA_VENV = '.goida'\n")
+        .expect("failed to write legacy activation script");
+
+    let add_output = run_goida_with_env(
+        &workspace,
+        &project,
+        &["add", "lib", "--path", local_dep.to_str().unwrap()],
+        &[("GOIDA_VENV", venv.to_str().unwrap())],
+    );
+    assert_success(&add_output, "goida add with legacy active venv");
+    assert!(venv.join("deps/lib/mod.goida").exists());
 }
 
 #[test]
@@ -127,6 +193,18 @@ fn package_manager_creates_venv_and_installs_active_dependencies_there() {
     assert!(venv.join("Scripts/deactivate.bat").exists());
     assert!(venv.join("bin/activate").exists());
     assert!(venv.join("bin/deactivate").exists());
+    let powershell_activate =
+        fs::read_to_string(venv.join("Scripts/Activate.ps1")).expect("missing Activate.ps1");
+    assert!(powershell_activate.contains("(.goida) "));
+    assert!(powershell_activate.contains("function global:prompt"));
+    assert!(powershell_activate.contains("Function:_goida_old_prompt"));
+    let cmd_activate =
+        fs::read_to_string(venv.join("Scripts/activate.bat")).expect("missing activate.bat");
+    assert!(cmd_activate.contains("PROMPT=(.goida) %PROMPT%"));
+    assert!(cmd_activate.contains("GOIDA_OLD_PROMPT"));
+    let sh_activate = fs::read_to_string(venv.join("bin/activate")).expect("missing bin/activate");
+    assert!(sh_activate.contains("export PS1=\"(.goida) ${PS1-}\""));
+    assert!(sh_activate.contains("GOIDA_OLD_PS1"));
 
     let local_dep = temp.join("local_dep");
     fs::create_dir_all(&local_dep).expect("failed to create local dependency");
@@ -211,6 +289,15 @@ fn assert_success(output: &std::process::Output, label: &str) {
     assert!(
         output.status.success(),
         "{label} failed\nSTDOUT: {}\nSTDERR: {}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+fn assert_failure(output: &std::process::Output, label: &str) {
+    assert!(
+        !output.status.success(),
+        "{label} unexpectedly succeeded\nSTDOUT: {}\nSTDERR: {}",
         String::from_utf8_lossy(&output.stdout),
         String::from_utf8_lossy(&output.stderr)
     );

@@ -167,6 +167,7 @@ pub(crate) fn remove_dependency(name: &str) -> Result<(), String> {
             .as_deref()
             .filter(|path| path.starts_with("$GOIDA_VENV/"))
             .map(|_| dependency_install_root(&root))
+            .transpose()?
             .unwrap_or_else(|| root.join(DEPS_DIR));
         ensure_inside(&dep_root, &dep_path)?;
         fs::remove_dir_all(&dep_path)
@@ -192,7 +193,11 @@ pub(crate) fn create_venv(path: &str) -> Result<(), String> {
             root.display()
         )
     })?;
-    let absolute = absolute_root.to_string_lossy().replace('\\', "\\\\");
+    let prompt_name = absolute_root
+        .file_name()
+        .map(|name| name.to_string_lossy().to_string())
+        .unwrap_or_else(|| "goida".to_string());
+    let absolute = absolute_root.to_string_lossy().to_string();
     let shell_absolute = absolute_root.to_string_lossy().replace('\\', "/");
 
     fs::write(
@@ -206,7 +211,7 @@ pub(crate) fn create_venv(path: &str) -> Result<(), String> {
 
     fs::write(
         root.join("Scripts").join("Activate.ps1"),
-        powershell_activate(&absolute),
+        powershell_activate(&absolute, &prompt_name),
     )
     .map_err(|err| format!("Не удалось записать Activate.ps1: {err}"))?;
     fs::write(
@@ -216,7 +221,7 @@ pub(crate) fn create_venv(path: &str) -> Result<(), String> {
     .map_err(|err| format!("Не удалось записать Deactivate.ps1: {err}"))?;
     fs::write(
         root.join("Scripts").join("activate.bat"),
-        cmd_activate(&absolute),
+        cmd_activate(&absolute, &prompt_name),
     )
     .map_err(|err| format!("Не удалось записать activate.bat: {err}"))?;
     fs::write(
@@ -226,7 +231,7 @@ pub(crate) fn create_venv(path: &str) -> Result<(), String> {
     .map_err(|err| format!("Не удалось записать deactivate.bat: {err}"))?;
     fs::write(
         root.join("bin").join("activate"),
-        sh_activate(&shell_absolute),
+        sh_activate(&shell_absolute, &prompt_name),
     )
     .map_err(|err| format!("Не удалось записать bin/activate: {err}"))?;
     fs::write(root.join("bin").join("deactivate"), sh_deactivate())
@@ -255,10 +260,20 @@ fn starter_source() -> &'static str {
     "функция главная() {\n    печать(\"Привет, мир!\")\n}\n\nглавная()\n"
 }
 
-fn powershell_activate(venv_path: &str) -> String {
+fn powershell_activate(venv_path: &str, prompt_name: &str) -> String {
+    let venv_path = escape_powershell_double_quoted(venv_path);
+    let prompt_name = escape_powershell_double_quoted(prompt_name);
     format!(
         r#"$env:GOIDA_OLD_VENV = $env:GOIDA_VENV
 $env:GOIDA_VENV = "{venv_path}"
+
+if (Test-Path Function:prompt) {{
+    Copy-Item Function:prompt Function:_goida_old_prompt -Force
+}}
+
+function global:prompt {{
+    "({prompt_name}) " + $(if (Test-Path Function:_goida_old_prompt) {{ & _goida_old_prompt }} else {{ "PS $($executionContext.SessionState.Path.CurrentLocation)$('>' * ($nestedPromptLevel + 1)) " }})
+}}
 
 function global:deactivate {{
     if ($env:GOIDA_OLD_VENV) {{
@@ -266,6 +281,12 @@ function global:deactivate {{
         Remove-Item Env:GOIDA_OLD_VENV -ErrorAction SilentlyContinue
     }} else {{
         Remove-Item Env:GOIDA_VENV -ErrorAction SilentlyContinue
+    }}
+    if (Test-Path Function:_goida_old_prompt) {{
+        Copy-Item Function:_goida_old_prompt Function:prompt -Force
+        Remove-Item Function:_goida_old_prompt -ErrorAction SilentlyContinue
+    }} else {{
+        Remove-Item Function:prompt -ErrorAction SilentlyContinue
     }}
     Remove-Item Function:deactivate -ErrorAction SilentlyContinue
 }}
@@ -282,25 +303,36 @@ fn powershell_deactivate() -> &'static str {
 } else {
     Remove-Item Env:GOIDA_VENV -ErrorAction SilentlyContinue
 }
+if (Test-Path Function:_goida_old_prompt) {
+    Copy-Item Function:_goida_old_prompt Function:prompt -Force
+    Remove-Item Function:_goida_old_prompt -ErrorAction SilentlyContinue
+} else {
+    Remove-Item Function:prompt -ErrorAction SilentlyContinue
+}
 Remove-Item Function:deactivate -ErrorAction SilentlyContinue
 Write-Host "Deactivated Goida venv"
 "#
 }
 
-fn cmd_activate(venv_path: &str) -> String {
+fn cmd_activate(venv_path: &str, prompt_name: &str) -> String {
+    let venv_path = escape_cmd_value(venv_path);
+    let prompt_name = escape_cmd_prompt_name(prompt_name);
     format!(
-        "@echo off\r\nset GOIDA_OLD_VENV=%GOIDA_VENV%\r\nset GOIDA_VENV={venv_path}\r\necho Activated Goida venv: %GOIDA_VENV%\r\n"
+        "@echo off\r\nset GOIDA_OLD_VENV=%GOIDA_VENV%\r\nset \"GOIDA_VENV={venv_path}\"\r\nset \"GOIDA_OLD_PROMPT=%PROMPT%\"\r\nset \"PROMPT=({prompt_name}) %PROMPT%\"\r\necho Activated Goida venv: %GOIDA_VENV%\r\n"
     )
 }
 
 fn cmd_deactivate() -> &'static str {
-    "@echo off\r\nif defined GOIDA_OLD_VENV (set GOIDA_VENV=%GOIDA_OLD_VENV%) else (set GOIDA_VENV=)\r\nset GOIDA_OLD_VENV=\r\necho Deactivated Goida venv\r\n"
+    "@echo off\r\nif defined GOIDA_OLD_VENV (set GOIDA_VENV=%GOIDA_OLD_VENV%) else (set GOIDA_VENV=)\r\nif defined GOIDA_OLD_PROMPT (set \"PROMPT=%GOIDA_OLD_PROMPT%\")\r\nset GOIDA_OLD_VENV=\r\nset GOIDA_OLD_PROMPT=\r\necho Deactivated Goida venv\r\n"
 }
 
-fn sh_activate(venv_path: &str) -> String {
+fn sh_activate(venv_path: &str, prompt_name: &str) -> String {
+    let prompt_name = escape_sh_double_quoted(prompt_name);
     format!(
         r#"export GOIDA_OLD_VENV="${{GOIDA_VENV-}}"
 export GOIDA_VENV="{venv_path}"
+export GOIDA_OLD_PS1="${{PS1-}}"
+export PS1="({prompt_name}) ${{PS1-}}"
 
 deactivate() {{
     if [ -n "${{GOIDA_OLD_VENV-}}" ]; then
@@ -308,6 +340,10 @@ deactivate() {{
         unset GOIDA_OLD_VENV
     else
         unset GOIDA_VENV
+    fi
+    if [ -n "${{GOIDA_OLD_PS1+x}}" ]; then
+        export PS1="$GOIDA_OLD_PS1"
+        unset GOIDA_OLD_PS1
     fi
     unset -f deactivate
 }}
@@ -324,9 +360,36 @@ else
     unset GOIDA_VENV
 fi
 unset GOIDA_OLD_VENV
+if [ -n "${GOIDA_OLD_PS1+x}" ]; then
+    export PS1="$GOIDA_OLD_PS1"
+    unset GOIDA_OLD_PS1
+fi
 unset -f deactivate 2>/dev/null || true
 echo "Deactivated Goida venv"
 "#
+}
+
+fn escape_powershell_double_quoted(value: &str) -> String {
+    value
+        .replace('`', "``")
+        .replace('"', "`\"")
+        .replace('$', "`$")
+}
+
+fn escape_cmd_prompt_name(value: &str) -> String {
+    value.replace('%', "%%")
+}
+
+fn escape_cmd_value(value: &str) -> String {
+    value.replace('%', "%%")
+}
+
+fn escape_sh_double_quoted(value: &str) -> String {
+    value
+        .replace('\\', "\\\\")
+        .replace('"', "\\\"")
+        .replace('$', "\\$")
+        .replace('`', "\\`")
 }
 
 fn read_manifest(root: &Path) -> Result<Manifest, String> {
@@ -432,7 +495,7 @@ fn checkout_git_dependency(
     git: &str,
     revision: &str,
 ) -> Result<PathBuf, String> {
-    let deps_root = dependency_install_root(root);
+    let deps_root = dependency_install_root(root)?;
     fs::create_dir_all(&deps_root)
         .map_err(|err| format!("Не удалось создать '{}': {err}", deps_root.display()))?;
     let dep_path = deps_root.join(name);
@@ -472,7 +535,7 @@ fn resolve_local_source_path(root: &Path, path: &str) -> Result<PathBuf, String>
 }
 
 fn copy_local_dependency(root: &Path, name: &str, source_path: &Path) -> Result<PathBuf, String> {
-    let deps_root = dependency_install_root(root);
+    let deps_root = dependency_install_root(root)?;
     fs::create_dir_all(&deps_root)
         .map_err(|err| format!("Не удалось создать '{}': {err}", deps_root.display()))?;
     let dep_path = deps_root.join(name);
@@ -522,10 +585,44 @@ fn copy_dir_all(source: &Path, destination: &Path) -> Result<(), String> {
     Ok(())
 }
 
-fn dependency_install_root(project_root: &Path) -> PathBuf {
-    std::env::var(GOIDA_VENV_ENV)
-        .map(|path| PathBuf::from(path).join("deps"))
-        .unwrap_or_else(|_| project_root.join(DEPS_DIR))
+fn dependency_install_root(project_root: &Path) -> Result<PathBuf, String> {
+    let venv_path = dependency_venv_path(project_root)?;
+    let deps_root = venv_path.join("deps");
+    if !deps_root.is_dir() {
+        return Err(format!(
+            "Окружение '{}' повреждено: отсутствует каталог deps",
+            venv_path.display()
+        ));
+    }
+    Ok(deps_root)
+}
+
+fn dependency_venv_path(project_root: &Path) -> Result<PathBuf, String> {
+    match std::env::var(GOIDA_VENV_ENV) {
+        Ok(path) => validate_venv_path(PathBuf::from(path)),
+        Err(_) => validate_venv_path(project_root.join(".goida")).map_err(|_| {
+            "Сначала создайте окружение командой: goida venv".to_string()
+        }),
+    }
+}
+
+fn validate_venv_path(venv_path: PathBuf) -> Result<PathBuf, String> {
+    if venv_path.join(VENV_CONFIG_FILE).is_file() || is_legacy_venv(&venv_path) {
+        return Ok(venv_path);
+    }
+
+    Err(format!(
+        "'{}' не является окружением Goida: отсутствует {}",
+        venv_path.display(),
+        VENV_CONFIG_FILE
+    ))
+}
+
+fn is_legacy_venv(venv_path: &Path) -> bool {
+    venv_path.join("deps").is_dir()
+        && (venv_path.join("Scripts/Activate.ps1").is_file()
+            || venv_path.join("Scripts/activate.bat").is_file()
+            || venv_path.join("bin/activate").is_file())
 }
 
 fn lock_dep_path(project_root: &Path, dep_path: &Path) -> String {
