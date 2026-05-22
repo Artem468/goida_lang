@@ -54,6 +54,119 @@ fn test_classes_example() {
 }
 
 #[test]
+fn test_method_chain_can_continue_on_new_lines() {
+    let dir = std::path::Path::new("target/multiline_method_chain_test");
+    std::fs::create_dir_all(dir).expect("Не удалось создать временную папку теста");
+    let main_file = dir.join("main.goida");
+    std::fs::write(
+        &main_file,
+        r#"
+класс Запрос {
+    публичный значение: число = 0
+
+    публичный функция ссылка(это, _url: строка) {
+        это.значение += 1
+        вернуть это
+    }
+
+    публичный функция заголовки(это, _headers: словарь) {
+        это.значение += 10
+        вернуть это
+    }
+
+    публичный функция ожидание(это, _timeout: число) {
+        это.значение += 100
+        вернуть это
+    }
+}
+
+класс Сессия {
+    публичный функция запрос(это) {
+        вернуть новый Запрос()
+    }
+}
+
+сес = новый Сессия()
+зап = сес.запрос()
+    .ссылка("https://example.com")
+    .заголовки(словарь("Content-Type", "application/json"))
+    .ожидание(30)
+
+печать(зап.значение)
+"#,
+    )
+    .expect("Не удалось записать временный файл");
+
+    let output = Command::new("cargo")
+        .args([
+            "run",
+            "-q",
+            "-p",
+            "cli",
+            "--",
+            "run",
+            main_file.to_str().unwrap(),
+        ])
+        .output()
+        .expect("Не удалось запустить multiline method chain test");
+
+    assert!(
+        output.status.success(),
+        "multiline method chain завершился с ошибкой\nSTDOUT: {}\nSTDERR: {}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!("111\n", String::from_utf8_lossy(&output.stdout));
+}
+
+#[test]
+fn test_binary_expressions_can_continue_on_new_lines() {
+    let dir = std::path::Path::new("target/multiline_binary_expression_test");
+    std::fs::create_dir_all(dir).expect("Не удалось создать временную папку теста");
+    let main_file = dir.join("main.goida");
+    std::fs::write(
+        &main_file,
+        r#"
+сумма = 1
+    + 2
+    * 3
+    - 4
+
+условие = сумма
+    >= 3
+    и сумма
+    < 10
+    или ложь
+
+печать(сумма)
+печать(условие)
+"#,
+    )
+    .expect("Не удалось записать временный файл");
+
+    let output = Command::new("cargo")
+        .args([
+            "run",
+            "-q",
+            "-p",
+            "cli",
+            "--",
+            "run",
+            main_file.to_str().unwrap(),
+        ])
+        .output()
+        .expect("Не удалось запустить multiline binary expression test");
+
+    assert!(
+        output.status.success(),
+        "multiline binary expression завершился с ошибкой\nSTDOUT: {}\nSTDERR: {}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!("3\nистина\n", String::from_utf8_lossy(&output.stdout));
+}
+
+#[test]
 fn test_queue_example() {
     let output = Command::new("cargo")
         .args([
