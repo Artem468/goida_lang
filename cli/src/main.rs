@@ -12,8 +12,14 @@ use goida_core::parser::prelude::{ParseError, Parser as ProgramParser};
 use goida_core::traits::prelude::CoreOperations;
 use goida_core::INTERPRETER;
 
+mod package;
+
 #[derive(Parser)]
-#[command(name = "goida", about = "Интерпретатор языка программирования Гойда")]
+#[command(
+    name = "goida",
+    about = "Интерпретатор языка программирования Гойда",
+    disable_help_subcommand = true
+)]
 struct Cli {
     #[command(subcommand)]
     command: Option<Commands>,
@@ -21,11 +27,52 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
+    #[command(about = "Запустить .goida файл")]
     Run {
+        #[arg(help = "Путь к исходному .goida файлу")]
         file: String,
-        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        #[arg(
+            trailing_var_arg = true,
+            allow_hyphen_values = true,
+            help = "Дополнительные аргументы скрипта"
+        )]
         script_args: Vec<String>,
     },
+    #[command(about = "Создать новый проект")]
+    New {
+        #[arg(help = "Имя каталога проекта и имя пакета")]
+        name: String,
+        #[arg(long, default_value = "", help = "Описание проекта")]
+        description: String,
+        #[arg(long, default_value = "0.1.0", help = "Версия проекта")]
+        version: String,
+    },
+    #[command(about = "Добавить зависимость из git или локального каталога")]
+    Add {
+        #[arg(help = "Локальное имя зависимости")]
+        name: String,
+        #[arg(long, help = "Git URL или путь к git-репозиторию")]
+        git: Option<String>,
+        #[arg(long, help = "Путь к локальному каталогу зависимости")]
+        path: Option<String>,
+        #[arg(long, help = "Commit или git-ссылка, только для --git")]
+        rev: Option<String>,
+        #[arg(long, help = "Ветка, только для --git")]
+        branch: Option<String>,
+        #[arg(long, help = "Тег, только для --git")]
+        tag: Option<String>,
+    },
+    #[command(about = "Удалить зависимость")]
+    Remove {
+        #[arg(help = "Имя зависимости")]
+        name: String,
+    },
+    #[command(about = "Создать виртуальное окружение Гойда")]
+    Venv {
+        #[arg(default_value = ".goida", help = "Путь к каталогу окружения")]
+        path: String,
+    },
+    #[command(about = "Запустить интерактивный режим")]
     Repl,
 }
 
@@ -38,10 +85,39 @@ fn main() {
                 std::process::exit(1);
             }
         }
+        Some(Commands::New {
+            name,
+            description,
+            version,
+        }) => exit_on_package_error(package::new_project(name, description, version)),
+        Some(Commands::Add {
+            name,
+            git,
+            path,
+            rev,
+            branch,
+            tag,
+        }) => exit_on_package_error(package::add_dependency(
+            name,
+            git.clone(),
+            path.clone(),
+            rev.clone(),
+            branch.clone(),
+            tag.clone(),
+        )),
+        Some(Commands::Remove { name }) => exit_on_package_error(package::remove_dependency(name)),
+        Some(Commands::Venv { path }) => exit_on_package_error(package::create_venv(path)),
         Some(Commands::Repl) => run_repl(),
         None => {
             println!("Добро пожаловать в Гойда! Используйте --help для справки.");
         }
+    }
+}
+
+fn exit_on_package_error(result: Result<(), String>) {
+    if let Err(err) = result {
+        eprintln!("{err}");
+        std::process::exit(1);
     }
 }
 

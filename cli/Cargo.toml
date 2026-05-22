@@ -7,3 +7,5 @@ edition = "2021"
 goida_core = { path = "../core" }
 ariadne = { version = "0.6.0" }
 clap = { version = "4.0", features = ["derive"] }
+serde = { version = "1.0", features = ["derive"] }
+toml = "0.8"

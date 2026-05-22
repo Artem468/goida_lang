@@ -181,11 +181,11 @@ expression = {
 }
 
 logical_or = {
-    logical_and ~ (logical_or_op ~ logical_and)*
+    logical_and ~ ((NEWLINE | COMMENT)* ~ logical_or_op ~ (NEWLINE | COMMENT)* ~ logical_and)*
 }
 
 logical_and = {
-    comparison ~ (logical_and_op ~ comparison)*
+    comparison ~ ((NEWLINE | COMMENT)* ~ logical_and_op ~ (NEWLINE | COMMENT)* ~ comparison)*
 }
 
 logical_or_op = @{
@@ -201,15 +201,15 @@ in_op = @{
 }
 
 comparison = {
-    addition ~ (comp_op ~ addition)*
+    addition ~ ((NEWLINE | COMMENT)* ~ comp_op ~ (NEWLINE | COMMENT)* ~ addition)*
 }
 
 addition = {
-    multiplication ~ (add_op ~ multiplication)*
+    multiplication ~ ((NEWLINE | COMMENT)* ~ add_op ~ (NEWLINE | COMMENT)* ~ multiplication)*
 }
 
 multiplication = {
-    unary ~ (mul_op ~ unary)*
+    unary ~ ((NEWLINE | COMMENT)* ~ mul_op ~ (NEWLINE | COMMENT)* ~ unary)*
 }
 
 unary = {
@@ -217,7 +217,7 @@ unary = {
 }
 
 postfix = {
-    primary ~ postfix_op*
+    primary ~ ((NEWLINE | COMMENT)* ~ postfix_op)*
 }
 
 postfix_op = _{
