@@ -22,15 +22,9 @@ impl ParserTrait {
     }
 
     fn get_char_range(&self, s: &str, start: usize, end: usize) -> String {
-        let mut indices = s
-            .char_indices()
-            .map(|(idx, _)| idx)
-            .chain(std::iter::once(s.len()));
-        let byte_start = indices.nth(start).unwrap_or(s.len());
-        let byte_end = indices
-            .nth(end.saturating_sub(start + 1))
-            .unwrap_or(s.len());
-        s[byte_start..byte_end].to_string()
+        let start = previous_char_boundary(s, start.min(s.len()));
+        let end = next_char_boundary(s, end.min(s.len()));
+        s.get(start..end).unwrap_or_default().to_string()
     }
 
     pub fn parse(mut self, code: &str) -> Result<Module, ParseError> {
@@ -166,4 +160,20 @@ impl ParserTrait {
         self.module.arena.optimize_all(&self.interner);
         Ok(self.module)
     }
+}
+
+fn previous_char_boundary(s: &str, mut index: usize) -> usize {
+    index = index.min(s.len());
+    while index > 0 && !s.is_char_boundary(index) {
+        index -= 1;
+    }
+    index
+}
+
+fn next_char_boundary(s: &str, mut index: usize) -> usize {
+    index = index.min(s.len());
+    while index < s.len() && !s.is_char_boundary(index) {
+        index += 1;
+    }
+    index
 }

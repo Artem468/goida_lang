@@ -600,9 +600,8 @@ fn dependency_install_root(project_root: &Path) -> Result<PathBuf, String> {
 fn dependency_venv_path(project_root: &Path) -> Result<PathBuf, String> {
     match std::env::var(GOIDA_VENV_ENV) {
         Ok(path) => validate_venv_path(PathBuf::from(path)),
-        Err(_) => validate_venv_path(project_root.join(".goida")).map_err(|_| {
-            "Сначала создайте окружение командой: goida venv".to_string()
-        }),
+        Err(_) => validate_venv_path(project_root.join(".goida"))
+            .map_err(|_| "Сначала создайте окружение командой: goida venv".to_string()),
     }
 }
 

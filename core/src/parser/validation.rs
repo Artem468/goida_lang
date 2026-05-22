@@ -77,6 +77,9 @@ impl ParserTrait {
             "Поток",
             "Мьютекс",
             "БлокировкаЧтенияЗаписи",
+            "Regex",
+            "regex",
+            "регекс",
         ] {
             names.insert(self.module.arena.intern_string(&self.interner, name));
         }
@@ -367,6 +370,9 @@ impl ParserTrait {
         let Some(name) = self.module.arena.resolve_symbol(&self.interner, symbol) else {
             return false;
         };
+        if name == "Regex" {
+            return true;
+        }
         let parts = name.split('.').collect::<Vec<_>>();
         if parts.len() > 1 {
             let module_symbol = self.module.arena.intern_string(&self.interner, parts[0]);

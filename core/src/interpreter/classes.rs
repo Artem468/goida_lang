@@ -20,6 +20,11 @@ impl InterpreterClasses for Interpreter {
         match method {
             MethodType::User(func) => {
                 let method_module = func.module.unwrap_or(current_module_id);
+                let method_name = self
+                    .modules
+                    .get(&method_module)
+                    .and_then(|m| m.arena.resolve_symbol(&self.interner, func.name))
+                    .unwrap_or_else(|| "неизвестно".to_string());
                 let mut arguments = arguments;
                 if !matches!(this_obj, Value::Empty) {
                     arguments.insert(
@@ -49,7 +54,10 @@ impl InterpreterClasses for Interpreter {
                 match execution_result {
                     Ok(()) => Ok(Value::Empty),
                     Err(RuntimeError::Return(_, val)) => Ok(val),
-                    Err(e) => Err(e),
+                    Err(mut e) => {
+                        e.add_stack_frame(format!("метод {}", method_name), span);
+                        Err(e)
+                    }
                 }
             }
 

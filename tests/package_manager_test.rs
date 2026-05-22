@@ -157,8 +157,11 @@ fn package_manager_accepts_legacy_active_venv_without_config() {
     let venv = project.join(".goida");
     fs::create_dir_all(venv.join("deps")).expect("failed to create legacy deps");
     fs::create_dir_all(venv.join("Scripts")).expect("failed to create legacy scripts");
-    fs::write(venv.join("Scripts/Activate.ps1"), "$env:GOIDA_VENV = '.goida'\n")
-        .expect("failed to write legacy activation script");
+    fs::write(
+        venv.join("Scripts/Activate.ps1"),
+        "$env:GOIDA_VENV = '.goida'\n",
+    )
+    .expect("failed to write legacy activation script");
 
     let add_output = run_goida_with_env(
         &workspace,

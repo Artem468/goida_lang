@@ -507,13 +507,17 @@ impl ExpressionEvaluator for Interpreter {
                             let method_module =
                                 method_type.get_module().unwrap_or(current_module_id);
 
+                            let method_name = interpreter.resolve_symbol(method).unwrap_or_default();
                             return interpreter.call_method(
                                 method_type,
                                 arguments,
                                 this_val,
                                 method_module,
                                 obj_expr.span,
-                            );
+                            ).map_err(|mut err| {
+                                err.add_stack_frame(format!("метод {}", method_name), obj_expr.span);
+                                err
+                            });
                         }
                     }
 

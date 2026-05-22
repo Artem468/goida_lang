@@ -12,6 +12,7 @@ pub(crate) mod iterator;
 mod json;
 mod list;
 mod number;
+mod regex;
 mod system;
 mod terminal;
 mod text;
@@ -33,6 +34,7 @@ impl Interpreter {
         io::setup_io_func(self, &interner);
         common::setup_type_func(self, &interner);
         common::setup_is_instance_func(self, &interner);
+        regex::setup_regex_func(self, &interner);
 
         let (string_name, string_class) = text::setup_text_class(&interner);
         self.std_classes.insert(string_name, string_class);
@@ -52,6 +54,8 @@ impl Interpreter {
         self.std_classes.insert(color_name, color_class);
         let (datetime_name, datetime_class) = datetime::setup_datetime_class(&interner);
         self.std_classes.insert(datetime_name, datetime_class);
+        let (regex_name, regex_class) = regex::setup_regex_class(&interner);
+        self.std_classes.insert(regex_name, regex_class);
         let (thread_name, thread_class) = thread::setup_thread_class(&interner);
         self.std_classes.insert(thread_name, thread_class);
         let (mutex_name, mutex_class) = thread::setup_mutex_class(&interner);

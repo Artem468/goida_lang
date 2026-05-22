@@ -273,10 +273,7 @@ fn test_string_utilities_and_regular_expressions() {
         String::from_utf8_lossy(&output.stdout),
         String::from_utf8_lossy(&output.stderr)
     );
-    assert_eq!(
-        "истина\nистина\n",
-        String::from_utf8_lossy(&output.stdout)
-    );
+    assert_eq!("истина\nистина\n", String::from_utf8_lossy(&output.stdout));
 }
 
 #[test]
