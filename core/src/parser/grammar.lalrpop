@@ -42,11 +42,11 @@ IdentName: String = {
 };
 
 Import: Import = {
-    "подключить" <path:"string"> "как" <alias:IdentName> => Import { path, alias },
+    "import" <path:"string"> "as" <alias:IdentName> => Import { path, alias },
 };
 
 Function: Function = {
-    "функция" <name:IdentName> "(" <params:ParamListOpt> ")" <return_type:ReturnTypeOpt> <body:Block> => Function {
+    "function" <name:IdentName> "(" <params:ParamListOpt> ")" <return_type:ReturnTypeOpt> <body:Block> => Function {
         name,
         params,
         return_type,
@@ -65,7 +65,7 @@ Block: Vec<Item> = {
 };
 
 Class: Class = {
-    "класс" <name:IdentName> <base:InheritanceOpt> "{" <items:ClassItems> => Class { name, base, items },
+    "class" <name:IdentName> <base:InheritanceOpt> "{" <items:ClassItems> => Class { name, base, items },
 };
 
 InheritanceOpt: Option<String> = {
@@ -105,7 +105,7 @@ ClassField: ClassField = {
 };
 
 Constructor: ClassMethod = {
-    <visibility:VisibilityOpt> "конструктор" <name:ConstructorName> "(" <params:ParamListOpt> ")" <return_type:ReturnTypeOpt> <body:Block> => ClassMethod {
+    <visibility:VisibilityOpt> "constructor" <name:ConstructorName> "(" <params:ParamListOpt> ")" <return_type:ReturnTypeOpt> <body:Block> => ClassMethod {
         visibility,
         is_static: false,
         name,
@@ -117,11 +117,11 @@ Constructor: ClassMethod = {
 
 ConstructorName: String = {
     <name:IdentName> => name,
-    "новый" => "новый".to_string(),
+    "new" => "new".to_string(),
 };
 
 ClassMethod: ClassMethod = {
-    <visibility:VisibilityOpt> <is_static:StaticOpt> "функция" <name:IdentName> "(" <params:ParamListOpt> ")" <return_type:ReturnTypeOpt> <body:Block> => ClassMethod {
+    <visibility:VisibilityOpt> <is_static:StaticOpt> "function" <name:IdentName> "(" <params:ParamListOpt> ")" <return_type:ReturnTypeOpt> <body:Block> => ClassMethod {
         visibility,
         is_static,
         name,
@@ -134,18 +134,18 @@ ClassMethod: ClassMethod = {
 #[inline]
 VisibilityOpt: Option<Visibility> = {
     => None,
-    "публичный" => Some(Visibility::Public),
-    "приватный" => Some(Visibility::Private),
+    "public" => Some(Visibility::Public),
+    "private" => Some(Visibility::Private),
 };
 
 #[inline]
 StaticOpt: bool = {
     => false,
-    "статичный" => true,
+    "static" => true,
 };
 
 Library: Library = {
-    "библиотека" <path:"string"> "{" <items:LibraryItems> => Library { path, items },
+    "library" <path:"string"> "{" <items:LibraryItems> => Library { path, items },
 };
 
 LibraryItems: Vec<LibraryItem> = {
@@ -162,7 +162,7 @@ LibraryItem: LibraryItem = {
 };
 
 LibraryFunction: LibraryFunction = {
-    "функция" <name:IdentName> "(" <params:LibraryParamListOpt> ")" <return_type:ReturnTypeOpt> EmptyBlock => LibraryFunction {
+    "function" <name:IdentName> "(" <params:LibraryParamListOpt> ")" <return_type:ReturnTypeOpt> EmptyBlock => LibraryFunction {
         name,
         params,
         return_type,
@@ -170,7 +170,7 @@ LibraryFunction: LibraryFunction = {
 };
 
 LibraryGlobal: LibraryGlobal = {
-    "переменная" <name:IdentName> ":" <type_name:TypeName> => LibraryGlobal { name, type_name },
+    "variable" <name:IdentName> ":" <type_name:TypeName> => LibraryGlobal { name, type_name },
 };
 
 EmptyBlock: () = {
@@ -200,7 +200,7 @@ LibraryParam: LibraryParam = {
 };
 
 Stmt: Stmt = {
-    <l:@L> "константа" <name:IdentName> <type_hint:TypeHintOpt> "=" <value:Expr> <r:@R> => Spanned::new(StmtKind::Assign {
+    <l:@L> "const" <name:IdentName> <type_hint:TypeHintOpt> "=" <value:Expr> <r:@R> => Spanned::new(StmtKind::Assign {
         name,
         is_const: true,
         type_hint,
@@ -223,33 +223,33 @@ Stmt: Stmt = {
         }
         StmtExprTail::Compound(op, value) => Spanned::new(StmtKind::CompoundAssign { target, op, value }, l, r),
     },
-    <l:@L> "если" "(" <condition:Expr> ")" <then_body:Block> "иначе" <else_body:ElseBodyRequired> <r:@R> => Spanned::new(StmtKind::If {
+    <l:@L> "if" "(" <condition:Expr> ")" <then_body:Block> "else" <else_body:ElseBodyRequired> <r:@R> => Spanned::new(StmtKind::If {
         condition,
         then_body,
         else_body: Some(else_body),
     }, l, r),
-    <l:@L> "если" "(" <condition:Expr> ")" <then_body:Block> <r:@R> => Spanned::new(StmtKind::If {
+    <l:@L> "if" "(" <condition:Expr> ")" <then_body:Block> <r:@R> => Spanned::new(StmtKind::If {
         condition,
         then_body,
         else_body: None,
     }, l, r),
-    <l:@L> "пока" "(" <condition:Expr> ")" <body:Block> <r:@R> => Spanned::new(StmtKind::While { condition, body }, l, r),
-    <l:@L> "для" "(" <variable:IdentName> "=" <init:Expr> "," <condition:Expr> "," <update:ForUpdate> ")" <body:Block> <r:@R> => Spanned::new(StmtKind::For {
+    <l:@L> "while" "(" <condition:Expr> ")" <body:Block> <r:@R> => Spanned::new(StmtKind::While { condition, body }, l, r),
+    <l:@L> "for" "(" <variable:IdentName> "=" <init:Expr> "," <condition:Expr> "," <update:ForUpdate> ")" <body:Block> <r:@R> => Spanned::new(StmtKind::For {
         variable,
         init,
         condition,
         update,
         body,
     }, l, r),
-    <l:@L> "для" <variable:IdentName> "из" <iterable:Expr> <body:Block> <r:@R> => Spanned::new(StmtKind::ForEach {
+    <l:@L> "for" <variable:IdentName> "from" <iterable:Expr> <body:Block> <r:@R> => Spanned::new(StmtKind::ForEach {
         variable,
         iterable,
         body,
     }, l, r),
-    <l:@L> "поток" <body:Block> <r:@R> => Spanned::new(StmtKind::Thread { body }, l, r),
-    <l:@L> "попробовать" <body:Block> <handlers:Catches> <r:@R> => Spanned::new(StmtKind::Try { body, handlers }, l, r),
-    <l:@L> "выбросить" <error_type:IdentName> <message:RaiseMessageOpt> <r:@R> => Spanned::new(StmtKind::Raise { error_type, message }, l, r),
-    <l:@L> "вернуть" <expr:ReturnExprOpt> <r:@R> => Spanned::new(StmtKind::Return(expr), l, r),
+    <l:@L> "thread" <body:Block> <r:@R> => Spanned::new(StmtKind::Thread { body }, l, r),
+    <l:@L> "try" <body:Block> <handlers:Catches> <r:@R> => Spanned::new(StmtKind::Try { body, handlers }, l, r),
+    <l:@L> "raise" <error_type:IdentName> <message:RaiseMessageOpt> <r:@R> => Spanned::new(StmtKind::Raise { error_type, message }, l, r),
+    <l:@L> "return" <expr:ReturnExprOpt> <r:@R> => Spanned::new(StmtKind::Return(expr), l, r),
 };
 
 StmtExprTail: StmtExprTail = {
@@ -273,12 +273,12 @@ ElseBodyRequired: ElseBody = {
 };
 
 StmtIfOnly: Stmt = {
-    <l:@L> "если" "(" <condition:Expr> ")" <then_body:Block> "иначе" <else_body:ElseBodyRequired> <r:@R> => Spanned::new(StmtKind::If {
+    <l:@L> "if" "(" <condition:Expr> ")" <then_body:Block> "else" <else_body:ElseBodyRequired> <r:@R> => Spanned::new(StmtKind::If {
         condition,
         then_body,
         else_body: Some(else_body),
     }, l, r),
-    <l:@L> "если" "(" <condition:Expr> ")" <then_body:Block> <r:@R> => Spanned::new(StmtKind::If {
+    <l:@L> "if" "(" <condition:Expr> ")" <then_body:Block> <r:@R> => Spanned::new(StmtKind::If {
         condition,
         then_body,
         else_body: None,
@@ -294,7 +294,7 @@ Catches: Vec<Catch> = {
 };
 
 Catch: Catch = {
-    <l:@L> "перехватить" <pattern:CatchPatternOpt> <body:Block> <r:@R> => Catch {
+    <l:@L> "catch" <pattern:CatchPatternOpt> <body:Block> <r:@R> => Catch {
         pattern,
         body,
         span: l..r,
@@ -309,8 +309,8 @@ CatchPatternOpt: Option<CatchPattern> = {
 };
 
 CatchPattern: CatchPattern = {
-    "как" <l:@L> <name:IdentName> <r:@R> => CatchPattern::Text(name, l..r),
-    <tl:@L> <type_name:IdentName> <tr:@R> "как" <nl:@L> <text_name:IdentName> <nr:@R> => CatchPattern::TypeAndText {
+    "as" <l:@L> <name:IdentName> <r:@R> => CatchPattern::Text(name, l..r),
+    <tl:@L> <type_name:IdentName> <tr:@R> "as" <nl:@L> <text_name:IdentName> <nr:@R> => CatchPattern::TypeAndText {
         type_name,
         type_span: tl..tr,
         text_name,
@@ -414,7 +414,7 @@ Arg: CallArg = {
 
 TypeName: String = {
     <name:QualifiedName> => name,
-    "пустота" => "пустота".to_string(),
+    "void" => "void".to_string(),
 };
 
 QualifiedName: String = {
@@ -432,7 +432,7 @@ LambdaExpr: Expr = {
 };
 
 LogicalOr: Expr = {
-    <left:LogicalOr> <l:@L> "или" <right:LogicalAnd> <r:@R> => {
+    <left:LogicalOr> <l:@L> "or" <right:LogicalAnd> <r:@R> => {
         let start = left.span.start;
         Spanned::new(ExprKind::Binary {
             op: BinaryOp::Or,
@@ -444,7 +444,7 @@ LogicalOr: Expr = {
 };
 
 LogicalAnd: Expr = {
-    <left:LogicalAnd> <l:@L> "и" <right:Comparison> <r:@R> => {
+    <left:LogicalAnd> <l:@L> "and" <right:Comparison> <r:@R> => {
         let start = left.span.start;
         Spanned::new(ExprKind::Binary {
             op: BinaryOp::And,
@@ -569,13 +569,13 @@ PostfixOp: PostfixOp = {
 
 Primary: Expr = {
     "(" <expr:Expr> ")" => expr,
-    <l:@L> "новый" <class_name:QualifiedName> "(" <args:ArgListOpt> ")" <r:@R> => Spanned::new(ExprKind::ObjectCreation { class_name, args }, l, r),
+    <l:@L> "new" <class_name:QualifiedName> "(" <args:ArgListOpt> ")" <r:@R> => Spanned::new(ExprKind::ObjectCreation { class_name, args }, l, r),
     <l:@L> <value:"number"> <r:@R> => Spanned::new(ExprKind::Number(value), l, r),
     <l:@L> <value:"float"> <r:@R> => Spanned::new(ExprKind::Float(value), l, r),
     <l:@L> <value:"string"> <r:@R> => Spanned::new(ExprKind::Text(value), l, r),
-    <l:@L> "истина" <r:@R> => Spanned::new(ExprKind::Boolean(true), l, r),
-    <l:@L> "ложь" <r:@R> => Spanned::new(ExprKind::Boolean(false), l, r),
-    <l:@L> "пустота" <r:@R> => Spanned::new(ExprKind::Empty, l, r),
+    <l:@L> "true" <r:@R> => Spanned::new(ExprKind::Boolean(true), l, r),
+    <l:@L> "false" <r:@R> => Spanned::new(ExprKind::Boolean(false), l, r),
+    <l:@L> "void" <r:@R> => Spanned::new(ExprKind::Empty, l, r),
     <l:@L> <name:IdentName> <r:@R> => Spanned::new(ExprKind::Identifier(name), l, r),
 };
 
@@ -590,33 +590,33 @@ extern {
 
     enum Token {
         "eof" => Token::Eof,
-        "подключить" => Token::KwImport,
-        "из" => Token::KwFrom,
-        "функция" => Token::KwFunction,
-        "библиотека" => Token::KwLibrary,
-        "переменная" => Token::KwVariable,
-        "класс" => Token::KwClass,
-        "конструктор" => Token::KwConstructor,
-        "публичный" => Token::KwPublic,
-        "приватный" => Token::KwPrivate,
-        "статичный" => Token::KwStatic,
-        "константа" => Token::KwConst,
-        "если" => Token::KwIf,
-        "иначе" => Token::KwElse,
-        "пока" => Token::KwWhile,
-        "для" => Token::KwFor,
-        "поток" => Token::KwThread,
-        "попробовать" => Token::KwTry,
-        "перехватить" => Token::KwCatch,
-        "выбросить" => Token::KwRaise,
-        "как" => Token::KwAs,
-        "новый" => Token::KwNew,
-        "вернуть" => Token::KwReturn,
-        "и" => Token::KwAnd,
-        "или" => Token::KwOr,
-        "истина" => Token::True,
-        "ложь" => Token::False,
-        "пустота" => Token::Empty,
+        "import" => Token::KwImport,
+        "from" => Token::KwFrom,
+        "function" => Token::KwFunction,
+        "library" => Token::KwLibrary,
+        "variable" => Token::KwVariable,
+        "class" => Token::KwClass,
+        "constructor" => Token::KwConstructor,
+        "public" => Token::KwPublic,
+        "private" => Token::KwPrivate,
+        "static" => Token::KwStatic,
+        "const" => Token::KwConst,
+        "if" => Token::KwIf,
+        "else" => Token::KwElse,
+        "while" => Token::KwWhile,
+        "for" => Token::KwFor,
+        "thread" => Token::KwThread,
+        "try" => Token::KwTry,
+        "catch" => Token::KwCatch,
+        "raise" => Token::KwRaise,
+        "as" => Token::KwAs,
+        "new" => Token::KwNew,
+        "return" => Token::KwReturn,
+        "and" => Token::KwAnd,
+        "or" => Token::KwOr,
+        "true" => Token::True,
+        "false" => Token::False,
+        "void" => Token::Empty,
         "=>" => Token::FatArrow,
         "->" => Token::Arrow,
         "==" => Token::EqEq,

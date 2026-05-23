@@ -161,80 +161,100 @@ impl AstArena {
     /// Registers built-in language and runtime types in the arena cache.
     pub fn init_builtin_types(&mut self, interner: &SharedInterner) {
         let builtins = [
-            ("число", DataType::Primitive(PrimitiveType::Number)),
-            ("строка", DataType::Primitive(PrimitiveType::Text)),
-            ("логический", DataType::Primitive(PrimitiveType::Boolean)),
-            ("дробь", DataType::Primitive(PrimitiveType::Float)),
-            ("указатель", DataType::Primitive(PrimitiveType::Pointer)),
-            ("список", DataType::List(Box::new(DataType::Any))),
-            ("массив", DataType::Array(Box::new(DataType::Any))),
             (
-                "словарь",
+                &["число", "number"][..],
+                DataType::Primitive(PrimitiveType::Number),
+            ),
+            (
+                &["строка", "string"][..],
+                DataType::Primitive(PrimitiveType::Text),
+            ),
+            (
+                &["логический", "bool"][..],
+                DataType::Primitive(PrimitiveType::Boolean),
+            ),
+            (
+                &["дробь", "float"][..],
+                DataType::Primitive(PrimitiveType::Float),
+            ),
+            (
+                &["указатель", "pointer"][..],
+                DataType::Primitive(PrimitiveType::Pointer),
+            ),
+            (&["список", "list"][..], DataType::List(Box::new(DataType::Any))),
+            (&["массив", "array"][..], DataType::Array(Box::new(DataType::Any))),
+            (
+                &["словарь", "dict"][..],
                 DataType::Dict {
                     key: Box::new(DataType::Any),
                     value: Box::new(DataType::Any),
                 },
             ),
-            ("пустота", DataType::Unit),
-            ("неизвестно", DataType::Any),
+            (&["пустота", "void"][..], DataType::Unit),
+            (&["неизвестно", "any"][..], DataType::Any),
             (
-                "функция",
+                &["функция", "function"][..],
                 DataType::Function {
                     params: vec![],
                     return_type: Box::new(DataType::Any),
                 },
             ),
-            ("Строка", DataType::Primitive(PrimitiveType::Text)),
-            ("Список", DataType::List(Box::new(DataType::Any))),
-            ("Массив", DataType::Array(Box::new(DataType::Any))),
             (
-                "Словарь",
+                &["Строка", "String"][..],
+                DataType::Primitive(PrimitiveType::Text),
+            ),
+            (&["Список", "List"][..], DataType::List(Box::new(DataType::Any))),
+            (&["Массив", "Array"][..], DataType::Array(Box::new(DataType::Any))),
+            (
+                &["Словарь", "Dict"][..],
                 DataType::Dict {
                     key: Box::new(DataType::Any),
                     value: Box::new(DataType::Any),
                 },
             ),
             (
-                "Файл",
+                &["Файл", "File"][..],
                 DataType::Object(self.intern_string(interner, "Файл")),
             ),
             (
-                "Терминал",
+                &["Терминал", "Terminal"][..],
                 DataType::Object(self.intern_string(interner, "Терминал")),
             ),
             (
-                "Система",
+                &["Система", "System"][..],
                 DataType::Object(self.intern_string(interner, "Система")),
             ),
             (
-                "ДатаВремя",
+                &["ДатаВремя", "DateTime"][..],
                 DataType::Object(self.intern_string(interner, "ДатаВремя")),
             ),
             (
-                "Поток",
+                &["Поток", "Thread"][..],
                 DataType::Object(self.intern_string(interner, "Поток")),
             ),
             (
-                "Мьютекс",
+                &["Мьютекс", "Mutex"][..],
                 DataType::Object(self.intern_string(interner, "Мьютекс")),
             ),
             (
-                "БлокировкаЧтенияЗаписи",
+                &["БлокировкаЧтенияЗаписи", "RwLock"][..],
                 DataType::Object(self.intern_string(interner, "БлокировкаЧтенияЗаписи")),
             ),
             (
-                "РегулярноеВыражение",
+                &["РегулярноеВыражение", "Regex"][..],
                 DataType::Object(self.intern_string(interner, "РегулярноеВыражение")),
             ),
-            ("модуль", DataType::Runtime(RuntimeType::Module)),
-            ("ресурс", DataType::Runtime(RuntimeType::Resource)),
-            ("класс", DataType::Runtime(RuntimeType::Class)),
+            (&["модуль", "module"][..], DataType::Runtime(RuntimeType::Module)),
+            (&["ресурс", "resource"][..], DataType::Runtime(RuntimeType::Resource)),
+            (&["класс", "class"][..], DataType::Runtime(RuntimeType::Class)),
         ];
 
-        for (name, dt) in builtins {
-            let symbol = self.intern_string(interner, name);
+        for (names, dt) in builtins {
             let id = self.add_type(dt);
-            self.type_cache.insert(symbol, id);
+            for name in names {
+                let symbol = self.intern_string(interner, name);
+                self.type_cache.insert(symbol, id);
+            }
         }
     }
 }

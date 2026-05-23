@@ -17,58 +17,85 @@ pub(crate) enum Token {
     #[token(";")]
     Semi,
     #[token("подключить")]
+    #[token("import")]
     KwImport,
     #[token("из")]
+    #[token("from")]
     KwFrom,
     #[token("функция")]
+    #[token("function")]
     KwFunction,
     #[token("библиотека")]
+    #[token("library")]
     KwLibrary,
     #[token("переменная")]
+    #[token("variable")]
     KwVariable,
     #[token("класс")]
+    #[token("class")]
     KwClass,
     #[token("конструктор")]
+    #[token("constructor")]
     KwConstructor,
     #[token("публичный")]
+    #[token("public")]
     KwPublic,
     #[token("приватный")]
+    #[token("private")]
     KwPrivate,
     #[token("статичный")]
+    #[token("static")]
     KwStatic,
     #[token("константа")]
+    #[token("const")]
     KwConst,
     #[token("если")]
+    #[token("if")]
     KwIf,
     #[token("иначе")]
+    #[token("else")]
     KwElse,
     #[token("пока")]
+    #[token("while")]
     KwWhile,
     #[token("для")]
+    #[token("for")]
     KwFor,
     #[token("поток")]
+    #[token("thread")]
     KwThread,
     #[token("попробовать")]
+    #[token("try")]
     KwTry,
     #[token("перехватить")]
+    #[token("catch")]
     KwCatch,
     #[token("выбросить")]
+    #[token("raise")]
     KwRaise,
     #[token("как")]
+    #[token("as")]
     KwAs,
     #[token("новый")]
+    #[token("new")]
     KwNew,
     #[token("вернуть")]
+    #[token("return")]
     KwReturn,
     #[token("и")]
+    #[token("and")]
     KwAnd,
     #[token("или")]
+    #[token("or")]
     KwOr,
     #[token("истина")]
+    #[token("true")]
     True,
     #[token("ложь")]
+    #[token("false")]
     False,
     #[token("пустота")]
+    #[token("void")]
     Empty,
 
     #[token("=>")]
