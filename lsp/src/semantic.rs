@@ -385,6 +385,24 @@ fn collect_expression_tokens(
             collect_expression_tokens(module, interner, *object, text, line_starts, out);
             collect_expression_tokens(module, interner, *index, text, line_starts, out);
         }
+        ExpressionKind::Lambda { params, body } => {
+            for param in params {
+                if let Some(name) = module.arena.resolve_symbol(interner, param.name) {
+                    push_name_token(out, text, line_starts, param.span, &name, 2, true);
+                }
+                if let Some(default_value) = param.default_value {
+                    collect_expression_tokens(
+                        module,
+                        interner,
+                        default_value,
+                        text,
+                        line_starts,
+                        out,
+                    );
+                }
+            }
+            collect_statement_tokens(module, interner, &[*body], text, line_starts, out);
+        }
         ExpressionKind::Literal(_) | ExpressionKind::This => {}
     }
 }

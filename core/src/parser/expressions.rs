@@ -362,6 +362,7 @@ impl ParserTrait {
     ) -> Result<ExprId, ParseError> {
         let primary_span = (pair.as_span(), self.module.name).into();
         match pair.as_rule() {
+            Rule::lambda_expr => self.parse_lambda_expr(pair),
             Rule::paren_expr => {
                 let mut inner = pair.into_inner();
                 let expr = self.parse_expression(inner.next().ok_or_else(|| {
@@ -478,6 +479,58 @@ impl ParserTrait {
                 "Неожиданное выражение".into(),
             ))),
         }
+    }
+
+    fn parse_lambda_expr(&mut self, pair: Pair<Rule>) -> Result<ExprId, ParseError> {
+        let lambda_span: Span = (pair.as_span(), self.module.name).into();
+        let mut inner = pair.into_inner();
+        let params_pair = inner.next().ok_or_else(|| {
+            ParseError::InvalidSyntax(ErrorData::new(
+                lambda_span,
+                "Ожидались параметры лямбды".into(),
+            ))
+        })?;
+
+        let mut params = Vec::new();
+        for token in params_pair.into_inner() {
+            if token.as_rule() == Rule::param_list {
+                params = self.parse_param_list(token)?;
+            }
+        }
+
+        let body_pair = inner.next().ok_or_else(|| {
+            ParseError::InvalidSyntax(ErrorData::new(lambda_span, "Ожидалось тело лямбды".into()))
+        })?;
+        let body_span: Span = (body_pair.as_span(), self.module.name).into();
+        let body = match body_pair.as_rule() {
+            Rule::block => {
+                let statements = self.parse_block(body_pair)?;
+                self.module
+                    .arena
+                    .add_statement(StatementKind::Block(statements), body_span)
+            }
+            Rule::expression => {
+                let expr = self.parse_expression(body_pair)?;
+                let return_stmt = self
+                    .module
+                    .arena
+                    .add_statement(StatementKind::Return(Some(expr)), body_span);
+                self.module
+                    .arena
+                    .add_statement(StatementKind::Block(vec![return_stmt]), body_span)
+            }
+            _ => {
+                return Err(ParseError::InvalidSyntax(ErrorData::new(
+                    body_span,
+                    "Ожидалось тело лямбды".into(),
+                )))
+            }
+        };
+
+        Ok(self
+            .module
+            .arena
+            .add_expression(ExpressionKind::Lambda { params, body }, lambda_span))
     }
 
     pub(crate) fn parse_arg_list(

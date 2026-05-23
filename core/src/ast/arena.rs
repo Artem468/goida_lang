@@ -222,6 +222,10 @@ impl AstArena {
                 "БлокировкаЧтенияЗаписи",
                 DataType::Object(self.intern_string(interner, "БлокировкаЧтенияЗаписи")),
             ),
+            (
+                "РегулярноеВыражение",
+                DataType::Object(self.intern_string(interner, "РегулярноеВыражение")),
+            ),
             ("модуль", DataType::Runtime(RuntimeType::Module)),
             ("ресурс", DataType::Runtime(RuntimeType::Resource)),
             ("класс", DataType::Runtime(RuntimeType::Class)),

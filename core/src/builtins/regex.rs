@@ -32,9 +32,13 @@ fn build_regex_object(
     pattern: String,
     span: Span,
 ) -> Result<Value, RuntimeError> {
-    let class_symbol = interp.intern_string("Regex");
+    let class_symbol = interp.intern_string("РегулярноеВыражение");
     let Some(class_ref) = interp.std_classes.get(&class_symbol).cloned() else {
-        return bail_runtime!(InvalidOperation, span, "Класс Regex не найден");
+        return bail_runtime!(
+            InvalidOperation,
+            span,
+            "Класс РегулярноеВыражение не найден"
+        );
     };
 
     let compiled = compile_regex(&pattern, span)?;
@@ -61,7 +65,7 @@ fn get_regex_parts(
     span: Span,
 ) -> Result<(String, Regex), RuntimeError> {
     let Some(Value::Object(instance_ref)) = CallArgListExt::first_value(args) else {
-        return bail_runtime!(TypeError, span, "Ожидался объект Regex");
+        return bail_runtime!(TypeError, span, "Ожидался объект РегулярноеВыражение");
     };
 
     let pattern_sym = interp.intern_string("__pattern");
@@ -70,7 +74,13 @@ fn get_regex_parts(
     instance_ref.read(|instance| {
         let pattern = match instance.field_values.get(&pattern_sym) {
             Some(Value::Text(pattern)) => pattern.clone(),
-            _ => return bail_runtime!(InvalidOperation, span, "Regex не инициализирован"),
+            _ => {
+                return bail_runtime!(
+                    InvalidOperation,
+                    span,
+                    "РегулярноеВыражение не инициализирован"
+                )
+            }
         };
 
         let regex = match instance.field_values.get(&regex_sym) {
@@ -80,10 +90,20 @@ fn get_regex_parts(
                     .downcast_ref::<Regex>()
                     .cloned()
                     .ok_or_else(|| {
-                        runtime_error!(TypeError, span, "Внутренний ресурс Regex поврежден")
+                        runtime_error!(
+                            TypeError,
+                            span,
+                            "Внутренний ресурс РегулярноеВыражение поврежден"
+                        )
                     })
             })?,
-            _ => return bail_runtime!(InvalidOperation, span, "Regex не инициализирован"),
+            _ => {
+                return bail_runtime!(
+                    InvalidOperation,
+                    span,
+                    "РегулярноеВыражение не инициализирован"
+                )
+            }
         };
 
         Ok((pattern, regex))
@@ -103,7 +123,7 @@ fn capture_values(captures: regex::Captures<'_>) -> Value {
 }
 
 pub fn setup_regex_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassDefinition>) {
-    let name = interner.write(|i| i.get_or_intern("Regex"));
+    let name = interner.write(|i| i.get_or_intern("РегулярноеВыражение"));
     let mut class_def = ClassDefinition::new(name, Span::default());
 
     define_constructor!(class_def, (interp, args, span) {
@@ -111,7 +131,7 @@ pub fn setup_regex_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassD
             CallArgListExt::first_value(&args),
             CallArgListExt::get_value(&args, 1),
         ) else {
-            return bail_runtime!(TypeError, span, "Использование: новый Regex(pattern)");
+            return bail_runtime!(TypeError, span, "Использование: новый РегулярноеВыражение(шаблон)");
         };
 
         let compiled = compile_regex(pattern, span)?;
@@ -233,21 +253,12 @@ pub fn setup_regex_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassD
 }
 
 pub fn setup_regex_func(interpreter: &mut Interpreter, interner: &SharedInterner) {
-    define_builtin!(interpreter, interner, "regex" => (interp, arguments, span) {
-        expect_args!(arguments, 1, span, "regex");
+    define_builtin!(interpreter, interner, "регулярное_выражение" => (interp, arguments, span) {
+        expect_args!(arguments, 1, span, "выражение");
         if let Value::Text(pattern) = &arguments[0].value {
             build_regex_object(interp, pattern.clone(), span)
         } else {
-            bail_runtime!(TypeError, span, "Функция regex ожидает строку")
-        }
-    });
-
-    define_builtin!(interpreter, interner, "регекс" => (interp, arguments, span) {
-        expect_args!(arguments, 1, span, "регекс");
-        if let Value::Text(pattern) = &arguments[0].value {
-            build_regex_object(interp, pattern.clone(), span)
-        } else {
-            bail_runtime!(TypeError, span, "Функция регекс ожидает строку")
+            bail_runtime!(TypeError, span, "Функция регулярное_выражение ожидает строку")
         }
     });
 }

@@ -245,6 +245,7 @@ index_access = {
 
 // === Primary expressions ===
 primary = _{
+    lambda_expr |
     paren_expr |
     new_expr |
     string_literal |
@@ -252,6 +253,14 @@ primary = _{
     bool_literal |
     empty_literal |
     identifier
+}
+
+lambda_expr = {
+    lambda_params ~ "=>" ~ (block | expression)
+}
+
+lambda_params = {
+    "(" ~ param_list? ~ ")"
 }
 
 empty_literal = @{

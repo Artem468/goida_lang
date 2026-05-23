@@ -9,6 +9,7 @@ use crate::traits::prelude::{
     CoreOperations, ExpressionEvaluator, InterpreterClasses, InterpreterFunctions, ValueOperations,
 };
 use crate::{bail_runtime, runtime_error};
+use std::sync::Arc;
 use string_interner::DefaultSymbol as Symbol;
 
 impl ExpressionEvaluator for Interpreter {
@@ -579,6 +580,18 @@ impl ExpressionEvaluator for Interpreter {
                 let (class_rc, definition_module) =
                     self.resolve_class_for_creation(class_name, current_module_id, expr_kind.span)?;
                 self.instantiate_class(class_rc, definition_module, arguments, expr_kind.span)
+            }
+
+            ExpressionKind::Lambda { params, body } => {
+                let name = self.intern_string("<лямбда>");
+                Ok(Value::Function(Arc::new(crate::ast::prelude::FunctionDefinition {
+                    name,
+                    params,
+                    return_type: None,
+                    body,
+                    span: expr_kind.span,
+                    module: Some(current_module_id),
+                })))
             }
 
             ExpressionKind::This => bail_runtime!(

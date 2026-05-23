@@ -1,4 +1,4 @@
-use crate::ast::prelude::{BinaryOperator, Span, TypeId, UnaryOperator};
+use crate::ast::prelude::{BinaryOperator, Parameter, Span, StmtId, TypeId, UnaryOperator};
 use string_interner::DefaultSymbol as Symbol;
 
 /// Stable index of an expression inside [`AstArena`](crate::ast::arena::AstArena).
@@ -51,6 +51,10 @@ pub enum ExpressionKind {
     ObjectCreation {
         class_name: Symbol,
         args: Vec<CallArg>,
+    },
+    Lambda {
+        params: Vec<Parameter>,
+        body: StmtId,
     },
     This,
 }

@@ -52,6 +52,8 @@ pub fn translate_rule(rule: &Rule) -> String {
         Rule::unary => "унарное выражение".into(),
         Rule::postfix => "постфиксное выражение".into(),
         Rule::paren_expr => "выражение в скобках".into(),
+        Rule::lambda_expr => "лямбда-выражение".into(),
+        Rule::lambda_params => "параметры лямбды".into(),
 
         // Операторы и знаки
         Rule::assignment => "присваивание '='".into(),

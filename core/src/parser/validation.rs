@@ -77,9 +77,8 @@ impl ParserTrait {
             "Поток",
             "Мьютекс",
             "БлокировкаЧтенияЗаписи",
-            "Regex",
-            "regex",
-            "регекс",
+            "регулярное_выражение",
+            "РегулярноеВыражение",
         ] {
             names.insert(self.module.arena.intern_string(&self.interner, name));
         }
@@ -358,6 +357,19 @@ impl ParserTrait {
                 }
                 Ok(())
             }
+            ExpressionKind::Lambda { params, body } => {
+                let mut local = HashSet::new();
+                for param in params {
+                    local.insert(param.name);
+                    if let Some(default_value) = param.default_value {
+                        self.validate_expression_names(default_value, scopes)?;
+                    }
+                }
+                scopes.push(local);
+                self.validate_statement_names(*body, scopes)?;
+                scopes.pop();
+                Ok(())
+            }
             ExpressionKind::Literal(_) | ExpressionKind::This => Ok(()),
         }
     }
@@ -370,9 +382,6 @@ impl ParserTrait {
         let Some(name) = self.module.arena.resolve_symbol(&self.interner, symbol) else {
             return false;
         };
-        if name == "Regex" {
-            return true;
-        }
         let parts = name.split('.').collect::<Vec<_>>();
         if parts.len() > 1 {
             let module_symbol = self.module.arena.intern_string(&self.interner, parts[0]);
