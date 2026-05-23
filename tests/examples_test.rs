@@ -89,7 +89,7 @@ fn test_local_binding_shadows_import_alias_for_property_access() {
     fs::write(dir.join("mod.goida"), "value = 41\n").expect("Не удалось записать временный модуль");
     fs::write(
         dir.join("main.goida"),
-        "подключить \"mod\" в m\nm = \"shadowed\"\nпечать(m.value)\n",
+        "подключить \"mod\" как m\nm = \"shadowed\"\nпечать(m.value)\n",
     )
     .expect("Не удалось записать временный основной файл");
 

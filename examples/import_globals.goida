@@ -1,4 +1,4 @@
-подключить "import_globals_module" в globals_module
+подключить "import_globals_module" как globals_module
 
 печать(globals_module.exported_number + 1)
 печать(exported_text)

@@ -1,165 +1,84 @@
 use crate::ast::prelude::*;
 use crate::interpreter::prelude::{Module, SharedInterner};
-use crate::parser::prelude::{
-    extract_last_token, translate_rule, ParseError, Parser as ParserTrait,
-};
-use pest::error::ErrorVariant;
-use pest::Parser;
-use pest_derive::Parser;
+use crate::parser::grammar;
+use crate::parser::lexer::{lex, LexicalError, Token};
+use crate::parser::prelude::{ParseError, Parser as ParserTrait};
+use lalrpop_util::ParseError as LalrpopParseError;
 use std::path::PathBuf;
-
-#[derive(Parser)]
-#[grammar = "grammar.pest"]
-struct ProgramParser;
 
 impl ParserTrait {
     pub fn new(interner: SharedInterner, name: &str, path: PathBuf) -> Self {
         Self {
             module: Module::new(&interner, name, path),
             interner,
-            nesting_level: 0,
         }
-    }
-
-    fn get_char_range(&self, s: &str, start: usize, end: usize) -> String {
-        let start = previous_char_boundary(s, start.min(s.len()));
-        let end = next_char_boundary(s, end.min(s.len()));
-        s.get(start..end).unwrap_or_default().to_string()
     }
 
     pub fn parse(mut self, code: &str) -> Result<Module, ParseError> {
-        let pairs = ProgramParser::parse(Rule::program, code).map_err(|e| {
-            let (start, end) = match e.location {
-                pest::error::InputLocation::Pos(pos) => extract_last_token(code, pos),
-                pest::error::InputLocation::Span((start, end)) => (start, end),
-            };
-
-            let message = match &e.variant {
-                ErrorVariant::ParsingError {
-                    positives,
-                    negatives,
-                } => {
-                    let mut parts = Vec::new();
-
-                    if !positives.is_empty() {
-                        let found = self.get_char_range(code, start, end);
-
-                        let found = if found.is_empty() {
-                            code.chars()
-                                .nth(start)
-                                .map(|c| c.to_string())
-                                .unwrap_or_else(|| "конец файла".into())
-                        } else {
-                            found.to_string()
-                        };
-
-                        let expected: Vec<String> = positives.iter().map(translate_rule).collect();
-                        parts.push(format!(
-                            "ожидалось: \n{} получено {}",
-                            expected.join("\n"),
-                            found
-                        ));
-                    }
-
-                    if !negatives.is_empty() {
-                        let unexpected: Vec<String> =
-                            negatives.iter().map(translate_rule).collect();
-                        parts.push(format!("неожиданный токен: \n{}", unexpected.join("\n")));
-                    }
-
-                    if parts.is_empty() {
-                        "неизвестная ошибка синтаксиса".to_string()
-                    } else {
-                        parts.join("; ")
-                    }
-                }
-                ErrorVariant::CustomError { message } => message.clone(),
-            };
-
-            ParseError::InvalidSyntax(ErrorData::new(
-                Span::new(start, end, self.module.name),
-                message,
-            ))
-        })?;
         self.module.arena.init_builtin_types(&self.interner);
         self.init_builtin_error_classes();
-        for pair in pairs {
-            if pair.as_rule() == Rule::program {
-                for inner in pair.into_inner() {
-                    match inner.as_rule() {
-                        Rule::function => {
-                            let stmt_id = self.parse_function(inner)?;
-                            self.module.body.push(stmt_id);
-                        }
-                        Rule::class => {
-                            let stmt_id = self.parse_class(inner)?;
-                            self.module.body.push(stmt_id);
-                        }
-                        Rule::library_stmt => {
-                            let stmt_id = self.parse_library_stmt(inner)?;
-                            self.module.body.push(stmt_id);
-                        }
-                        Rule::assignment => {
-                            let stmt_id = self.parse_assignment(inner)?;
-                            self.module.body.push(stmt_id);
-                        }
-                        Rule::compound_assignment => {
-                            let stmt_id = self.parse_compound_assignment(inner)?;
-                            self.module.body.push(stmt_id);
-                        }
-                        Rule::property_assign => {
-                            let stmt_id = self.parse_property_assign(inner)?;
-                            self.module.body.push(stmt_id);
-                        }
-                        Rule::if_stmt => {
-                            let stmt_id = self.parse_if_stmt(inner)?;
-                            self.module.body.push(stmt_id);
-                        }
-                        Rule::try_stmt => {
-                            let stmt_id = self.parse_try_stmt(inner)?;
-                            self.module.body.push(stmt_id);
-                        }
-                        Rule::raise_stmt => {
-                            let stmt_id = self.parse_raise_stmt(inner)?;
-                            self.module.body.push(stmt_id);
-                        }
-                        Rule::while_stmt => {
-                            let stmt_id = self.parse_while_stmt(inner)?;
-                            self.module.body.push(stmt_id);
-                        }
-                        Rule::foreach_stmt => {
-                            let stmt_id = self.parse_foreach_stmt(inner)?;
-                            self.module.body.push(stmt_id);
-                        }
-                        Rule::for_stmt => {
-                            let stmt_id = self.parse_for_stmt(inner)?;
-                            self.module.body.push(stmt_id);
-                        }
-                        Rule::thread_stmt => {
-                            let stmt_id = self.parse_thread_stmt(inner)?;
-                            self.module.body.push(stmt_id);
-                        }
-                        Rule::return_stmt => {
-                            let stmt_id = self.parse_return_stmt(inner)?;
-                            self.module.body.push(stmt_id);
-                        }
-                        Rule::expr_stmt => {
-                            let stmt_id = self.parse_expr_stmt(inner)?;
-                            self.module.body.push(stmt_id);
-                        }
-                        Rule::import_stmt => {
-                            let stmt_id = self.parse_import_stmt(inner)?;
-                            self.module.body.push(stmt_id);
-                        }
-                        _ => {}
-                    }
-                }
-            }
-        }
+
+        let syntax = grammar::ProgramParser::new()
+            .parse(lex(code))
+            .map_err(|err| self.convert_parse_error(code, err))?;
+
+        self.build_program(syntax)?;
         self.validate_module_names()?;
         self.module.arena.optimize_all(&self.interner);
         Ok(self.module)
     }
+
+    fn convert_parse_error(
+        &self,
+        code: &str,
+        err: LalrpopParseError<usize, Token, LexicalError>,
+    ) -> ParseError {
+        match err {
+            LalrpopParseError::InvalidToken { location } => {
+                let (start, end) = token_range_at(code, location);
+                ParseError::InvalidSyntax(ErrorData::new(
+                    Span::new(start, end, self.module.name),
+                    "Некорректный токен".into(),
+                ))
+            }
+            LalrpopParseError::UnrecognizedEof { location, expected } => {
+                ParseError::InvalidSyntax(ErrorData::new(
+                    Span::new(location, location, self.module.name),
+                    format_expected("Неожиданный конец файла", expected),
+                ))
+            }
+            LalrpopParseError::UnrecognizedToken { token, expected } => {
+                let (start, found, end) = token;
+                ParseError::InvalidSyntax(ErrorData::new(
+                    Span::new(start, end, self.module.name),
+                    format_expected(
+                        format!("Неожиданный токен {}", token_name(&found)),
+                        expected,
+                    ),
+                ))
+            }
+            LalrpopParseError::ExtraToken { token } => {
+                let (start, found, end) = token;
+                ParseError::InvalidSyntax(ErrorData::new(
+                    Span::new(start, end, self.module.name),
+                    format!("Лишний токен {}", token_name(&found)),
+                ))
+            }
+            LalrpopParseError::User { error } => ParseError::InvalidSyntax(ErrorData::new(
+                Span::new(error.span.start, error.span.end, self.module.name),
+                error.message,
+            )),
+        }
+    }
+}
+
+fn token_range_at(code: &str, location: usize) -> (usize, usize) {
+    let start = previous_char_boundary(code, location.min(code.len()));
+    let mut end = next_char_boundary(code, location.min(code.len()));
+    if end == start && end < code.len() {
+        end = next_char_boundary(code, end + 1);
+    }
+    (start, end)
 }
 
 fn previous_char_boundary(s: &str, mut index: usize) -> usize {
@@ -176,4 +95,22 @@ fn next_char_boundary(s: &str, mut index: usize) -> usize {
         index += 1;
     }
     index
+}
+
+fn format_expected(prefix: impl Into<String>, expected: Vec<String>) -> String {
+    if expected.is_empty() {
+        prefix.into()
+    } else {
+        format!("{}; ожидалось: {}", prefix.into(), expected.join(", "))
+    }
+}
+
+fn token_name(token: &Token) -> String {
+    match token {
+        Token::Ident(value) => format!("'{}'", value),
+        Token::String(value) => format!("\"{}\"", value),
+        Token::Number(value) => value.to_string(),
+        Token::Float(value) => value.to_string(),
+        other => format!("{:?}", other),
+    }
 }

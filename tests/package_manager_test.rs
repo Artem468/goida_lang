@@ -228,7 +228,7 @@ fn package_manager_creates_venv_and_installs_active_dependencies_there() {
 
     fs::write(
         project.join("главный.goida"),
-        "подключить \"lib/mod\" в m\nпечать(m.значение)\n",
+        "подключить \"lib/mod\" как m\nпечать(m.значение)\n",
     )
     .expect("failed to write project main");
     let run_output = run_goida_with_env(

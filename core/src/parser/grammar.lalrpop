@@ -1,0 +1,658 @@
+use crate::parser::lexer::{LexicalError, Token};
+use crate::parser::syntax::*;
+
+grammar;
+
+pub Program: Program = {
+    <items:ProgramItems> => Program { items },
+};
+
+ProgramItems: Vec<Item> = {
+    <_s:Semis> "eof" => Vec::new(),
+    <_s:Semis> <item:Item> "newline" <mut items:ProgramItems> => {
+        items.insert(0, item);
+        items
+    },
+};
+
+BlockItems: Vec<Item> = {
+    <_s:Semis> "}" => Vec::new(),
+    <_s:Semis> <item:Item> "newline" <mut items:BlockItems> => {
+        items.insert(0, item);
+        items
+    },
+};
+
+#[inline]
+Semis: () = {
+    => (),
+    "newline" => (),
+};
+
+Item: Item = {
+    <l:@L> <item:Import> <r:@R> => Spanned::new(ItemKind::Import(item), l, r),
+    <l:@L> <item:Function> <r:@R> => Spanned::new(ItemKind::Function(item), l, r),
+    <l:@L> <item:Class> <r:@R> => Spanned::new(ItemKind::Class(item), l, r),
+    <l:@L> <item:Library> <r:@R> => Spanned::new(ItemKind::Library(item), l, r),
+    <l:@L> <stmt:Stmt> <r:@R> => Spanned::new(ItemKind::Statement(Spanned::new(stmt.node, l, r)), l, r),
+};
+
+IdentName: String = {
+    <name:"identifier"> => name.to_string(),
+};
+
+Import: Import = {
+    "подключить" <path:"string"> "как" <alias:IdentName> => Import { path, alias },
+};
+
+Function: Function = {
+    "функция" <name:IdentName> "(" <params:ParamListOpt> ")" <return_type:ReturnTypeOpt> <body:Block> => Function {
+        name,
+        params,
+        return_type,
+        body,
+    },
+};
+
+#[inline]
+ReturnTypeOpt: Option<String> = {
+    => None,
+    "->" <ty:TypeName> => Some(ty),
+};
+
+Block: Vec<Item> = {
+    "{" <items:BlockItems> => items,
+};
+
+Class: Class = {
+    "класс" <name:IdentName> <base:InheritanceOpt> "{" <items:ClassItems> => Class { name, base, items },
+};
+
+InheritanceOpt: Option<String> = {
+    => None,
+    "(" <base:IdentName> ")" => Some(base),
+};
+
+ClassItems: Vec<ClassItem> = {
+    <_s:Semis> "}" => Vec::new(),
+    <_s:Semis> <item:ClassItem> "newline" <mut items:ClassItems> => {
+        items.insert(0, item);
+        items
+    },
+};
+
+ClassItem: ClassItem = {
+    <l:@L> <item:ClassField> <r:@R> => Spanned::new(ClassItemKind::Field(item), l, r),
+    <l:@L> <item:Constructor> <r:@R> => Spanned::new(ClassItemKind::Constructor(item), l, r),
+    <l:@L> <item:ClassMethod> <r:@R> => Spanned::new(ClassItemKind::Method(item), l, r),
+};
+
+ClassField: ClassField = {
+    <visibility:VisibilityOpt> <is_static:StaticOpt> <name:IdentName> ":" <type_name:TypeName> "type=" <default_value:Expr> => ClassField {
+        visibility,
+        is_static,
+        name,
+        type_name,
+        default_value: Some(default_value),
+    },
+    <visibility:VisibilityOpt> <is_static:StaticOpt> <name:IdentName> ":" <type_name:TypeName> => ClassField {
+        visibility,
+        is_static,
+        name,
+        type_name,
+        default_value: None,
+    },
+};
+
+Constructor: ClassMethod = {
+    <visibility:VisibilityOpt> "конструктор" <name:ConstructorName> "(" <params:ParamListOpt> ")" <return_type:ReturnTypeOpt> <body:Block> => ClassMethod {
+        visibility,
+        is_static: false,
+        name,
+        params,
+        return_type,
+        body,
+    },
+};
+
+ConstructorName: String = {
+    <name:IdentName> => name,
+    "новый" => "новый".to_string(),
+};
+
+ClassMethod: ClassMethod = {
+    <visibility:VisibilityOpt> <is_static:StaticOpt> "функция" <name:IdentName> "(" <params:ParamListOpt> ")" <return_type:ReturnTypeOpt> <body:Block> => ClassMethod {
+        visibility,
+        is_static,
+        name,
+        params,
+        return_type,
+        body,
+    },
+};
+
+#[inline]
+VisibilityOpt: Option<Visibility> = {
+    => None,
+    "публичный" => Some(Visibility::Public),
+    "приватный" => Some(Visibility::Private),
+};
+
+#[inline]
+StaticOpt: bool = {
+    => false,
+    "статичный" => true,
+};
+
+Library: Library = {
+    "библиотека" <path:"string"> "{" <items:LibraryItems> => Library { path, items },
+};
+
+LibraryItems: Vec<LibraryItem> = {
+    <_s:Semis> "}" => Vec::new(),
+    <_s:Semis> <item:LibraryItem> "newline" <mut items:LibraryItems> => {
+        items.insert(0, item);
+        items
+    },
+};
+
+LibraryItem: LibraryItem = {
+    <l:@L> <item:LibraryFunction> <r:@R> => Spanned::new(LibraryItemKind::Function(item), l, r),
+    <l:@L> <item:LibraryGlobal> <r:@R> => Spanned::new(LibraryItemKind::Global(item), l, r),
+};
+
+LibraryFunction: LibraryFunction = {
+    "функция" <name:IdentName> "(" <params:LibraryParamListOpt> ")" <return_type:ReturnTypeOpt> EmptyBlock => LibraryFunction {
+        name,
+        params,
+        return_type,
+    },
+};
+
+LibraryGlobal: LibraryGlobal = {
+    "переменная" <name:IdentName> ":" <type_name:TypeName> => LibraryGlobal { name, type_name },
+};
+
+EmptyBlock: () = {
+    "{" "}" => (),
+};
+
+#[inline]
+LibraryParamListOpt: Vec<LibraryParam> = {
+    => Vec::new(),
+    <params:LibraryParamList> => params,
+};
+
+LibraryParamList: Vec<LibraryParam> = {
+    <param:LibraryParam> => vec![param],
+    <mut params:LibraryParamList> "," <param:LibraryParam> => {
+        params.push(param);
+        params
+    },
+};
+
+LibraryParam: LibraryParam = {
+    <l:@L> <name:IdentName> ":" <type_name:TypeName> <r:@R> => LibraryParam {
+        name,
+        type_name,
+        span: l..r,
+    },
+};
+
+Stmt: Stmt = {
+    <l:@L> "константа" <name:IdentName> <type_hint:TypeHintOpt> "=" <value:Expr> <r:@R> => Spanned::new(StmtKind::Assign {
+        name,
+        is_const: true,
+        type_hint,
+        value,
+    }, l, r),
+    <l:@L> <name:IdentName> <type_hint:TypeHintSome> "type=" <value:Expr> <r:@R> => Spanned::new(StmtKind::Assign {
+        name,
+        is_const: false,
+        type_hint: Some(type_hint),
+        value,
+    }, l, r),
+    <l:@L> <target:Expr> <tail:StmtExprTail> <r:@R> => match tail {
+        StmtExprTail::None => Spanned::new(StmtKind::Expr(target), l, r),
+        StmtExprTail::Assign(value) => {
+            if let ExprKind::Identifier(name) = target.node.clone() {
+                Spanned::new(StmtKind::Assign { name, is_const: false, type_hint: None, value }, l, r)
+            } else {
+                Spanned::new(StmtKind::AssignTarget { target, value }, l, r)
+            }
+        }
+        StmtExprTail::Compound(op, value) => Spanned::new(StmtKind::CompoundAssign { target, op, value }, l, r),
+    },
+    <l:@L> "если" "(" <condition:Expr> ")" <then_body:Block> "иначе" <else_body:ElseBodyRequired> <r:@R> => Spanned::new(StmtKind::If {
+        condition,
+        then_body,
+        else_body: Some(else_body),
+    }, l, r),
+    <l:@L> "если" "(" <condition:Expr> ")" <then_body:Block> <r:@R> => Spanned::new(StmtKind::If {
+        condition,
+        then_body,
+        else_body: None,
+    }, l, r),
+    <l:@L> "пока" "(" <condition:Expr> ")" <body:Block> <r:@R> => Spanned::new(StmtKind::While { condition, body }, l, r),
+    <l:@L> "для" "(" <variable:IdentName> "=" <init:Expr> "," <condition:Expr> "," <update:ForUpdate> ")" <body:Block> <r:@R> => Spanned::new(StmtKind::For {
+        variable,
+        init,
+        condition,
+        update,
+        body,
+    }, l, r),
+    <l:@L> "для" <variable:IdentName> "из" <iterable:Expr> <body:Block> <r:@R> => Spanned::new(StmtKind::ForEach {
+        variable,
+        iterable,
+        body,
+    }, l, r),
+    <l:@L> "поток" <body:Block> <r:@R> => Spanned::new(StmtKind::Thread { body }, l, r),
+    <l:@L> "попробовать" <body:Block> <handlers:Catches> <r:@R> => Spanned::new(StmtKind::Try { body, handlers }, l, r),
+    <l:@L> "выбросить" <error_type:IdentName> <message:RaiseMessageOpt> <r:@R> => Spanned::new(StmtKind::Raise { error_type, message }, l, r),
+    <l:@L> "вернуть" <expr:ReturnExprOpt> <r:@R> => Spanned::new(StmtKind::Return(expr), l, r),
+};
+
+StmtExprTail: StmtExprTail = {
+    => StmtExprTail::None,
+    "=" <value:Expr> => StmtExprTail::Assign(value),
+    <op:CompoundOp> <value:Expr> => StmtExprTail::Compound(op, value),
+};
+
+TypeHintOpt: Option<String> = {
+    => None,
+    ":" <ty:TypeName> => Some(ty),
+};
+
+TypeHintSome: String = {
+    ":" <ty:TypeName> => ty,
+};
+
+ElseBodyRequired: ElseBody = {
+    <l:@L> <body:Block> <r:@R> => ElseBody::Block(body, l..r),
+    <stmt:StmtIfOnly> => ElseBody::If(Box::new(stmt)),
+};
+
+StmtIfOnly: Stmt = {
+    <l:@L> "если" "(" <condition:Expr> ")" <then_body:Block> "иначе" <else_body:ElseBodyRequired> <r:@R> => Spanned::new(StmtKind::If {
+        condition,
+        then_body,
+        else_body: Some(else_body),
+    }, l, r),
+    <l:@L> "если" "(" <condition:Expr> ")" <then_body:Block> <r:@R> => Spanned::new(StmtKind::If {
+        condition,
+        then_body,
+        else_body: None,
+    }, l, r),
+};
+
+Catches: Vec<Catch> = {
+    <catch:Catch> => vec![catch],
+    <mut catches:Catches> <catch:Catch> => {
+        catches.push(catch);
+        catches
+    },
+};
+
+Catch: Catch = {
+    <l:@L> "перехватить" <pattern:CatchPatternOpt> <body:Block> <r:@R> => Catch {
+        pattern,
+        body,
+        span: l..r,
+    },
+};
+
+#[inline]
+CatchPatternOpt: Option<CatchPattern> = {
+    => None,
+    "(" ")" => None,
+    "(" <pattern:CatchPattern> ")" => Some(pattern),
+};
+
+CatchPattern: CatchPattern = {
+    "как" <l:@L> <name:IdentName> <r:@R> => CatchPattern::Text(name, l..r),
+    <tl:@L> <type_name:IdentName> <tr:@R> "как" <nl:@L> <text_name:IdentName> <nr:@R> => CatchPattern::TypeAndText {
+        type_name,
+        type_span: tl..tr,
+        text_name,
+        text_span: nl..nr,
+    },
+    <l:@L> <name:IdentName> <r:@R> => CatchPattern::Type(name, l..r),
+};
+
+#[inline]
+RaiseMessageOpt: Option<Expr> = {
+    => None,
+    "(" ")" => None,
+    "(" <expr:Expr> ")" => Some(expr),
+};
+
+#[inline]
+ReturnExprOpt: Option<Expr> = {
+    => None,
+    <expr:Expr> => Some(expr),
+};
+
+ForUpdate: ForUpdate = {
+    <l:@L> <target:Postfix> "=" <value:Expr> <r:@R> => {
+        if let ExprKind::Identifier(name) = target.node.clone() {
+            ForUpdate::Assign { name, value, span: l..r }
+        } else {
+            ForUpdate::AssignTarget { target, value, span: l..r }
+        }
+    },
+    <l:@L> <target:Postfix> <op:CompoundOp> <value:Expr> <r:@R> => ForUpdate::Compound { target, op, value, span: l..r },
+    <expr:Expr> => ForUpdate::Expr(expr),
+};
+
+CompoundOp: CompoundOp = {
+    "+=" => CompoundOp::Add,
+    "-=" => CompoundOp::Sub,
+    "*=" => CompoundOp::Mul,
+    "/=" => CompoundOp::Div,
+    "%=" => CompoundOp::Mod,
+};
+
+#[inline]
+ParamListOpt: Vec<Param> = {
+    => Vec::new(),
+    <params:ParamList> => params,
+};
+
+ParamList: Vec<Param> = {
+    <param:Param> => vec![param],
+    <mut params:ParamList> "," <param:Param> => {
+        params.push(param);
+        params
+    },
+};
+
+Param: Param = {
+    <l:@L> <name:IdentName> ":" <type_name:TypeName> "type=" <default_value:Expr> <r:@R> => Param {
+        name,
+        type_name: Some(type_name),
+        default_value: Some(default_value),
+        span: l..r,
+    },
+    <l:@L> <name:IdentName> ":" <type_name:TypeName> <r:@R> => Param {
+        name,
+        type_name: Some(type_name),
+        default_value: None,
+        span: l..r,
+    },
+    <l:@L> <name:IdentName> "=" <default_value:Expr> <r:@R> => Param {
+        name,
+        type_name: None,
+        default_value: Some(default_value),
+        span: l..r,
+    },
+    <l:@L> <name:IdentName> <r:@R> => Param {
+        name,
+        type_name: None,
+        default_value: None,
+        span: l..r,
+    },
+};
+
+#[inline]
+ArgListOpt: Vec<CallArg> = {
+    => Vec::new(),
+    <args:ArgList> => args,
+};
+
+ArgList: Vec<CallArg> = {
+    <arg:Arg> => vec![arg],
+    <mut args:ArgList> "," <arg:Arg> => {
+        args.push(arg);
+        args
+    },
+};
+
+Arg: CallArg = {
+    <name:IdentName> "=" <value:Expr> => CallArg { name: Some(name), value },
+    <value:Expr> => CallArg { name: None, value },
+};
+
+TypeName: String = {
+    <name:QualifiedName> => name,
+    "пустота" => "пустота".to_string(),
+};
+
+QualifiedName: String = {
+    <head:IdentName> => head,
+    <head:QualifiedName> "." <tail:IdentName> => format!("{head}.{tail}"),
+};
+
+Expr: Expr = {
+    <e:LambdaExpr> => e,
+    <e:LogicalOr> => e,
+};
+
+LambdaExpr: Expr = {
+    <l:@L> "lambda(" <params:ParamListOpt> ")" "=>" <body:LambdaBody> <r:@R> => Spanned::new(ExprKind::Lambda { params, body }, l, r),
+};
+
+LogicalOr: Expr = {
+    <left:LogicalOr> <l:@L> "или" <right:LogicalAnd> <r:@R> => {
+        let start = left.span.start;
+        Spanned::new(ExprKind::Binary {
+            op: BinaryOp::Or,
+            left: Box::new(left),
+            right: Box::new(right),
+        }, start, r.max(l))
+    },
+    <e:LogicalAnd> => e,
+};
+
+LogicalAnd: Expr = {
+    <left:LogicalAnd> <l:@L> "и" <right:Comparison> <r:@R> => {
+        let start = left.span.start;
+        Spanned::new(ExprKind::Binary {
+            op: BinaryOp::And,
+            left: Box::new(left),
+            right: Box::new(right),
+        }, start, r.max(l))
+    },
+    <e:Comparison> => e,
+};
+
+Comparison: Expr = {
+    <left:Comparison> <op:CompOp> <right:Addition> => {
+        let start = left.span.start;
+        let end = right.span.end;
+        Spanned::new(ExprKind::Binary {
+            op,
+            left: Box::new(left),
+            right: Box::new(right),
+        }, start, end)
+    },
+    <e:Addition> => e,
+};
+
+CompOp: BinaryOp = {
+    "==" => BinaryOp::Eq,
+    "!=" => BinaryOp::Ne,
+    "<=" => BinaryOp::Le,
+    ">=" => BinaryOp::Ge,
+    "<" => BinaryOp::Lt,
+    ">" => BinaryOp::Gt,
+};
+
+Addition: Expr = {
+    <left:Addition> "+" <right:Multiplication> => {
+        let start = left.span.start;
+        let end = right.span.end;
+        Spanned::new(ExprKind::Binary {
+            op: BinaryOp::Add,
+            left: Box::new(left),
+            right: Box::new(right),
+        }, start, end)
+    },
+    <left:Addition> "-" <right:Multiplication> => {
+        let start = left.span.start;
+        let end = right.span.end;
+        Spanned::new(ExprKind::Binary {
+            op: BinaryOp::Sub,
+            left: Box::new(left),
+            right: Box::new(right),
+        }, start, end)
+    },
+    <e:Multiplication> => e,
+};
+
+Multiplication: Expr = {
+    <left:Multiplication> "*" <right:Unary> => {
+        let start = left.span.start;
+        let end = right.span.end;
+        Spanned::new(ExprKind::Binary {
+            op: BinaryOp::Mul,
+            left: Box::new(left),
+            right: Box::new(right),
+        }, start, end)
+    },
+    <left:Multiplication> "/" <right:Unary> => {
+        let start = left.span.start;
+        let end = right.span.end;
+        Spanned::new(ExprKind::Binary {
+            op: BinaryOp::Div,
+            left: Box::new(left),
+            right: Box::new(right),
+        }, start, end)
+    },
+    <left:Multiplication> "%" <right:Unary> => {
+        let start = left.span.start;
+        let end = right.span.end;
+        Spanned::new(ExprKind::Binary {
+            op: BinaryOp::Mod,
+            left: Box::new(left),
+            right: Box::new(right),
+        }, start, end)
+    },
+    <e:Unary> => e,
+};
+
+Unary: Expr = {
+    <l:@L> "-" <operand:Unary> => {
+        let end = operand.span.end;
+        Spanned::new(ExprKind::Unary {
+            op: UnaryOp::Negative,
+            operand: Box::new(operand),
+        }, l, end)
+    },
+    <l:@L> "!" <operand:Unary> => {
+        let end = operand.span.end;
+        Spanned::new(ExprKind::Unary {
+            op: UnaryOp::Not,
+            operand: Box::new(operand),
+        }, l, end)
+    },
+    <e:Postfix> => e,
+};
+
+Postfix: Expr = {
+    <primary:Primary> <ops:PostfixOps> => apply_postfix(primary, ops),
+};
+
+PostfixOps: Vec<PostfixOp> = {
+    => Vec::new(),
+    <mut ops:PostfixOps> <op:PostfixOp> => {
+        ops.push(op);
+        ops
+    },
+};
+
+PostfixOp: PostfixOp = {
+    <l:@L> "(" <args:ArgListOpt> ")" <r:@R> => PostfixOp::FunctionCall(args, l..r),
+    <l:@L> "method." <method:IdentName> "(" <args:ArgListOpt> ")" <r:@R> => PostfixOp::MethodCall(method, args, l..r),
+    <l:@L> "." <property:IdentName> <r:@R> => PostfixOp::PropertyAccess(property, l..r),
+    <l:@L> "[" <index:Expr> "]" <r:@R> => PostfixOp::Index(index, l..r),
+};
+
+Primary: Expr = {
+    "(" <expr:Expr> ")" => expr,
+    <l:@L> "новый" <class_name:QualifiedName> "(" <args:ArgListOpt> ")" <r:@R> => Spanned::new(ExprKind::ObjectCreation { class_name, args }, l, r),
+    <l:@L> <value:"number"> <r:@R> => Spanned::new(ExprKind::Number(value), l, r),
+    <l:@L> <value:"float"> <r:@R> => Spanned::new(ExprKind::Float(value), l, r),
+    <l:@L> <value:"string"> <r:@R> => Spanned::new(ExprKind::Text(value), l, r),
+    <l:@L> "истина" <r:@R> => Spanned::new(ExprKind::Boolean(true), l, r),
+    <l:@L> "ложь" <r:@R> => Spanned::new(ExprKind::Boolean(false), l, r),
+    <l:@L> "пустота" <r:@R> => Spanned::new(ExprKind::Empty, l, r),
+    <l:@L> <name:IdentName> <r:@R> => Spanned::new(ExprKind::Identifier(name), l, r),
+};
+
+LambdaBody: LambdaBody = {
+    <l:@L> <body:Block> <r:@R> => LambdaBody::Block(body, l..r),
+    <expr:Expr> => LambdaBody::Expr(Box::new(expr)),
+};
+
+extern {
+    type Location = usize;
+    type Error = LexicalError;
+
+    enum Token {
+        "eof" => Token::Eof,
+        "подключить" => Token::KwImport,
+        "из" => Token::KwFrom,
+        "функция" => Token::KwFunction,
+        "библиотека" => Token::KwLibrary,
+        "переменная" => Token::KwVariable,
+        "класс" => Token::KwClass,
+        "конструктор" => Token::KwConstructor,
+        "публичный" => Token::KwPublic,
+        "приватный" => Token::KwPrivate,
+        "статичный" => Token::KwStatic,
+        "константа" => Token::KwConst,
+        "если" => Token::KwIf,
+        "иначе" => Token::KwElse,
+        "пока" => Token::KwWhile,
+        "для" => Token::KwFor,
+        "поток" => Token::KwThread,
+        "попробовать" => Token::KwTry,
+        "перехватить" => Token::KwCatch,
+        "выбросить" => Token::KwRaise,
+        "как" => Token::KwAs,
+        "новый" => Token::KwNew,
+        "вернуть" => Token::KwReturn,
+        "и" => Token::KwAnd,
+        "или" => Token::KwOr,
+        "истина" => Token::True,
+        "ложь" => Token::False,
+        "пустота" => Token::Empty,
+        "=>" => Token::FatArrow,
+        "->" => Token::Arrow,
+        "==" => Token::EqEq,
+        "!=" => Token::NotEq,
+        "<=" => Token::Le,
+        ">=" => Token::Ge,
+        "+=" => Token::PlusEq,
+        "-=" => Token::MinusEq,
+        "*=" => Token::StarEq,
+        "/=" => Token::SlashEq,
+        "%=" => Token::PercentEq,
+        "=" => Token::Eq,
+        "type=" => Token::TypeEq,
+        "<" => Token::Lt,
+        ">" => Token::Gt,
+        "+" => Token::Plus,
+        "-" => Token::Minus,
+        "*" => Token::Star,
+        "/" => Token::Slash,
+        "%" => Token::Percent,
+        "!" => Token::Bang,
+        "." => Token::Dot,
+        "method." => Token::MethodDot,
+        "," => Token::Comma,
+        ":" => Token::Colon,
+        "(" => Token::LParen,
+        "lambda(" => Token::LambdaLParen,
+        ")" => Token::RParen,
+        "{" => Token::LBrace,
+        "}" => Token::RBrace,
+        "[" => Token::LBracket,
+        "]" => Token::RBracket,
+        "newline" => Token::Semi,
+        "identifier" => Token::Ident(<String>),
+        "string" => Token::String(<String>),
+        "number" => Token::Number(<i64>),
+        "float" => Token::Float(<f64>),
+    }
+}
