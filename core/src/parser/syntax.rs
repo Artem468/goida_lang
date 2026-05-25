@@ -1,3 +1,4 @@
+use crate::parser::lexer::Token;
 use std::ops::Range;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -30,7 +31,85 @@ pub(crate) enum ItemKind {
     Function(Function),
     Class(Class),
     Library(Library),
+    MacroDefinition(MacroDefinition),
     Statement(Stmt),
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct MacroDefinition {
+    pub name: String,
+    pub rules: Vec<MacroRule>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct MacroRule {
+    pub matcher: Vec<MacroMatcher>,
+    pub template: Vec<MacroTemplate>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) enum MacroMatcher {
+    Token(MacroToken),
+    Fragment {
+        name: String,
+        kind: MacroFragmentKind,
+    },
+    Repeat {
+        matcher: Vec<MacroMatcher>,
+        separator: Vec<MacroToken>,
+        op: MacroRepeatOp,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) enum MacroTemplate {
+    Token(MacroToken),
+    Variable(String),
+    Delimited {
+        delimiter: MacroDelimiter,
+        template: Vec<MacroTemplate>,
+        span: Range<usize>,
+    },
+    Repeat {
+        template: Vec<MacroTemplate>,
+        separator: Vec<MacroToken>,
+        op: MacroRepeatOp,
+    },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum MacroFragmentKind {
+    Expr,
+    Ident,
+    Block,
+    Stmt,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum MacroRepeatOp {
+    ZeroOrMore,
+    OneOrMore,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct MacroToken {
+    pub token: Token,
+    pub span: Range<usize>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct MacroCall {
+    pub name: String,
+    pub args: Vec<MacroToken>,
+    pub delimiter: MacroDelimiter,
+    pub span: Range<usize>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum MacroDelimiter {
+    Paren,
+    Bracket,
+    Brace,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -287,6 +366,7 @@ pub(crate) enum ExprKind {
         params: Vec<Param>,
         body: LambdaBody,
     },
+    MacroCall(MacroCall),
 }
 
 #[derive(Debug, Clone, PartialEq)]

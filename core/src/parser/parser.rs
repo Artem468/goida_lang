@@ -21,6 +21,7 @@ impl ParserTrait {
         let syntax = grammar::ProgramParser::new()
             .parse(lex(code))
             .map_err(|err| self.convert_parse_error(code, err))?;
+        let syntax = self.expand_macros(syntax)?;
 
         self.build_program(syntax)?;
         self.validate_module_names()?;

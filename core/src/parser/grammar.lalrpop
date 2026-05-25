@@ -7,6 +7,15 @@ pub Program: Program = {
     <items:ProgramItems> => Program { items },
 };
 
+pub ExprExpansion: Expr = {
+    <expr:Expr> "eof" => expr,
+};
+
+pub StmtExpansion: Stmt = {
+    <stmt:Stmt> "newline" "eof" => stmt,
+    <stmt:Stmt> "eof" => stmt,
+};
+
 ProgramItems: Vec<Item> = {
     <_s:Semis> "eof" => Vec::new(),
     <_s:Semis> <item:Item> "newline" <mut items:ProgramItems> => {
@@ -34,6 +43,7 @@ Item: Item = {
     <l:@L> <item:Function> <r:@R> => Spanned::new(ItemKind::Function(item), l, r),
     <l:@L> <item:Class> <r:@R> => Spanned::new(ItemKind::Class(item), l, r),
     <l:@L> <item:Library> <r:@R> => Spanned::new(ItemKind::Library(item), l, r),
+    <l:@L> <item:MacroDefinition> <r:@R> => Spanned::new(ItemKind::MacroDefinition(item), l, r),
     <l:@L> <stmt:Stmt> <r:@R> => Spanned::new(ItemKind::Statement(Spanned::new(stmt.node, l, r)), l, r),
 };
 
@@ -171,6 +181,176 @@ LibraryFunction: LibraryFunction = {
 
 LibraryGlobal: LibraryGlobal = {
     "variable" <name:IdentName> ":" <type_name:TypeName> => LibraryGlobal { name, type_name },
+};
+
+MacroDefinition: MacroDefinition = {
+    "macro" <name:IdentName> "{" <rules:MacroRules> => MacroDefinition { name, rules },
+};
+
+MacroRules: Vec<MacroRule> = {
+    <_s:Semis> "}" => Vec::new(),
+    <_s:Semis> <rule:MacroRule> "newline" <mut rules:MacroRules> => {
+        rules.insert(0, rule);
+        rules
+    },
+};
+
+MacroRule: MacroRule = {
+    <_open:MacroRuleOpen> <matcher:MacroMatcherList> ")" "=>" "{" <template:MacroTemplateList> "}" => MacroRule {
+        matcher,
+        template,
+    },
+};
+
+MacroRuleOpen: () = {
+    "(" => (),
+    "lambda(" => (),
+};
+
+MacroMatcherList: Vec<MacroMatcher> = {
+    => Vec::new(),
+    <mut items:MacroMatcherList> <item:MacroMatcherItem> => {
+        items.push(item);
+        items
+    },
+};
+
+MacroMatcherItem: MacroMatcher = {
+    "$" <name:IdentName> ":" <kind:MacroFragmentKind> => MacroMatcher::Fragment { name, kind },
+    "$" "(" <matcher:MacroMatcherList> ")" <separator:MacroSeparatorOpt> <op:MacroRepeatOp> => MacroMatcher::Repeat {
+        matcher,
+        separator,
+        op,
+    },
+    <token:MacroPlainToken> => MacroMatcher::Token(token),
+};
+
+MacroTemplateList: Vec<MacroTemplate> = {
+    => Vec::new(),
+    <mut items:MacroTemplateList> <item:MacroTemplateItem> => {
+        items.push(item);
+        items
+    },
+};
+
+MacroTemplateItem: MacroTemplate = {
+    "$" <name:IdentName> => MacroTemplate::Variable(name),
+    "$" "(" <template:MacroTemplateList> ")" <separator:MacroSeparatorOpt> <op:MacroRepeatOp> => MacroTemplate::Repeat {
+        template,
+        separator,
+        op,
+    },
+    <l:@L> "(" <template:MacroTemplateList> ")" <r:@R> => MacroTemplate::Delimited {
+        delimiter: MacroDelimiter::Paren,
+        template,
+        span: l..r,
+    },
+    <l:@L> "[" <template:MacroTemplateList> "]" <r:@R> => MacroTemplate::Delimited {
+        delimiter: MacroDelimiter::Bracket,
+        template,
+        span: l..r,
+    },
+    <l:@L> "{" <template:MacroTemplateList> "}" <r:@R> => MacroTemplate::Delimited {
+        delimiter: MacroDelimiter::Brace,
+        template,
+        span: l..r,
+    },
+    <token:MacroPlainToken> => MacroTemplate::Token(token),
+};
+
+MacroFragmentKind: MacroFragmentKind = {
+    <name:IdentName> => match name.as_str() {
+        "expr" | "выр" => MacroFragmentKind::Expr,
+        "ident" | "имя" => MacroFragmentKind::Ident,
+        "block" | "блок" => MacroFragmentKind::Block,
+        "stmt" | "инстр" => MacroFragmentKind::Stmt,
+        _ => MacroFragmentKind::Ident,
+    },
+};
+
+MacroRepeatOp: MacroRepeatOp = {
+    "*" => MacroRepeatOp::ZeroOrMore,
+    "+" => MacroRepeatOp::OneOrMore,
+};
+
+MacroSeparatorOpt: Vec<MacroToken> = {
+    => Vec::new(),
+    <token:MacroSeparatorToken> => vec![token],
+};
+
+MacroSeparatorToken: MacroToken = {
+    <l:@L> "," <r:@R> => MacroToken { token: Token::Comma, span: l..r },
+    <l:@L> "newline" <r:@R> => MacroToken { token: Token::Semi, span: l..r },
+};
+
+MacroCall: MacroCall = {
+    <l:@L> <name:IdentName> "!" "(" <args:MacroParenArgs> <r:@R> => MacroCall {
+        name,
+        args,
+        delimiter: MacroDelimiter::Paren,
+        span: l..r,
+    },
+    <l:@L> <name:IdentName> "!" "[" <args:MacroBracketArgs> <r:@R> => MacroCall {
+        name,
+        args,
+        delimiter: MacroDelimiter::Bracket,
+        span: l..r,
+    },
+    <l:@L> <name:IdentName> "!" "{" <args:MacroBraceArgs> <r:@R> => MacroCall {
+        name,
+        args,
+        delimiter: MacroDelimiter::Brace,
+        span: l..r,
+    },
+};
+
+MacroParenArgs: Vec<MacroToken> = {
+    ")" => Vec::new(),
+    <item:MacroArgToken> <mut rest:MacroParenArgs> => {
+        let mut out = item;
+        out.append(&mut rest);
+        out
+    },
+};
+
+MacroBracketArgs: Vec<MacroToken> = {
+    "]" => Vec::new(),
+    <item:MacroArgToken> <mut rest:MacroBracketArgs> => {
+        let mut out = item;
+        out.append(&mut rest);
+        out
+    },
+};
+
+MacroBraceArgs: Vec<MacroToken> = {
+    "}" => Vec::new(),
+    <item:MacroArgToken> <mut rest:MacroBraceArgs> => {
+        let mut out = item;
+        out.append(&mut rest);
+        out
+    },
+};
+
+MacroArgToken: Vec<MacroToken> = {
+    <token:MacroPlainToken> => vec![token],
+    <l:@L> "(" <inner:MacroParenArgs> <r:@R> => {
+        let mut out = vec![MacroToken { token: Token::LParen, span: l..l + 1 }];
+        out.extend(inner);
+        out.push(MacroToken { token: Token::RParen, span: r.saturating_sub(1)..r });
+        out
+    },
+    <l:@L> "[" <inner:MacroBracketArgs> <r:@R> => {
+        let mut out = vec![MacroToken { token: Token::LBracket, span: l..l + 1 }];
+        out.extend(inner);
+        out.push(MacroToken { token: Token::RBracket, span: r.saturating_sub(1)..r });
+        out
+    },
+    <l:@L> "{" <inner:MacroBraceArgs> <r:@R> => {
+        let mut out = vec![MacroToken { token: Token::LBrace, span: l..l + 1 }];
+        out.extend(inner);
+        out.push(MacroToken { token: Token::RBrace, span: r.saturating_sub(1)..r });
+        out
+    },
 };
 
 EmptyBlock: () = {
@@ -569,6 +749,7 @@ PostfixOp: PostfixOp = {
 
 Primary: Expr = {
     "(" <expr:Expr> ")" => expr,
+    <l:@L> <call:MacroCall> <r:@R> => Spanned::new(ExprKind::MacroCall(call), l, r),
     <l:@L> "new" <class_name:QualifiedName> "(" <args:ArgListOpt> ")" <r:@R> => Spanned::new(ExprKind::ObjectCreation { class_name, args }, l, r),
     <l:@L> <value:"number"> <r:@R> => Spanned::new(ExprKind::Number(value), l, r),
     <l:@L> <value:"float"> <r:@R> => Spanned::new(ExprKind::Float(value), l, r),
@@ -582,6 +763,67 @@ Primary: Expr = {
 LambdaBody: LambdaBody = {
     <l:@L> <body:Block> <r:@R> => LambdaBody::Block(body, l..r),
     <expr:Expr> => LambdaBody::Expr(Box::new(expr)),
+};
+
+MacroPlainToken: MacroToken = {
+    <l:@L> "import" <r:@R> => MacroToken { token: Token::KwImport, span: l..r },
+    <l:@L> "from" <r:@R> => MacroToken { token: Token::KwFrom, span: l..r },
+    <l:@L> "function" <r:@R> => MacroToken { token: Token::KwFunction, span: l..r },
+    <l:@L> "library" <r:@R> => MacroToken { token: Token::KwLibrary, span: l..r },
+    <l:@L> "variable" <r:@R> => MacroToken { token: Token::KwVariable, span: l..r },
+    <l:@L> "class" <r:@R> => MacroToken { token: Token::KwClass, span: l..r },
+    <l:@L> "constructor" <r:@R> => MacroToken { token: Token::KwConstructor, span: l..r },
+    <l:@L> "public" <r:@R> => MacroToken { token: Token::KwPublic, span: l..r },
+    <l:@L> "private" <r:@R> => MacroToken { token: Token::KwPrivate, span: l..r },
+    <l:@L> "static" <r:@R> => MacroToken { token: Token::KwStatic, span: l..r },
+    <l:@L> "const" <r:@R> => MacroToken { token: Token::KwConst, span: l..r },
+    <l:@L> "if" <r:@R> => MacroToken { token: Token::KwIf, span: l..r },
+    <l:@L> "else" <r:@R> => MacroToken { token: Token::KwElse, span: l..r },
+    <l:@L> "while" <r:@R> => MacroToken { token: Token::KwWhile, span: l..r },
+    <l:@L> "for" <r:@R> => MacroToken { token: Token::KwFor, span: l..r },
+    <l:@L> "thread" <r:@R> => MacroToken { token: Token::KwThread, span: l..r },
+    <l:@L> "try" <r:@R> => MacroToken { token: Token::KwTry, span: l..r },
+    <l:@L> "catch" <r:@R> => MacroToken { token: Token::KwCatch, span: l..r },
+    <l:@L> "raise" <r:@R> => MacroToken { token: Token::KwRaise, span: l..r },
+    <l:@L> "as" <r:@R> => MacroToken { token: Token::KwAs, span: l..r },
+    <l:@L> "new" <r:@R> => MacroToken { token: Token::KwNew, span: l..r },
+    <l:@L> "return" <r:@R> => MacroToken { token: Token::KwReturn, span: l..r },
+    <l:@L> "and" <r:@R> => MacroToken { token: Token::KwAnd, span: l..r },
+    <l:@L> "or" <r:@R> => MacroToken { token: Token::KwOr, span: l..r },
+    <l:@L> "true" <r:@R> => MacroToken { token: Token::True, span: l..r },
+    <l:@L> "false" <r:@R> => MacroToken { token: Token::False, span: l..r },
+    <l:@L> "void" <r:@R> => MacroToken { token: Token::Empty, span: l..r },
+    <l:@L> "macro" <r:@R> => MacroToken { token: Token::KwMacro, span: l..r },
+    <l:@L> "=>" <r:@R> => MacroToken { token: Token::FatArrow, span: l..r },
+    <l:@L> "->" <r:@R> => MacroToken { token: Token::Arrow, span: l..r },
+    <l:@L> "==" <r:@R> => MacroToken { token: Token::EqEq, span: l..r },
+    <l:@L> "!=" <r:@R> => MacroToken { token: Token::NotEq, span: l..r },
+    <l:@L> "<=" <r:@R> => MacroToken { token: Token::Le, span: l..r },
+    <l:@L> ">=" <r:@R> => MacroToken { token: Token::Ge, span: l..r },
+    <l:@L> "+=" <r:@R> => MacroToken { token: Token::PlusEq, span: l..r },
+    <l:@L> "-=" <r:@R> => MacroToken { token: Token::MinusEq, span: l..r },
+    <l:@L> "*=" <r:@R> => MacroToken { token: Token::StarEq, span: l..r },
+    <l:@L> "/=" <r:@R> => MacroToken { token: Token::SlashEq, span: l..r },
+    <l:@L> "%=" <r:@R> => MacroToken { token: Token::PercentEq, span: l..r },
+    <l:@L> "=" <r:@R> => MacroToken { token: Token::Eq, span: l..r },
+    <l:@L> "type=" <r:@R> => MacroToken { token: Token::TypeEq, span: l..r },
+    <l:@L> "<" <r:@R> => MacroToken { token: Token::Lt, span: l..r },
+    <l:@L> ">" <r:@R> => MacroToken { token: Token::Gt, span: l..r },
+    <l:@L> "+" <r:@R> => MacroToken { token: Token::Plus, span: l..r },
+    <l:@L> "-" <r:@R> => MacroToken { token: Token::Minus, span: l..r },
+    <l:@L> "*" <r:@R> => MacroToken { token: Token::Star, span: l..r },
+    <l:@L> "/" <r:@R> => MacroToken { token: Token::Slash, span: l..r },
+    <l:@L> "%" <r:@R> => MacroToken { token: Token::Percent, span: l..r },
+    <l:@L> "!" <r:@R> => MacroToken { token: Token::Bang, span: l..r },
+    <l:@L> "." <r:@R> => MacroToken { token: Token::Dot, span: l..r },
+    <l:@L> "method." <r:@R> => MacroToken { token: Token::MethodDot, span: l..r },
+    <l:@L> "," <r:@R> => MacroToken { token: Token::Comma, span: l..r },
+    <l:@L> ":" <r:@R> => MacroToken { token: Token::Colon, span: l..r },
+    <l:@L> "newline" <r:@R> => MacroToken { token: Token::Semi, span: l..r },
+    <l:@L> <value:"identifier"> <r:@R> => MacroToken { token: Token::Ident(value), span: l..r },
+    <l:@L> <value:"string"> <r:@R> => MacroToken { token: Token::String(value), span: l..r },
+    <l:@L> <value:"number"> <r:@R> => MacroToken { token: Token::Number(value), span: l..r },
+    <l:@L> <value:"float"> <r:@R> => MacroToken { token: Token::Float(value), span: l..r },
 };
 
 extern {
@@ -617,6 +859,7 @@ extern {
         "true" => Token::True,
         "false" => Token::False,
         "void" => Token::Empty,
+        "macro" => Token::KwMacro,
         "=>" => Token::FatArrow,
         "->" => Token::Arrow,
         "==" => Token::EqEq,
@@ -638,6 +881,7 @@ extern {
         "/" => Token::Slash,
         "%" => Token::Percent,
         "!" => Token::Bang,
+        "$" => Token::Dollar,
         "." => Token::Dot,
         "method." => Token::MethodDot,
         "," => Token::Comma,

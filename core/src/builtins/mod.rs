@@ -11,6 +11,7 @@ mod io;
 pub(crate) mod iterator;
 mod json;
 mod list;
+pub(crate) mod macros;
 mod number;
 mod regex;
 mod system;

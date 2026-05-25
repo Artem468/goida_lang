@@ -32,6 +32,10 @@ impl ParserTrait {
             }
             syn::ItemKind::Class(class) => self.build_class(class, item.span),
             syn::ItemKind::Library(library) => self.build_library(library, item.span),
+            syn::ItemKind::MacroDefinition(_) => Err(ParseError::InvalidSyntax(ErrorData::new(
+                span,
+                "Макросы должны быть раскрыты до построения AST".into(),
+            ))),
             syn::ItemKind::Statement(stmt) => self.build_statement(stmt),
         }
     }
@@ -499,6 +503,12 @@ impl ParserTrait {
                     }
                 };
                 ExpressionKind::Lambda { params, body }
+            }
+            syn::ExprKind::MacroCall(_) => {
+                return Err(ParseError::InvalidSyntax(ErrorData::new(
+                    span,
+                    "Вызов макроса должен быть раскрыт до построения AST".into(),
+                )));
             }
         };
         Ok(self.module.arena.add_expression(kind, span))

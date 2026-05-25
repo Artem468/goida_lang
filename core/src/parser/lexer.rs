@@ -97,6 +97,9 @@ pub(crate) enum Token {
     #[token("пустота")]
     #[token("void")]
     Empty,
+    #[token("макрос")]
+    #[token("macro")]
+    KwMacro,
 
     #[token("=>")]
     FatArrow,
@@ -140,6 +143,8 @@ pub(crate) enum Token {
     Percent,
     #[token("!")]
     Bang,
+    #[token("$")]
+    Dollar,
     #[token(".")]
     Dot,
     MethodDot,

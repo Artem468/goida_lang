@@ -54,6 +54,25 @@ macro_rules! define_builtin {
 }
 
 #[macro_export]
+macro_rules! define_builtin_macro {
+    ($expander:expr, $name:literal => {
+        $(($matcher:literal) => { $template:literal };)+
+    }) => {{
+        let rules = [
+            $(($matcher, $template),)+
+        ];
+        $expander.register_builtin($name, &rules)?;
+    }};
+
+    ($expander:expr, $name:literal, $(($matcher:literal, $template:literal)),+ $(,)?) => {{
+        let rules = [
+            $(($matcher, $template),)+
+        ];
+        $expander.register_builtin($name, &rules)?;
+    }};
+}
+
+#[macro_export]
 macro_rules! runtime_error {
     ($variant:ident, $span:expr, $fmt:expr $(, $arg:expr)*) => {
         RuntimeError::$variant(ErrorData::new(
