@@ -1,5 +1,6 @@
 use crate::ast::prelude::*;
 use crate::ast::program::{FieldData, MethodType};
+use crate::builtins::catalog::known_global_names;
 use crate::interpreter::prelude::{Module, Value};
 use crate::parser::prelude::{ParseError, Parser as ParserTrait};
 use std::collections::HashSet;
@@ -49,35 +50,7 @@ impl ParserTrait {
             Self::collect_module_exported_names(module, &mut names);
         }
 
-        for name in [
-            "печать",
-            "ввод",
-            "тип",
-            "является",
-            "число",
-            "строка",
-            "логический",
-            "дробь",
-            "список",
-            "массив",
-            "словарь",
-            "итератор",
-            "из_json",
-            "в_json",
-            "строка_из_указателя",
-            "Список",
-            "Массив",
-            "Словарь",
-            "Итератор",
-            "Строка",
-            "Файл",
-            "Система",
-            "Терминал",
-            "ДатаВремя",
-            "Поток",
-            "Мьютекс",
-            "БлокировкаЧтенияЗаписи",
-        ] {
+        for name in known_global_names() {
             names.insert(self.module.arena.intern_string(&self.interner, name));
         }
 
@@ -353,6 +326,19 @@ impl ParserTrait {
                 for arg in args {
                     self.validate_expression_names(arg.value, scopes)?;
                 }
+                Ok(())
+            }
+            ExpressionKind::Lambda { params, body } => {
+                let mut local = HashSet::new();
+                for param in params {
+                    local.insert(param.name);
+                    if let Some(default_value) = param.default_value {
+                        self.validate_expression_names(default_value, scopes)?;
+                    }
+                }
+                scopes.push(local);
+                self.validate_statement_names(*body, scopes)?;
+                scopes.pop();
                 Ok(())
             }
             ExpressionKind::Literal(_) | ExpressionKind::This => Ok(()),

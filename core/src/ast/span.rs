@@ -36,15 +36,6 @@ impl Span {
     }
 }
 
-impl<'a> From<(pest::Span<'a>, DefaultSymbol)> for Span {
-    fn from((pest_span, file_id): (pest::Span<'a>, DefaultSymbol)) -> Self {
-        Self {
-            start: pest_span.start() as u32,
-            end: pest_span.end() as u32,
-            file_id,
-        }
-    }
-}
 impl From<Span> for Range<usize> {
     fn from(span: Span) -> Self {
         span.start as usize..span.end as usize

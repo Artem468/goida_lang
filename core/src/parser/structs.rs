@@ -7,7 +7,6 @@ pub struct Parser {
     /// Module under construction.
     pub module: Module,
     pub(crate) interner: SharedInterner,
-    pub(crate) nesting_level: usize,
 }
 
 #[derive(Debug)]

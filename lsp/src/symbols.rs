@@ -1,4 +1,4 @@
-use goida_core::ast::prelude::{Span, StatementKind, StmtId};
+use goida_core::ast::prelude::{ExpressionKind, Span, StatementKind, StmtId};
 use goida_core::ast::program::MethodType;
 use goida_core::interpreter::prelude::{Module, SharedInterner};
 use std::collections::HashMap;
@@ -93,44 +93,86 @@ pub(crate) fn collect_declarations(
             continue;
         };
         match &statement.kind {
-            StatementKind::Assign { name, .. } => {
+            StatementKind::Assign { name, value, .. } => {
                 if let Some(name) = module.arena.resolve_symbol(interner, *name) {
                     out.push(ResolvedSymbol {
                         name,
                         span: statement.span,
                     });
                 }
+                collect_expression_declarations(module, interner, *value, out);
             }
-            StatementKind::For { variable, body, .. } => {
+            StatementKind::CompoundAssign { target, value, .. } => {
+                collect_expression_declarations(module, interner, *target, out);
+                collect_expression_declarations(module, interner, *value, out);
+            }
+            StatementKind::IndexAssign {
+                object,
+                index,
+                value,
+            } => {
+                collect_expression_declarations(module, interner, *object, out);
+                collect_expression_declarations(module, interner, *index, out);
+                collect_expression_declarations(module, interner, *value, out);
+            }
+            StatementKind::PropertyAssign { object, value, .. } => {
+                collect_expression_declarations(module, interner, *object, out);
+                collect_expression_declarations(module, interner, *value, out);
+            }
+            StatementKind::Expression(expr) => {
+                collect_expression_declarations(module, interner, *expr, out);
+            }
+            StatementKind::For {
+                variable,
+                init,
+                condition,
+                update,
+                body,
+            } => {
                 if let Some(name) = module.arena.resolve_symbol(interner, *variable) {
                     out.push(ResolvedSymbol {
                         name,
                         span: statement.span,
                     });
                 }
+                collect_expression_declarations(module, interner, *init, out);
+                collect_expression_declarations(module, interner, *condition, out);
+                collect_declarations(module, interner, &[*update], out);
                 collect_declarations(module, interner, &[*body], out);
             }
-            StatementKind::ForEach { variable, body, .. } => {
+            StatementKind::ForEach {
+                variable,
+                iterable,
+                body,
+            } => {
                 if let Some(name) = module.arena.resolve_symbol(interner, *variable) {
                     out.push(ResolvedSymbol {
                         name,
                         span: statement.span,
                     });
                 }
+                collect_expression_declarations(module, interner, *iterable, out);
                 collect_declarations(module, interner, &[*body], out);
             }
             StatementKind::If {
+                condition,
                 then_body,
                 else_body,
-                ..
             } => {
+                collect_expression_declarations(module, interner, *condition, out);
                 collect_declarations(module, interner, &[*then_body], out);
                 if let Some(else_body) = else_body {
                     collect_declarations(module, interner, &[*else_body], out);
                 }
             }
-            StatementKind::While { body, .. } => {
+            StatementKind::While { condition, body } => {
+                collect_expression_declarations(module, interner, *condition, out);
                 collect_declarations(module, interner, &[*body], out)
+            }
+            StatementKind::Raise { message, .. } => {
+                if let Some(message) = message {
+                    collect_expression_declarations(module, interner, *message, out);
+                }
             }
             StatementKind::Thread { body } => collect_declarations(module, interner, &[*body], out),
             StatementKind::Try { body, handlers } => {
@@ -148,6 +190,11 @@ pub(crate) fn collect_declarations(
                 }
             }
             StatementKind::Block(items) => collect_declarations(module, interner, items, out),
+            StatementKind::Return(expr) => {
+                if let Some(expr) = expr {
+                    collect_expression_declarations(module, interner, *expr, out);
+                }
+            }
             StatementKind::FunctionDefinition(function) => {
                 if let Some(name) = module.arena.resolve_symbol(interner, function.name) {
                     out.push(ResolvedSymbol {
@@ -161,6 +208,9 @@ pub(crate) fn collect_declarations(
                             name,
                             span: param.span,
                         });
+                    }
+                    if let Some(default_value) = param.default_value {
+                        collect_expression_declarations(module, interner, default_value, out);
                     }
                 }
                 collect_declarations(module, interner, &[function.body], out);
@@ -180,6 +230,9 @@ pub(crate) fn collect_declarations(
                                 span: param.span,
                             });
                         }
+                        if let Some(default_value) = param.default_value {
+                            collect_expression_declarations(module, interner, default_value, out);
+                        }
                     }
                     collect_declarations(module, interner, &[constructor.body], out);
                 }
@@ -198,20 +251,81 @@ pub(crate) fn collect_declarations(
                                     span: param.span,
                                 });
                             }
+                            if let Some(default_value) = param.default_value {
+                                collect_expression_declarations(
+                                    module,
+                                    interner,
+                                    default_value,
+                                    out,
+                                );
+                            }
                         }
                         collect_declarations(module, interner, &[method.body], out);
                     }
                 }
             }
-            StatementKind::Expression(_)
-            | StatementKind::CompoundAssign { .. }
-            | StatementKind::IndexAssign { .. }
-            | StatementKind::PropertyAssign { .. }
-            | StatementKind::Raise { .. }
-            | StatementKind::Return(_)
-            | StatementKind::NativeLibraryDefinition(_)
-            | StatementKind::Empty => {}
+            StatementKind::NativeLibraryDefinition(_) | StatementKind::Empty => {}
         }
+    }
+}
+
+fn collect_expression_declarations(
+    module: &Module,
+    interner: &SharedInterner,
+    expr_id: u32,
+    out: &mut Vec<ResolvedSymbol>,
+) {
+    let Some(expr) = module.arena.get_expression(expr_id) else {
+        return;
+    };
+
+    match &expr.kind {
+        ExpressionKind::FunctionCall { function, args } => {
+            collect_expression_declarations(module, interner, *function, out);
+            for arg in args {
+                collect_expression_declarations(module, interner, arg.value, out);
+            }
+        }
+        ExpressionKind::MethodCall { object, args, .. } => {
+            collect_expression_declarations(module, interner, *object, out);
+            for arg in args {
+                collect_expression_declarations(module, interner, arg.value, out);
+            }
+        }
+        ExpressionKind::ObjectCreation { args, .. } => {
+            for arg in args {
+                collect_expression_declarations(module, interner, arg.value, out);
+            }
+        }
+        ExpressionKind::Binary { left, right, .. } => {
+            collect_expression_declarations(module, interner, *left, out);
+            collect_expression_declarations(module, interner, *right, out);
+        }
+        ExpressionKind::Unary { operand, .. } => {
+            collect_expression_declarations(module, interner, *operand, out);
+        }
+        ExpressionKind::Index { object, index } => {
+            collect_expression_declarations(module, interner, *object, out);
+            collect_expression_declarations(module, interner, *index, out);
+        }
+        ExpressionKind::PropertyAccess { object, .. } => {
+            collect_expression_declarations(module, interner, *object, out);
+        }
+        ExpressionKind::Lambda { params, body } => {
+            for param in params {
+                if let Some(name) = module.arena.resolve_symbol(interner, param.name) {
+                    out.push(ResolvedSymbol {
+                        name,
+                        span: param.span,
+                    });
+                }
+                if let Some(default_value) = param.default_value {
+                    collect_expression_declarations(module, interner, default_value, out);
+                }
+            }
+            collect_declarations(module, interner, &[*body], out);
+        }
+        ExpressionKind::Identifier(_) | ExpressionKind::Literal(_) | ExpressionKind::This => {}
     }
 }
 

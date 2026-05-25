@@ -1,6 +1,65 @@
 use std::process::Command;
 
 #[test]
+fn test_english_syntax_aliases() {
+    let dir = std::path::Path::new("target/english_syntax_aliases_test");
+    std::fs::create_dir_all(dir).expect("Не удалось создать временную папку теста");
+    let main_file = dir.join("main.goida");
+    std::fs::write(
+        &main_file,
+        r#"
+function add(a: number, b: number) -> number {
+    return a + b
+}
+
+function noop() -> void {
+    return void
+}
+
+value: number = 0
+if (true and !false) {
+    value = add(2, 3)
+} else {
+    value = 99
+}
+
+while (value < 7) {
+    value += 1
+}
+
+for item from список(1, 2) {
+    value += item
+}
+
+noop()
+печать(value)
+"#,
+    )
+    .expect("Не удалось записать временный файл");
+
+    let output = Command::new("cargo")
+        .args([
+            "run",
+            "-q",
+            "-p",
+            "cli",
+            "--",
+            "run",
+            main_file.to_str().unwrap(),
+        ])
+        .output()
+        .expect("Не удалось запустить english syntax aliases test");
+
+    assert!(
+        output.status.success(),
+        "english syntax aliases завершился с ошибкой\nSTDOUT: {}\nSTDERR: {}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!("10\n", String::from_utf8_lossy(&output.stdout));
+}
+
+#[test]
 fn test_control_flow_example() {
     let output = Command::new("cargo")
         .args([

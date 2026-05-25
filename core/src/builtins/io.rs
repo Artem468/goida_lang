@@ -6,29 +6,36 @@ use std::io;
 use std::io::Write;
 
 pub fn setup_io_func(interpreter: &mut Interpreter, interner: &SharedInterner) {
-    let separator = interner.write(|i| i.get_or_intern("разделитель"));
-    let end = interner.write(|i| i.get_or_intern("конец"));
-    let out = interner.write(|i| i.get_or_intern("файл"));
+    let separators =
+        ["разделитель", "sep", "separator"].map(|name| interner.write(|i| i.get_or_intern(name)));
+    let ends = ["конец", "end"].map(|name| interner.write(|i| i.get_or_intern(name)));
+    let outs = ["файл", "file"].map(|name| interner.write(|i| i.get_or_intern(name)));
 
-    define_builtin!(interpreter, interner, "печать" => (_interpreter, mut arguments, _span) {
-        let sep_idx = arguments.iter().position(|arg| arg.name == Some(separator));
+    define_builtin!(interpreter, interner, crate::builtins::catalog::function::PRINT.canonical => (_interpreter, mut arguments, _span) {
+        let sep_idx = arguments
+            .iter()
+            .position(|arg| arg.name.is_some_and(|name| separators.contains(&name)));
         let _sep = match sep_idx {
             Some(idx) => arguments.remove(idx).value.to_string(),
             None => " ".to_string(),
         };
 
-        let end_idx = arguments.iter().position(|arg| arg.name == Some(end));
+        let end_idx = arguments
+            .iter()
+            .position(|arg| arg.name.is_some_and(|name| ends.contains(&name)));
         let _end = match end_idx {
             Some(idx) => arguments.remove(idx).value.to_string(),
             None => "\n".to_string(),
         };
 
-        let out_idx = arguments.iter().position(|arg| arg.name == Some(out));
+        let out_idx = arguments
+            .iter()
+            .position(|arg| arg.name.is_some_and(|name| outs.contains(&name)));
         let out_val = out_idx.map(|idx| arguments.remove(idx).value.to_string());
 
         let mut writer: Box<dyn Write> = match out_val.as_deref() {
-            Some("ошибка") => Box::new(io::stderr()),
-            Some("вывод") | None => Box::new(io::stdout()),
+            Some("ошибка") | Some("stderr") => Box::new(io::stderr()),
+            Some("вывод") | Some("stdout") | None => Box::new(io::stdout()),
             Some(path) => {
                 let file = std::fs::File::create(path).map_err(|e| {
                     runtime_error!(
@@ -67,7 +74,7 @@ pub fn setup_io_func(interpreter: &mut Interpreter, interner: &SharedInterner) {
         Ok(Value::Empty)
     });
 
-    define_builtin!(interpreter, interner, "ввод" => (_interpreter, arguments, span) {
+    define_builtin!(interpreter, interner, crate::builtins::catalog::function::INPUT.canonical => (_interpreter, arguments, span) {
         expect_args!(arguments, 1, span, "ввод");
 
         print!("{}", arguments[0].value);

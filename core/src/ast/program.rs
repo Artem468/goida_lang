@@ -105,11 +105,30 @@ pub struct ClassInstance {
 pub struct ErrorData {
     pub location: Span,
     pub message: String,
+    pub stack_trace: Vec<StackFrame>,
+}
+
+#[derive(Debug, Clone)]
+/// One source-level call frame attached to a runtime error.
+pub struct StackFrame {
+    pub name: String,
+    pub location: Span,
 }
 
 impl ErrorData {
     /// Creates a diagnostic payload at the given source span.
     pub fn new(location: Span, message: String) -> ErrorData {
-        ErrorData { location, message }
+        ErrorData {
+            location,
+            message,
+            stack_trace: Vec::new(),
+        }
+    }
+
+    pub fn push_frame(&mut self, name: impl Into<String>, location: Span) {
+        self.stack_trace.push(StackFrame {
+            name: name.into(),
+            location,
+        });
     }
 }

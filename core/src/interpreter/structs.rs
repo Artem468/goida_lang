@@ -264,6 +264,23 @@ impl RuntimeError {
             }
         }
     }
+
+    pub fn add_stack_frame(&mut self, name: impl Into<String>, location: Span) {
+        match self {
+            RuntimeError::UndefinedVariable(err)
+            | RuntimeError::UndefinedFunction(err)
+            | RuntimeError::UndefinedMethod(err)
+            | RuntimeError::TypeMismatch(err)
+            | RuntimeError::DivisionByZero(err)
+            | RuntimeError::InvalidOperation(err)
+            | RuntimeError::Return(err, _)
+            | RuntimeError::TypeError(err)
+            | RuntimeError::IOError(err)
+            | RuntimeError::Panic(err)
+            | RuntimeError::Raised(err, _) => err.push_frame(name, location),
+            RuntimeError::ImportError(_) => {}
+        }
+    }
 }
 
 #[derive(Debug)]

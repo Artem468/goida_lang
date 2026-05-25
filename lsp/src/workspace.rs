@@ -92,7 +92,7 @@ mod tests {
         fs::create_dir_all(&deps_dir).expect("failed to create deps dir");
         fs::write(
             root.join("main.goida"),
-            "подключить \"harpoon/главный\" в web\n",
+            "подключить \"harpoon/главный\" как web\n",
         )
         .expect("failed to write main file");
         fs::write(deps_dir.join("главный.goida"), "значение = 1\n")

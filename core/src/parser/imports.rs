@@ -1,61 +1,9 @@
 use crate::ast::prelude::*;
 use crate::import_paths::resolve_import_path;
-use crate::interpreter::prelude::Value;
-use crate::parser::parser::Rule;
 use crate::parser::prelude::{ParseError, Parser as ParserTrait};
 use string_interner::DefaultSymbol as Symbol;
 
 impl ParserTrait {
-    pub(crate) fn parse_import_stmt(
-        &mut self,
-        pair: pest::iterators::Pair<Rule>,
-    ) -> Result<StmtId, ParseError> {
-        let import_span: Span = (pair.as_span(), self.module.name).into();
-        let mut inner = pair.into_inner();
-
-        let path_token = inner.next().ok_or_else(|| {
-            ParseError::InvalidSyntax(ErrorData::new(import_span, "Неожиданный токен".into()))
-        })?;
-        let alias_token = inner.next().ok_or_else(|| {
-            ParseError::InvalidSyntax(ErrorData::new(import_span, "Неожиданный токен".into()))
-        })?;
-
-        let raw_path = path_token.as_str();
-        let clean_path = if raw_path.len() >= 2 {
-            &raw_path[1..raw_path.len() - 1]
-        } else {
-            raw_path
-        };
-
-        let path_symbol = self.module.arena.intern_string(&self.interner, clean_path);
-        let alias_symbol = self
-            .module
-            .arena
-            .intern_string(&self.interner, alias_token.as_str());
-
-        let import_data = Import {
-            item: ImportItem {
-                path: path_symbol,
-                alias: alias_symbol,
-            },
-            span: import_span,
-        };
-
-        self.module.imports.push(import_data);
-        let stmt_id = self
-            .module
-            .arena
-            .add_statement(StatementKind::Empty, import_span);
-
-        let module = self.parse_and_register_import(path_symbol, import_span)?;
-        self.register_imported_type_aliases(alias_symbol, module);
-        self.module
-            .globals
-            .insert(alias_symbol, Value::Module(module));
-
-        Ok(stmt_id)
-    }
-
     pub(crate) fn register_imported_type_aliases(
         &mut self,
         alias_symbol: Symbol,

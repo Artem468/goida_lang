@@ -15,6 +15,11 @@ impl InterpreterFunctions for Interpreter {
         current_module_id: Symbol,
         span: Span,
     ) -> Result<Value, RuntimeError> {
+        let function_name = self
+            .modules
+            .get(&current_module_id)
+            .and_then(|m| m.arena.resolve_symbol(&self.interner, function.name))
+            .unwrap_or_else(|| "неизвестно".to_string());
         let final_arguments =
             self.bind_call_arguments(&function, arguments, current_module_id, span, "Функция")?;
 
@@ -30,7 +35,11 @@ impl InterpreterFunctions for Interpreter {
         match execution_result {
             Ok(()) => Ok(Value::Empty),
             Err(RuntimeError::Return(_, val)) => Ok(val),
-            Err(e) => Err(e),
+            Err(mut e) => {
+                let frame_name = format!("функция {}", function_name);
+                e.add_stack_frame(frame_name, span);
+                Err(e)
+            }
         }
     }
 
@@ -41,19 +50,22 @@ impl InterpreterFunctions for Interpreter {
         current_module_id: Symbol,
         span: Span,
     ) -> Result<Value, RuntimeError> {
+        let name_str = self.resolve_symbol(name).unwrap();
+
         if let Some(val) = self.environment.read(|env| env.get(&name)) {
             match val {
                 Value::Function(func) => {
                     return self.call_function(func.clone(), arguments, current_module_id, span);
                 }
                 Value::Builtin(builtin) => {
-                    return builtin(self, arguments, span);
+                    return builtin(self, arguments, span).map_err(|mut err| {
+                        err.add_stack_frame(format!("функция {}", name_str), span);
+                        err
+                    });
                 }
                 _ => {}
             }
         }
-
-        let name_str = self.resolve_symbol(name).unwrap();
 
         let current_module = self
             .modules
@@ -76,7 +88,10 @@ impl InterpreterFunctions for Interpreter {
                     Value::Function(func) => {
                         self.call_function(func.clone(), arguments, definition_module_id, span)
                     }
-                    Value::Builtin(builtin) => builtin(self, arguments, span),
+                    Value::Builtin(builtin) => builtin(self, arguments, span).map_err(|mut err| {
+                        err.add_stack_frame(format!("функция {}", name_str), span);
+                        err
+                    }),
                     _ => bail_runtime!(UndefinedFunction, span, "{}", name_str),
                 };
             }
@@ -92,11 +107,17 @@ impl InterpreterFunctions for Interpreter {
             return self.call_function(func.clone(), arguments, current_module_id, span);
         }
         if let Some(Value::Builtin(builtin)) = current_module.globals.get(&name) {
-            return builtin(self, arguments, span);
+            return builtin(self, arguments, span).map_err(|mut err| {
+                err.add_stack_frame(format!("функция {}", name_str), span);
+                err
+            });
         }
 
         if let Some(builtin_fn) = self.builtins.get(&name) {
-            return builtin_fn(self, arguments, span);
+            return builtin_fn(self, arguments, span).map_err(|mut err| {
+                err.add_stack_frame(format!("функция {}", name_str), span);
+                err
+            });
         }
 
         bail_runtime!(UndefinedFunction, span, "{}", name_str)

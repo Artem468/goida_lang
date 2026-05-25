@@ -9,7 +9,8 @@ use crate::{bail_runtime, define_builtin, define_constructor, define_method, run
 use string_interner::DefaultSymbol as Symbol;
 
 pub fn setup_list_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassDefinition>) {
-    let name = interner.write(|i| i.get_or_intern("Список"));
+    let name =
+        interner.write(|i| i.get_or_intern(crate::builtins::catalog::class::LIST.names.canonical));
 
     let mut class_def = ClassDefinition::new(name, Span::default());
 
@@ -25,7 +26,7 @@ pub fn setup_list_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassDe
     });
 
     // append(value) - Добавить в конец
-    define_method!(class_def, interner, "добавить" => (_, args, span) {
+    define_method!(class_def, interner, crate::builtins::catalog::method::ADD.canonical => (_, args, span) {
         if let (Some(Value::List(list)), Some(val)) = (
             CallArgListExt::first_value(&args),
             CallArgListExt::get_value(&args, 1),
@@ -42,7 +43,7 @@ pub fn setup_list_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassDe
     });
 
     // set(index: Number, value: Any) -> Empty
-    define_method!(class_def, interner, "задать" => (_, args, span) {
+    define_method!(class_def, interner, crate::builtins::catalog::method::SET.canonical => (_, args, span) {
         if let (Some(Value::List(list)), Some(raw_idx), Some(new_val)) = (
             CallArgListExt::first_value(&args),
             CallArgListExt::get_value(&args, 1),
@@ -59,7 +60,7 @@ pub fn setup_list_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassDe
     });
 
     // len() - Получить длину
-    define_method!(class_def, interner, "длина" => (_, args, span) {
+    define_method!(class_def, interner, crate::builtins::catalog::method::LEN.canonical => (_, args, span) {
         if let Some(Value::List(list)) = CallArgListExt::first_value(&args) {
             let length = list.read(|i| i.len());
             Ok(Value::Number(length as i64))
@@ -69,7 +70,7 @@ pub fn setup_list_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassDe
     });
 
     // pop(index?) - Удалить и вернуть элемент (последний или по индексу)
-    define_method!(class_def, interner, "удалить" => (_, args, span) {
+    define_method!(class_def, interner, crate::builtins::catalog::method::REMOVE.canonical => (_, args, span) {
         if let Some(Value::List(list)) = CallArgListExt::first_value(&args) {
             list.write(|vec| {
                 if vec.is_empty() {
@@ -91,7 +92,7 @@ pub fn setup_list_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassDe
     });
 
     // clear() - Очистить список
-    define_method!(class_def, interner, "отчистить" => (_, args, span) {
+    define_method!(class_def, interner, crate::builtins::catalog::method::CLEAR_TYPO.canonical => (_, args, span) {
         if let Some(Value::List(list)) = CallArgListExt::first_value(&args) {
             list.write(|i| i.clear());
             Ok(Value::Empty)
@@ -101,7 +102,7 @@ pub fn setup_list_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassDe
     });
 
     // join(separator) - Склеить в строку
-    define_method!(class_def, interner, "объединить" => (_, args, span) {
+    define_method!(class_def, interner, crate::builtins::catalog::method::JOIN.canonical => (_, args, span) {
         if let (Some(Value::List(list)), Some(Value::Text(sep))) = (
             CallArgListExt::first_value(&args),
             CallArgListExt::get_value(&args, 1),
@@ -119,7 +120,7 @@ pub fn setup_list_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassDe
     });
 
     // get(index) - Безопасное получение (аналог list[i])
-    define_method!(class_def, interner, "получить" => (_, args, span) {
+    define_method!(class_def, interner, crate::builtins::catalog::method::GET.canonical => (_, args, span) {
         if let (Some(Value::List(list)), Some(idx)) = (
             CallArgListExt::first_value(&args),
             CallArgListExt::get_value(&args, 1),
@@ -133,7 +134,7 @@ pub fn setup_list_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassDe
         }
     });
 
-    define_method!(class_def, interner, "итератор" => (_, args, span) {
+    define_method!(class_def, interner, crate::builtins::catalog::method::ITERATOR.canonical => (_, args, span) {
         let Some(value) = CallArgListExt::first_value(&args) else {
             return bail_runtime!(TypeError, span, "Ожидался список");
         };
@@ -144,7 +145,7 @@ pub fn setup_list_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassDe
 }
 
 pub fn setup_list_func(interpreter: &mut Interpreter, interner: &SharedInterner) {
-    define_builtin!(interpreter, interner, "список" => (_, arguments, _) {
+    define_builtin!(interpreter, interner, crate::builtins::catalog::function::LIST.canonical => (_, arguments, _) {
         Ok(Value::List(SharedMut::new(
             arguments.into_iter().map(|arg| arg.value).collect(),
         )))

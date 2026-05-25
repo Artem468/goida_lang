@@ -81,7 +81,7 @@ fn main() {
     match &cli.command {
         Some(Commands::Run { file, .. }) => {
             if let Err((err, _)) = run_file(file) {
-                println!("{}", err);
+                println!("{}", err.lines().next().unwrap_or(&err));
                 std::process::exit(1);
             }
         }
@@ -215,15 +215,31 @@ fn render_error(msg: &str, error: &ErrorData) {
     let file_name = intp.get_file_path(&error.location.file_id);
     let file_code = intp.source_manager.get_file_content(file_name.as_str());
     let ariadne_span = error.location.as_ariadne(file_code.as_str());
+    let display_msg = msg.lines().next().unwrap_or(msg);
+    let mut note = error.message.clone();
+
+    if !error.stack_trace.is_empty() {
+        note.push_str("\n\nСтек вызовов:");
+        for frame in &error.stack_trace {
+            let frame_file = intp.get_file_path(&frame.location.file_id);
+            let frame_code = intp.source_manager.get_file_content(frame_file.as_str());
+            let line = frame_code
+                .get(..frame.location.start.min(frame_code.len() as u32) as usize)
+                .map(|prefix| prefix.lines().count())
+                .unwrap_or(0)
+                + 1;
+            note.push_str(&format!("\n  в {} ({}:{})", frame.name, frame_file, line));
+        }
+    }
 
     Report::build(ReportKind::Error, (&file_name, ariadne_span.clone()))
-        .with_message(msg)
+        .with_message(display_msg)
         .with_label(
             Label::new((&file_name, ariadne_span))
-                .with_message(msg)
+                .with_message(display_msg)
                 .with_color(Color::Red),
         )
-        .with_note(&error.message)
+        .with_note(note)
         .finish()
         .print(&intp.source_manager)
         .expect("Can't build report message");
@@ -244,7 +260,7 @@ fn run_repl() {
                 continue;
             }
             if let Err(e) = execute_code(input, "repl") {
-                eprintln!("Ошибка: {}", e.0);
+                eprintln!("Ошибка: {}", e.0.lines().next().unwrap_or(&e.0));
             }
         }
     }

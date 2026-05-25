@@ -11,7 +11,8 @@ use std::ffi::{c_char, CStr};
 use string_interner::DefaultSymbol as Symbol;
 
 pub fn setup_text_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassDefinition>) {
-    let name = interner.write(|i| i.get_or_intern("Строка"));
+    let name = interner
+        .write(|i| i.get_or_intern(crate::builtins::catalog::class::STRING.names.canonical));
 
     let mut class_def = ClassDefinition::new(name, Span::default());
 
@@ -32,7 +33,7 @@ pub fn setup_text_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassDe
     });
 
     // len() -> Number
-    define_method!(class_def, interner, "длина" => (_interp, args, span) {
+    define_method!(class_def, interner, crate::builtins::catalog::method::LEN.canonical => (_interp, args, span) {
         if let Some(Value::Text(s)) = CallArgListExt::first_value(&args) {
             Ok(Value::Number(s.chars().count() as i64))
         } else {
@@ -45,7 +46,7 @@ pub fn setup_text_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassDe
     });
 
     // split(separator: Text) -> List
-    define_method!(class_def, interner, "разделить" => (_interp, args, span) {
+    define_method!(class_def, interner, crate::builtins::catalog::method::SPLIT.canonical => (_interp, args, span) {
         if let (Some(Value::Text(s)), Some(Value::Text(sep))) = (
             CallArgListExt::first_value(&args),
             CallArgListExt::get_value(&args, 1),
@@ -65,7 +66,7 @@ pub fn setup_text_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassDe
     });
 
     // upper() -> Text
-    define_method!(class_def, interner, "верхний" => (_interp, args, span) {
+    define_method!(class_def, interner, crate::builtins::catalog::method::UPPER.canonical => (_interp, args, span) {
         if let Some(Value::Text(s)) = CallArgListExt::first_value(&args) {
             Ok(Value::Text(s.to_uppercase()))
         } else {
@@ -78,7 +79,7 @@ pub fn setup_text_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassDe
     });
 
     // lower() -> Text
-    define_method!(class_def, interner, "нижний" => (_interp, args, span) {
+    define_method!(class_def, interner, crate::builtins::catalog::method::LOWER.canonical => (_interp, args, span) {
         if let Some(Value::Text(s)) = CallArgListExt::first_value(&args) {
             Ok(Value::Text(s.to_lowercase()))
         } else {
@@ -91,7 +92,7 @@ pub fn setup_text_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassDe
     });
 
     // contains(substring: Text) -> Boolean
-    define_method!(class_def, interner, "содержит" => (_interp, args, span) {
+    define_method!(class_def, interner, crate::builtins::catalog::method::CONTAINS.canonical => (_interp, args, span) {
         if let (Some(Value::Text(s)), Some(Value::Text(sub))) = (
             CallArgListExt::first_value(&args),
             CallArgListExt::get_value(&args, 1),
@@ -107,7 +108,7 @@ pub fn setup_text_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassDe
     });
 
     // replace(old: Text, new: Text) -> Text
-    define_method!(class_def, interner, "заменить" => (_interp, args, span) {
+    define_method!(class_def, interner, crate::builtins::catalog::method::REPLACE.canonical => (_interp, args, span) {
         if let (Some(Value::Text(s)), Some(Value::Text(old)), Some(Value::Text(new))) = (
             CallArgListExt::first_value(&args),
             CallArgListExt::get_value(&args, 1),
@@ -123,7 +124,7 @@ pub fn setup_text_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassDe
         }
     });
 
-    define_method!(class_def, interner, "обрезать" => (_interp, args, span) {
+    define_method!(class_def, interner, crate::builtins::catalog::method::TRIM.canonical => (_interp, args, span) {
         if let Some(Value::Text(s)) = CallArgListExt::first_value(&args) {
             Ok(Value::Text(s.trim().to_string()))
         } else {
@@ -131,7 +132,7 @@ pub fn setup_text_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassDe
         }
     });
 
-    define_method!(class_def, interner, "начинается_с" => (_interp, args, span) {
+    define_method!(class_def, interner, crate::builtins::catalog::method::STARTS_WITH.canonical => (_interp, args, span) {
         if let (Some(Value::Text(s)), Some(Value::Text(prefix))) = (
             CallArgListExt::first_value(&args),
             CallArgListExt::get_value(&args, 1),
@@ -142,7 +143,7 @@ pub fn setup_text_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassDe
         }
     });
 
-    define_method!(class_def, interner, "заканчивается_на" => (_interp, args, span) {
+    define_method!(class_def, interner, crate::builtins::catalog::method::ENDS_WITH.canonical => (_interp, args, span) {
         if let (Some(Value::Text(s)), Some(Value::Text(suffix))) = (
             CallArgListExt::first_value(&args),
             CallArgListExt::get_value(&args, 1),
@@ -153,7 +154,7 @@ pub fn setup_text_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassDe
         }
     });
 
-    define_method!(class_def, interner, "итератор" => (_, args, span) {
+    define_method!(class_def, interner, crate::builtins::catalog::method::ITERATOR.canonical => (_, args, span) {
         let Some(value) = CallArgListExt::first_value(&args) else {
             return bail_runtime!(TypeError, span, "Ожидалась строка");
         };
@@ -164,13 +165,13 @@ pub fn setup_text_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassDe
 }
 
 pub fn setup_text_func(interpreter: &mut Interpreter, interner: &SharedInterner) {
-    define_builtin!(interpreter, interner, "строка" => (_, arguments, span) {
+    define_builtin!(interpreter, interner, crate::builtins::catalog::function::STRING.canonical => (_, arguments, span) {
         expect_args!(arguments, 1, span, "строка");
         let n: String = arguments[0].value.clone().try_into()?;
         Ok(Value::Text(n))
     });
 
-    define_builtin!(interpreter, interner, "строка_из_указателя" => (_, arguments, _){
+    define_builtin!(interpreter, interner, crate::builtins::catalog::function::STRING_FROM_POINTER.canonical => (_, arguments, _){
         let ptr = arguments[0].value.as_i64().unwrap();
         let _v = unsafe { addr_to_string(ptr) };
         Ok(Value::Text(_v))

@@ -9,6 +9,7 @@ use crate::traits::prelude::{
     CoreOperations, ExpressionEvaluator, InterpreterClasses, InterpreterFunctions, ValueOperations,
 };
 use crate::{bail_runtime, runtime_error};
+use std::sync::Arc;
 use string_interner::DefaultSymbol as Symbol;
 
 impl ExpressionEvaluator for Interpreter {
@@ -507,13 +508,17 @@ impl ExpressionEvaluator for Interpreter {
                             let method_module =
                                 method_type.get_module().unwrap_or(current_module_id);
 
+                            let method_name = interpreter.resolve_symbol(method).unwrap_or_default();
                             return interpreter.call_method(
                                 method_type,
                                 arguments,
                                 this_val,
                                 method_module,
                                 obj_expr.span,
-                            );
+                            ).map_err(|mut err| {
+                                err.add_stack_frame(format!("метод {}", method_name), obj_expr.span);
+                                err
+                            });
                         }
                     }
 
@@ -575,6 +580,18 @@ impl ExpressionEvaluator for Interpreter {
                 let (class_rc, definition_module) =
                     self.resolve_class_for_creation(class_name, current_module_id, expr_kind.span)?;
                 self.instantiate_class(class_rc, definition_module, arguments, expr_kind.span)
+            }
+
+            ExpressionKind::Lambda { params, body } => {
+                let name = self.intern_string("<лямбда>");
+                Ok(Value::Function(Arc::new(crate::ast::prelude::FunctionDefinition {
+                    name,
+                    params,
+                    return_type: None,
+                    body,
+                    span: expr_kind.span,
+                    module: Some(current_module_id),
+                })))
             }
 
             ExpressionKind::This => bail_runtime!(

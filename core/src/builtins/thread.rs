@@ -265,7 +265,8 @@ fn unlock_rw_write(lock: &RuntimeRwLock, span: Span) -> Result<(), RuntimeError>
 }
 
 pub fn setup_thread_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassDefinition>) {
-    let name = interner.write(|i| i.get_or_intern("Поток"));
+    let name = interner
+        .write(|i| i.get_or_intern(crate::builtins::catalog::class::THREAD.names.canonical));
     let mut class_def = ClassDefinition::new(name, Span::default());
 
     define_constructor!(class_def, (interp, args, span) {
@@ -285,12 +286,12 @@ pub fn setup_thread_class(interner: &SharedInterner) -> (Symbol, SharedMut<Class
         Ok(Value::Empty)
     });
 
-    define_method!(class_def, interner, @static "создать" => (interp, args, span) {
+    define_method!(class_def, interner, @static crate::builtins::catalog::method::CREATE.canonical => (interp, args, span) {
         let thread = thread_from_args(interp, &args, 0, span)?;
         Ok(Value::Thread(thread))
     });
 
-    define_method!(class_def, interner, "ждать" => (interp, args, span) {
+    define_method!(class_def, interner, crate::builtins::catalog::method::JOIN_THREAD.canonical => (interp, args, span) {
         if let Some(Value::Thread(thread_value)) = CallArgListExt::first_value(&args) {
             interp.join_thread_handle(thread_value, span)
         } else {
@@ -302,7 +303,8 @@ pub fn setup_thread_class(interner: &SharedInterner) -> (Symbol, SharedMut<Class
 }
 
 pub fn setup_mutex_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassDefinition>) {
-    let name = interner.write(|i| i.get_or_intern("Мьютекс"));
+    let name =
+        interner.write(|i| i.get_or_intern(crate::builtins::catalog::class::MUTEX.names.canonical));
     let mut class_def = ClassDefinition::new(name, Span::default());
 
     define_constructor!(class_def, (interp, args, span) {
@@ -319,7 +321,7 @@ pub fn setup_mutex_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassD
         Ok(Value::Empty)
     });
 
-    define_method!(class_def, interner, "блокировать" => (_, args, span) {
+    define_method!(class_def, interner, crate::builtins::catalog::method::LOCK.canonical => (_, args, span) {
         if let Some(Value::Mutex(mutex)) = CallArgListExt::first_value(&args) {
             lock_mutex(mutex, span)?;
             Ok(Value::Empty)
@@ -328,7 +330,7 @@ pub fn setup_mutex_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassD
         }
     });
 
-    define_method!(class_def, interner, "разблокировать" => (_, args, span) {
+    define_method!(class_def, interner, crate::builtins::catalog::method::UNLOCK.canonical => (_, args, span) {
         if let Some(Value::Mutex(mutex)) = CallArgListExt::first_value(&args) {
             unlock_mutex(mutex, span)?;
             Ok(Value::Empty)
@@ -337,7 +339,7 @@ pub fn setup_mutex_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassD
         }
     });
 
-    define_method!(class_def, interner, "прочитать" => (_, args, span) {
+    define_method!(class_def, interner, crate::builtins::catalog::method::READ.canonical => (_, args, span) {
         if let Some(Value::Mutex(mutex)) = CallArgListExt::first_value(&args) {
             wait_mutex_access(mutex, span)?;
             let guard = mutex
@@ -350,7 +352,7 @@ pub fn setup_mutex_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassD
         }
     });
 
-    define_method!(class_def, interner, "записать" => (_, args, span) {
+    define_method!(class_def, interner, crate::builtins::catalog::method::WRITE.canonical => (_, args, span) {
         if let (Some(Value::Mutex(mutex)), Some(new_value)) = (
             CallArgListExt::first_value(&args),
             CallArgListExt::get_value(&args, 1),
@@ -371,7 +373,8 @@ pub fn setup_mutex_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassD
 }
 
 pub fn setup_rwlock_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassDefinition>) {
-    let name = interner.write(|i| i.get_or_intern("БлокировкаЧтенияЗаписи"));
+    let name = interner
+        .write(|i| i.get_or_intern(crate::builtins::catalog::class::RWLOCK.names.canonical));
     let mut class_def = ClassDefinition::new(name, Span::default());
 
     define_constructor!(class_def, (interp, args, span) {
@@ -388,7 +391,7 @@ pub fn setup_rwlock_class(interner: &SharedInterner) -> (Symbol, SharedMut<Class
         Ok(Value::Empty)
     });
 
-    define_method!(class_def, interner, "писать_блокировать" => (_, args, span) {
+    define_method!(class_def, interner, crate::builtins::catalog::method::WRITE_LOCK.canonical => (_, args, span) {
         if let Some(Value::RwLock(lock)) = CallArgListExt::first_value(&args) {
             lock_rw_write(lock, span)?;
             Ok(Value::Empty)
@@ -397,7 +400,7 @@ pub fn setup_rwlock_class(interner: &SharedInterner) -> (Symbol, SharedMut<Class
         }
     });
 
-    define_method!(class_def, interner, "писать_разблокировать" => (_, args, span) {
+    define_method!(class_def, interner, crate::builtins::catalog::method::WRITE_UNLOCK.canonical => (_, args, span) {
         if let Some(Value::RwLock(lock)) = CallArgListExt::first_value(&args) {
             unlock_rw_write(lock, span)?;
             Ok(Value::Empty)
@@ -406,7 +409,7 @@ pub fn setup_rwlock_class(interner: &SharedInterner) -> (Symbol, SharedMut<Class
         }
     });
 
-    define_method!(class_def, interner, "читать_блокировать" => (_, args, span) {
+    define_method!(class_def, interner, crate::builtins::catalog::method::READ_LOCK.canonical => (_, args, span) {
         if let Some(Value::RwLock(lock)) = CallArgListExt::first_value(&args) {
             lock_rw_read(lock, span)?;
             Ok(Value::Empty)
@@ -415,7 +418,7 @@ pub fn setup_rwlock_class(interner: &SharedInterner) -> (Symbol, SharedMut<Class
         }
     });
 
-    define_method!(class_def, interner, "читать_разблокировать" => (_, args, span) {
+    define_method!(class_def, interner, crate::builtins::catalog::method::READ_UNLOCK.canonical => (_, args, span) {
         if let Some(Value::RwLock(lock)) = CallArgListExt::first_value(&args) {
             unlock_rw_read(lock, span)?;
             Ok(Value::Empty)
@@ -424,7 +427,7 @@ pub fn setup_rwlock_class(interner: &SharedInterner) -> (Symbol, SharedMut<Class
         }
     });
 
-    define_method!(class_def, interner, "прочитать" => (_, args, span) {
+    define_method!(class_def, interner, crate::builtins::catalog::method::READ.canonical => (_, args, span) {
         if let Some(Value::RwLock(lock)) = CallArgListExt::first_value(&args) {
             wait_rw_read(lock, span)?;
             let guard = lock.value.read().map_err(|_| {
@@ -436,7 +439,7 @@ pub fn setup_rwlock_class(interner: &SharedInterner) -> (Symbol, SharedMut<Class
         }
     });
 
-    define_method!(class_def, interner, "записать" => (_, args, span) {
+    define_method!(class_def, interner, crate::builtins::catalog::method::WRITE.canonical => (_, args, span) {
         if let (Some(Value::RwLock(lock)), Some(new_value)) = (
             CallArgListExt::first_value(&args),
             CallArgListExt::get_value(&args, 1),

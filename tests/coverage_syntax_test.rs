@@ -109,13 +109,13 @@ fn test_foreach_statement_iterates_collections() {
 
     let source = r#"
 сумма = 0
-для элемент в список(1, 2, 3) {
+для элемент из список(1, 2, 3) {
     сумма += элемент
 }
 печать(сумма)
 
 текст = ""
-для буква в "аб" {
+для буква из "аб" {
     текст += буква
 }
 печать(текст)
@@ -207,7 +207,7 @@ fn test_lazy_iterator_map_filter_reduce() {
 печать(результат)
 
 через_цикл = 0
-для x в список(1, 2, 3, 4).итератор().преобразовать(удвоить).отфильтровать(больше_пяти) {
+для x из список(1, 2, 3, 4).итератор().преобразовать(удвоить).отфильтровать(больше_пяти) {
     через_цикл += x
 }
 печать(через_цикл)
@@ -273,10 +273,196 @@ fn test_string_utilities_and_regular_expressions() {
         String::from_utf8_lossy(&output.stdout),
         String::from_utf8_lossy(&output.stderr)
     );
+    assert_eq!("истина\nистина\n", String::from_utf8_lossy(&output.stdout));
+}
+
+#[test]
+fn test_regex_class_uses_russian_name() {
+    let dir = std::path::Path::new("target/russian_regex_test");
+    std::fs::create_dir_all(dir).expect("Не удалось создать временную папку теста");
+
+    let main_file = dir.join("main.goida");
+    std::fs::write(
+        &main_file,
+        r#"
+рег = новый РегулярноеВыражение("[0-9]+")
+печать(рег.совпадает("42"))
+печать(регулярное_выражение("[а-я]+").найти("abc тест"))
+"#,
+    )
+    .expect("Не удалось записать временный файл");
+
+    let output = Command::new("cargo")
+        .args([
+            "run",
+            "-q",
+            "-p",
+            "cli",
+            "--",
+            "run",
+            main_file.to_str().unwrap(),
+        ])
+        .output()
+        .expect("Не удалось запустить cargo run");
+
+    assert!(
+        output.status.success(),
+        "русское РегулярноеВыражение завершилось с ошибкой\nSTDOUT: {}\nSTDERR: {}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!("истина\nтест\n", String::from_utf8_lossy(&output.stdout));
+}
+
+#[test]
+fn test_lambda_expression_and_block_forms() {
+    let dir = std::path::Path::new("target/lambda_expression_test");
+    std::fs::create_dir_all(dir).expect("Не удалось создать временную папку теста");
+
+    let main_file = dir.join("main.goida");
+    std::fs::write(
+        &main_file,
+        r#"
+пять = () => 5
+плюс = (a, b) => a + b
+блок = (x) => {
+    вернуть x * 3
+}
+без_возврата = () => {
+    10
+}
+
+печать(пять())
+печать(плюс(2, 4))
+печать(блок(7))
+печать(без_возврата())
+печать(список(1, 2, 3).итератор().преобразовать((x) => x * 2).список().объединить(","))
+"#,
+    )
+    .expect("Не удалось записать временный файл");
+
+    let output = Command::new("cargo")
+        .args([
+            "run",
+            "-q",
+            "-p",
+            "cli",
+            "--",
+            "run",
+            main_file.to_str().unwrap(),
+        ])
+        .output()
+        .expect("Не удалось запустить cargo run");
+
+    assert!(
+        output.status.success(),
+        "лямбды завершились с ошибкой\nSTDOUT: {}\nSTDERR: {}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
     assert_eq!(
-        "истина\nистина\n",
+        "5\n6\n21\nпустота\n2,4,6\n",
         String::from_utf8_lossy(&output.stdout)
     );
+}
+
+#[test]
+fn test_lambda_arguments_defaults_named_args_and_shadowing() {
+    let dir = std::path::Path::new("target/lambda_arguments_test");
+    std::fs::create_dir_all(dir).expect("Не удалось создать временную папку теста");
+
+    let main_file = dir.join("main.goida");
+    std::fs::write(
+        &main_file,
+        r#"
+база = 10
+сумма = (a, b = 3, c = база) => a + b + c
+печать(сумма(2))
+печать(сумма(2, c = 5, b = 4))
+
+x = 100
+тень = (x) => x + 1
+печать(тень(4))
+печать(x)
+
+блок = (value) => {
+    промежуточный = value * 2
+    вернуть промежуточный + 1
+}
+печать(блок(7))
+"#,
+    )
+    .expect("Не удалось записать временный файл");
+
+    let output = Command::new("cargo")
+        .args([
+            "run",
+            "-q",
+            "-p",
+            "cli",
+            "--",
+            "run",
+            main_file.to_str().unwrap(),
+        ])
+        .output()
+        .expect("Не удалось запустить cargo run");
+
+    assert!(
+        output.status.success(),
+        "аргументы лямбд завершились с ошибкой\nSTDOUT: {}\nSTDERR: {}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(
+        "15\n11\n5\n100\n15\n",
+        String::from_utf8_lossy(&output.stdout)
+    );
+}
+
+#[test]
+fn test_inline_lambdas_in_iterator_pipeline() {
+    let dir = std::path::Path::new("target/inline_lambda_iterator_test");
+    std::fs::create_dir_all(dir).expect("Не удалось создать временную папку теста");
+
+    let main_file = dir.join("main.goida");
+    std::fs::write(
+        &main_file,
+        r#"
+результат = список(1, 2, 3, 4, 5)
+    .итератор()
+    .преобразовать((x) => x * 3)
+    .отфильтровать((x) => x > 6)
+    .свернуть((acc, x) => acc + x, 0)
+печать(результат)
+
+элементы = итератор("абв")
+    .преобразовать((буква) => "[" + буква + "]")
+    .список()
+печать(элементы.объединить(""))
+"#,
+    )
+    .expect("Не удалось записать временный файл");
+
+    let output = Command::new("cargo")
+        .args([
+            "run",
+            "-q",
+            "-p",
+            "cli",
+            "--",
+            "run",
+            main_file.to_str().unwrap(),
+        ])
+        .output()
+        .expect("Не удалось запустить cargo run");
+
+    assert!(
+        output.status.success(),
+        "inline-лямбды в итераторе завершились с ошибкой\nSTDOUT: {}\nSTDERR: {}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!("36\n[а][б][в]\n", String::from_utf8_lossy(&output.stdout));
 }
 
 #[test]
@@ -286,13 +472,13 @@ fn test_foreach_array_dict_and_constant_compound_assignment() {
 
     let ok_source = r#"
 сумма = 0
-для x в массив(2, 4, 6) {
+для x из массив(2, 4, 6) {
     сумма += x
 }
 печать(сумма)
 
 ключи = ""
-для ключ в словарь("b", 2, "a", 1) {
+для ключ из словарь("b", 2, "a", 1) {
     ключи += ключ
 }
 печать(ключи)
