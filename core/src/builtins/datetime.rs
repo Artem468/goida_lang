@@ -9,7 +9,8 @@ use std::sync::Arc;
 use string_interner::DefaultSymbol as Symbol;
 
 pub fn setup_datetime_class(interner_ref: &SharedInterner) -> (Symbol, SharedMut<ClassDefinition>) {
-    let name_sym = interner_ref.write(|i| i.get_or_intern("ДатаВремя"));
+    let name_sym = interner_ref
+        .write(|i| i.get_or_intern(crate::builtins::catalog::class::DATETIME.names.canonical));
     let mut class_def = ClassDefinition::new(name_sym, Span::default());
 
     let ms_sym = interner_ref.write(|i| i.get_or_intern("_мс"));
@@ -64,86 +65,96 @@ pub fn setup_datetime_class(interner_ref: &SharedInterner) -> (Symbol, SharedMut
     };
 
     // --- Методы получения компонентов (год, месяц, день, час, минута, секунда) ---
-    let components = ["год", "месяц", "день", "час", "минута", "секунда"];
-
-    for name in components {
-        let method_name = name.to_string();
-        class_def.add_method(
-            interner_ref.write(|i| i.get_or_intern(&method_name)),
-            Visibility::Public,
-            false,
-            BuiltinFn(Arc::new(move |_, args, _| {
-                let ms = get_ms(&args)?;
-                let dt = Local.timestamp_millis_opt(ms).unwrap();
-                let val = match method_name.as_str() {
-                    "год" => dt.year() as i64,
-                    "месяц" => dt.month() as i64,
-                    "день" => dt.day() as i64,
-                    "час" => dt.hour() as i64,
-                    "минута" => dt.minute() as i64,
-                    "секунда" => dt.second() as i64,
-                    _ => 0,
-                };
-                Ok(Value::Number(val))
-            })),
-        );
-    }
-
-    let units = [
-        ("секунд", 1_000),
-        ("минут", 60_000),
-        ("часов", 3_600_000),
-        ("дней", 86_400_000),
-        ("месяцев", 2_592_000_000),
-        ("лет", 31_536_000_000),
+    let components = [
+        crate::builtins::catalog::method::YEAR.canonical,
+        crate::builtins::catalog::method::MONTH.canonical,
+        crate::builtins::catalog::method::DAY.canonical,
+        crate::builtins::catalog::method::HOUR.canonical,
+        crate::builtins::catalog::method::MINUTE.canonical,
+        crate::builtins::catalog::method::SECOND.canonical,
     ];
 
-    for (name, ms_unit) in units {
+    for name in components {
+        let aliases = crate::builtins::catalog::method_names(name);
+        let method_name = name.to_string();
+        let method = BuiltinFn(Arc::new(move |_, args, _| {
+            let ms = get_ms(&args)?;
+            let dt = Local.timestamp_millis_opt(ms).unwrap();
+            let val = match method_name.as_str() {
+                "год" => dt.year() as i64,
+                "месяц" => dt.month() as i64,
+                "день" => dt.day() as i64,
+                "час" => dt.hour() as i64,
+                "минута" => dt.minute() as i64,
+                "секунда" => dt.second() as i64,
+                _ => 0,
+            };
+            Ok(Value::Number(val))
+        }));
+        for alias in aliases {
+            class_def.add_method(
+                interner_ref.write(|i| i.get_or_intern(alias)),
+                Visibility::Public,
+                false,
+                method.clone(),
+            );
+        }
+    }
+
+    for unit in crate::builtins::catalog::DATETIME_UNITS {
         // --- Метод: ДОБАВИТЬ ---
-        let add_name = format!("добавить_{}", name);
-        class_def.add_method(
-            interner_ref.write(|i| i.get_or_intern(&add_name)),
-            Visibility::Public,
-            false,
-            BuiltinFn(Arc::new(move |_, args, _span| {
-                let current_ms = get_ms(&args)?;
-                let val = CallArgListExt::get_value(&args, 1)
-                    .and_then(|v| v.as_i64())
-                    .unwrap_or(0);
+        let add_aliases = unit.add.names;
+        let ms_unit = unit.millis;
+        let add_method = BuiltinFn(Arc::new(move |_, args, _span| {
+            let current_ms = get_ms(&args)?;
+            let val = CallArgListExt::get_value(&args, 1)
+                .and_then(|v| v.as_i64())
+                .unwrap_or(0);
 
-                let new_ms = current_ms + (val * ms_unit);
+            let new_ms = current_ms + (val * ms_unit);
 
-                if let Some(Value::Object(inst)) = CallArgListExt::first_value(&args) {
-                    inst.write(|i| i.field_values.insert(ms_sym, Value::Number(new_ms)));
-                }
-                Ok(args[0].value.clone())
-            })),
-        );
+            if let Some(Value::Object(inst)) = CallArgListExt::first_value(&args) {
+                inst.write(|i| i.field_values.insert(ms_sym, Value::Number(new_ms)));
+            }
+            Ok(args[0].value.clone())
+        }));
+        for alias in add_aliases {
+            class_def.add_method(
+                interner_ref.write(|i| i.get_or_intern(alias)),
+                Visibility::Public,
+                false,
+                add_method.clone(),
+            );
+        }
 
         // --- Метод: ВЫЧЕСТЬ ---
-        let sub_name = format!("вычесть_{}", name);
-        class_def.add_method(
-            interner_ref.write(|i| i.get_or_intern(&sub_name)),
-            Visibility::Public,
-            false,
-            BuiltinFn(Arc::new(move |_, args, _span| {
-                let current_ms = get_ms(&args)?;
-                let val = CallArgListExt::get_value(&args, 1)
-                    .and_then(|v| v.as_i64())
-                    .unwrap_or(0);
+        let sub_aliases = unit.subtract.names;
+        let ms_unit = unit.millis;
+        let sub_method = BuiltinFn(Arc::new(move |_, args, _span| {
+            let current_ms = get_ms(&args)?;
+            let val = CallArgListExt::get_value(&args, 1)
+                .and_then(|v| v.as_i64())
+                .unwrap_or(0);
 
-                let new_ms = current_ms - (val * ms_unit);
+            let new_ms = current_ms - (val * ms_unit);
 
-                if let Some(Value::Object(inst)) = CallArgListExt::first_value(&args) {
-                    inst.write(|i| i.field_values.insert(ms_sym, Value::Number(new_ms)));
-                }
-                Ok(args[0].value.clone())
-            })),
-        );
+            if let Some(Value::Object(inst)) = CallArgListExt::first_value(&args) {
+                inst.write(|i| i.field_values.insert(ms_sym, Value::Number(new_ms)));
+            }
+            Ok(args[0].value.clone())
+        }));
+        for alias in sub_aliases {
+            class_def.add_method(
+                interner_ref.write(|i| i.get_or_intern(alias)),
+                Visibility::Public,
+                false,
+                sub_method.clone(),
+            );
+        }
     }
 
     // --- Метод: .сейчас() (стандартный вывод) ---
-    define_method!(class_def, interner_ref, "сейчас" => (_, args, _) {
+    define_method!(class_def, interner_ref, crate::builtins::catalog::method::NOW.canonical => (_, args, _) {
         let now = Local::now();
 
         let pattern = match CallArgListExt::get_value(&args, 1) {
@@ -156,7 +167,7 @@ pub fn setup_datetime_class(interner_ref: &SharedInterner) -> (Symbol, SharedMut
     });
 
     // --- Метод: .формат(шаблон) ---
-    define_method!(class_def, interner_ref, "формат" => (_, args, _) {
+    define_method!(class_def, interner_ref, crate::builtins::catalog::method::FORMAT.canonical => (_, args, _) {
         let ms = get_ms(&args)?;
         let dt = Local.timestamp_millis_opt(ms).unwrap();
         let pattern = CallArgListExt::get_value(&args, 1)

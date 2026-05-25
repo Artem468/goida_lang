@@ -99,12 +99,13 @@ fn test_builtin_format_macro_formats_values() {
 имя = "Анна"
 возраст = 21
 печать(format!("Привет, {}, тебе {} лет", имя, возраст))
+печать(формат!("Имя: {}", имя))
 печать(format!("{{}} = {}", 42))
 "#;
 
     let (ok, out, err) = run_source("macro_builtin_format_test", source);
     assert!(ok, "format macro failed\nSTDOUT: {out}\nSTDERR: {err}");
-    assert_eq!("Привет, Анна, тебе 21 лет\n{} = 42\n", out);
+    assert_eq!("Привет, Анна, тебе 21 лет\nИмя: Анна\n{} = 42\n", out);
 }
 
 #[test]

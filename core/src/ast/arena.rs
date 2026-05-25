@@ -5,6 +5,7 @@ use crate::ast::prelude::{
     BinaryOperator, DataType, ExprId, ExpressionKind, ExpressionNode, LiteralValue, PrimitiveType,
     RuntimeType, Span, StatementKind, StatementNode, StmtId, TypeId,
 };
+use crate::builtins::catalog::{self, BuiltinTypeSpec};
 use crate::interpreter::prelude::SharedInterner;
 
 #[derive(Debug, Clone)]
@@ -160,101 +161,57 @@ impl AstArena {
 
     /// Registers built-in language and runtime types in the arena cache.
     pub fn init_builtin_types(&mut self, interner: &SharedInterner) {
-        let builtins = [
-            (
-                &["число", "number"][..],
-                DataType::Primitive(PrimitiveType::Number),
-            ),
-            (
-                &["строка", "string"][..],
-                DataType::Primitive(PrimitiveType::Text),
-            ),
-            (
-                &["логический", "bool"][..],
-                DataType::Primitive(PrimitiveType::Boolean),
-            ),
-            (
-                &["дробь", "float"][..],
-                DataType::Primitive(PrimitiveType::Float),
-            ),
-            (
-                &["указатель", "pointer"][..],
-                DataType::Primitive(PrimitiveType::Pointer),
-            ),
-            (&["список", "list"][..], DataType::List(Box::new(DataType::Any))),
-            (&["массив", "array"][..], DataType::Array(Box::new(DataType::Any))),
-            (
-                &["словарь", "dict"][..],
-                DataType::Dict {
-                    key: Box::new(DataType::Any),
-                    value: Box::new(DataType::Any),
-                },
-            ),
-            (&["пустота", "void"][..], DataType::Unit),
-            (&["неизвестно", "any"][..], DataType::Any),
-            (
-                &["функция", "function"][..],
-                DataType::Function {
-                    params: vec![],
-                    return_type: Box::new(DataType::Any),
-                },
-            ),
-            (
-                &["Строка", "String"][..],
-                DataType::Primitive(PrimitiveType::Text),
-            ),
-            (&["Список", "List"][..], DataType::List(Box::new(DataType::Any))),
-            (&["Массив", "Array"][..], DataType::Array(Box::new(DataType::Any))),
-            (
-                &["Словарь", "Dict"][..],
-                DataType::Dict {
-                    key: Box::new(DataType::Any),
-                    value: Box::new(DataType::Any),
-                },
-            ),
-            (
-                &["Файл", "File"][..],
-                DataType::Object(self.intern_string(interner, "Файл")),
-            ),
-            (
-                &["Терминал", "Terminal"][..],
-                DataType::Object(self.intern_string(interner, "Терминал")),
-            ),
-            (
-                &["Система", "System"][..],
-                DataType::Object(self.intern_string(interner, "Система")),
-            ),
-            (
-                &["ДатаВремя", "DateTime"][..],
-                DataType::Object(self.intern_string(interner, "ДатаВремя")),
-            ),
-            (
-                &["Поток", "Thread"][..],
-                DataType::Object(self.intern_string(interner, "Поток")),
-            ),
-            (
-                &["Мьютекс", "Mutex"][..],
-                DataType::Object(self.intern_string(interner, "Мьютекс")),
-            ),
-            (
-                &["БлокировкаЧтенияЗаписи", "RwLock"][..],
-                DataType::Object(self.intern_string(interner, "БлокировкаЧтенияЗаписи")),
-            ),
-            (
-                &["РегулярноеВыражение", "Regex"][..],
-                DataType::Object(self.intern_string(interner, "РегулярноеВыражение")),
-            ),
-            (&["модуль", "module"][..], DataType::Runtime(RuntimeType::Module)),
-            (&["ресурс", "resource"][..], DataType::Runtime(RuntimeType::Resource)),
-            (&["класс", "class"][..], DataType::Runtime(RuntimeType::Class)),
-        ];
+        for builtin in catalog::TYPES {
+            self.register_builtin_type(interner, builtin.names, builtin.spec, None);
+        }
 
-        for (names, dt) in builtins {
-            let id = self.add_type(dt);
-            for name in names {
-                let symbol = self.intern_string(interner, name);
-                self.type_cache.insert(symbol, id);
+        for class in catalog::CLASSES {
+            self.register_builtin_type(
+                interner,
+                class.names.names,
+                class.type_spec,
+                Some(class.names.canonical),
+            );
+        }
+    }
+
+    fn register_builtin_type(
+        &mut self,
+        interner: &SharedInterner,
+        names: &[&str],
+        spec: BuiltinTypeSpec,
+        object_name: Option<&str>,
+    ) {
+        let dt = match spec {
+            BuiltinTypeSpec::Number => DataType::Primitive(PrimitiveType::Number),
+            BuiltinTypeSpec::Text => DataType::Primitive(PrimitiveType::Text),
+            BuiltinTypeSpec::Boolean => DataType::Primitive(PrimitiveType::Boolean),
+            BuiltinTypeSpec::Float => DataType::Primitive(PrimitiveType::Float),
+            BuiltinTypeSpec::Pointer => DataType::Primitive(PrimitiveType::Pointer),
+            BuiltinTypeSpec::List => DataType::List(Box::new(DataType::Any)),
+            BuiltinTypeSpec::Array => DataType::Array(Box::new(DataType::Any)),
+            BuiltinTypeSpec::Dict => DataType::Dict {
+                key: Box::new(DataType::Any),
+                value: Box::new(DataType::Any),
+            },
+            BuiltinTypeSpec::Unit => DataType::Unit,
+            BuiltinTypeSpec::Any => DataType::Any,
+            BuiltinTypeSpec::Function => DataType::Function {
+                params: vec![],
+                return_type: Box::new(DataType::Any),
+            },
+            BuiltinTypeSpec::Object => {
+                DataType::Object(self.intern_string(interner, object_name.unwrap_or_default()))
             }
+            BuiltinTypeSpec::Module => DataType::Runtime(RuntimeType::Module),
+            BuiltinTypeSpec::Resource => DataType::Runtime(RuntimeType::Resource),
+            BuiltinTypeSpec::Class => DataType::Runtime(RuntimeType::Class),
+        };
+
+        let id = self.add_type(dt);
+        for name in names {
+            let symbol = self.intern_string(interner, name);
+            self.type_cache.insert(symbol, id);
         }
     }
 }

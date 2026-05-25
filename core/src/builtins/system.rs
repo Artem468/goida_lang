@@ -7,11 +7,12 @@ use std::sync::Arc;
 use string_interner::DefaultSymbol as Symbol;
 
 pub fn setup_system_class(interner_ref: &SharedInterner) -> (Symbol, SharedMut<ClassDefinition>) {
-    let name = interner_ref.write(|i| i.get_or_intern("Система"));
+    let name = interner_ref
+        .write(|i| i.get_or_intern(crate::builtins::catalog::class::SYSTEM.names.canonical));
     let mut class_def = ClassDefinition::new(name, Span::default());
 
     // --- Система.выход(код) ---
-    define_method!(class_def, interner_ref, @static "выход" => (_, args, _) {
+    define_method!(class_def, interner_ref, @static crate::builtins::catalog::method::EXIT.canonical => (_, args, _) {
         let code = match CallArgListExt::first_value(&args) {
             Some(Value::Number(n)) => *n as i32,
             _ => 0,
@@ -20,7 +21,7 @@ pub fn setup_system_class(interner_ref: &SharedInterner) -> (Symbol, SharedMut<C
     });
 
     // --- Система.паника(сообщение) ---
-    define_method!(class_def, interner_ref, @static "паника" => (_, args, span) {
+    define_method!(class_def, interner_ref, @static crate::builtins::catalog::method::PANIC.canonical => (_, args, span) {
         let msg = CallArgListExt::first_value(&args)
             .map(|v| v.to_string())
             .unwrap_or_else(|| "Неизвестная ошибка".into());
@@ -33,13 +34,13 @@ pub fn setup_system_class(interner_ref: &SharedInterner) -> (Symbol, SharedMut<C
     });
 
     // --- Система.платформа() -> Text ---
-    define_method!(class_def, interner_ref, @static "платформа" => (_, _, _) {
+    define_method!(class_def, interner_ref, @static crate::builtins::catalog::method::PLATFORM.canonical => (_, _, _) {
         let os = std::env::consts::OS; // "windows", "linux", "macos"
         Ok(Value::Text(os.to_string()))
     });
 
     // --- Система.аргументы() -> List ---
-    define_method!(class_def, interner_ref, @static "аргументы" => (_, _, _) {
+    define_method!(class_def, interner_ref, @static crate::builtins::catalog::method::ARGS.canonical => (_, _, _) {
         let args_os: Vec<Value> = std::env::args()
             .skip_while(|arg| arg != "--")
             .skip(1)
@@ -50,7 +51,7 @@ pub fn setup_system_class(interner_ref: &SharedInterner) -> (Symbol, SharedMut<C
     });
 
     // --- Система.время() -> Number (мс) ---
-    define_method!(class_def, interner_ref, @static "время" => (_, _, _) {
+    define_method!(class_def, interner_ref, @static crate::builtins::catalog::method::TIME.canonical => (_, _, _) {
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
@@ -59,7 +60,7 @@ pub fn setup_system_class(interner_ref: &SharedInterner) -> (Symbol, SharedMut<C
     });
 
     // --- Система.сон(миллисекунды) ---
-    define_method!(class_def, interner_ref, @static "сон" => (_, args, span) {
+    define_method!(class_def, interner_ref, @static crate::builtins::catalog::method::SLEEP.canonical => (_, args, span) {
         let ms = match CallArgListExt::first_value(&args) {
             Some(Value::Number(n)) => *n,
             _ => {
@@ -85,14 +86,14 @@ pub fn setup_system_class(interner_ref: &SharedInterner) -> (Symbol, SharedMut<C
     });
 
     // --- Система.сигнал() ---
-    define_method!(class_def, interner_ref, @static "сигнал" => (_, _, _) {
+    define_method!(class_def, interner_ref, @static crate::builtins::catalog::method::BEEP.canonical => (_, _, _) {
         print!("\x07");
         let _ = std::io::stdout().flush();
         Ok(Value::Empty)
     });
 
     // --- Система.окружение("SOME") ---
-    define_method!(class_def, interner_ref, @static "окружение" => (_, args, span) {
+    define_method!(class_def, interner_ref, @static crate::builtins::catalog::method::ENV.canonical => (_, args, span) {
         let arg = CallArgListExt::first_value(&args)
             .map(|v| v.to_string())
             .unwrap_or_else(|| "Неизвестная ошибка".into());

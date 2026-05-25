@@ -1,6 +1,6 @@
 #[macro_export]
 macro_rules! define_method {
-    ($class:expr, $interner:expr, $($(@$flag:ident)+)? $name:literal => ($interp:pat, $args:pat, $span:pat) $body:block) => {
+    ($class:expr, $interner:expr, $($(@$flag:ident)+)? $name:expr => ($interp:pat, $args:pat, $span:pat) $body:block) => {
         {
             let vis = {
                 #[allow(unused_mut)]
@@ -20,14 +20,22 @@ macro_rules! define_method {
                 s
             };
 
-            $class.add_method(
-                $interner.write(|i| i.get_or_intern($name)),
-                vis,
-                is_static,
-                $crate::interpreter::prelude::BuiltinFn(std::sync::Arc::new(move |$interp, $args, $span| {
+            let method = $crate::interpreter::prelude::BuiltinFn(std::sync::Arc::new(move |$interp, $args, $span| {
                     $body
-                })),
-            );
+                }));
+            let aliases = $crate::builtins::catalog::method_names($name);
+            if aliases.is_empty() {
+                $class.add_method($interner.write(|i| i.get_or_intern($name)), vis, is_static, method);
+            } else {
+                for alias in aliases {
+                    $class.add_method(
+                        $interner.write(|i| i.get_or_intern(alias)),
+                        vis.clone(),
+                        is_static,
+                        method.clone(),
+                    );
+                }
+            }
         }
     };
 }
@@ -43,14 +51,23 @@ macro_rules! define_constructor {
 
 #[macro_export]
 macro_rules! define_builtin {
-    ($interpreter:expr, $interner:expr, $name:literal => ($interp:pat, $args:pat, $span:pat) $body:block) => {
-        $interpreter.builtins.insert(
-            $interner.write(|i| i.get_or_intern($name)),
-            $crate::interpreter::prelude::BuiltinFn(std::sync::Arc::new(
-                move |$interp, $args, $span| $body,
-            )),
-        );
-    };
+    ($interpreter:expr, $interner:expr, $name:expr => ($interp:pat, $args:pat, $span:pat) $body:block) => {{
+        let builtin = $crate::interpreter::prelude::BuiltinFn(std::sync::Arc::new(
+            move |$interp, $args, $span| $body,
+        ));
+        let aliases = $crate::builtins::catalog::function_names($name);
+        if aliases.is_empty() {
+            $interpreter
+                .builtins
+                .insert($interner.write(|i| i.get_or_intern($name)), builtin);
+        } else {
+            for alias in aliases {
+                $interpreter
+                    .builtins
+                    .insert($interner.write(|i| i.get_or_intern(alias)), builtin.clone());
+            }
+        }
+    }};
 }
 
 #[macro_export]

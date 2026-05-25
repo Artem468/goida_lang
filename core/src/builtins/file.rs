@@ -9,7 +9,8 @@ use std::path::Path;
 use string_interner::DefaultSymbol as Symbol;
 
 pub fn setup_file_class(interner_ref: &SharedInterner) -> (Symbol, SharedMut<ClassDefinition>) {
-    let name = interner_ref.write(|i| i.get_or_intern("Файл"));
+    let name = interner_ref
+        .write(|i| i.get_or_intern(crate::builtins::catalog::class::FILE.names.canonical));
 
     let mut class_def = ClassDefinition::new(name, Span::default());
 
@@ -45,13 +46,13 @@ pub fn setup_file_class(interner_ref: &SharedInterner) -> (Symbol, SharedMut<Cla
     };
 
     // --- .существует() -> Bool ---
-    define_method!(class_def, interner_ref, "существует" => (_, args, _) {
+    define_method!(class_def, interner_ref, crate::builtins::catalog::method::EXISTS.canonical => (_, args, _) {
         let path = get_path(&args).unwrap_or_default();
         Ok(Value::Boolean(Path::new(&path).exists()))
     });
 
     // --- .читать() -> Text ---
-    define_method!(class_def, interner_ref, "читать" => (_, args, span) {
+    define_method!(class_def, interner_ref, crate::builtins::catalog::method::READ.canonical => (_, args, span) {
         let path = get_path(&args)?;
         let content = fs::read_to_string(path)
             .map_err(|e| runtime_error!(IOError, span, "{}", e.to_string()))?;
@@ -59,7 +60,7 @@ pub fn setup_file_class(interner_ref: &SharedInterner) -> (Symbol, SharedMut<Cla
     });
 
     // --- .записать(текст) ---
-    define_method!(class_def, interner_ref, "записать" => (_, args, span) {
+    define_method!(class_def, interner_ref, crate::builtins::catalog::method::WRITE.canonical => (_, args, span) {
         let path = get_path(&args)?;
         let text = if let Some(t) = CallArgListExt::get_value(&args, 1) {
             t.to_string()
@@ -78,7 +79,7 @@ pub fn setup_file_class(interner_ref: &SharedInterner) -> (Symbol, SharedMut<Cla
     });
 
     // --- .дописать(текст) ---
-    define_method!(class_def, interner_ref, "дописать" => (_, args, span) {
+    define_method!(class_def, interner_ref, crate::builtins::catalog::method::APPEND.canonical => (_, args, span) {
         let path = get_path(&args)?;
         let text = if let Some(t) = CallArgListExt::get_value(&args, 1) {
             t.to_string()
@@ -105,7 +106,7 @@ pub fn setup_file_class(interner_ref: &SharedInterner) -> (Symbol, SharedMut<Cla
     });
 
     // --- .удалить() ---
-    define_method!(class_def, interner_ref, "удалить" => (_, args, span) {
+    define_method!(class_def, interner_ref, crate::builtins::catalog::method::REMOVE.canonical => (_, args, span) {
         let path = get_path(&args)?;
         fs::remove_file(path)
             .map_err(|e| runtime_error!(IOError, span, "{}", e.to_string()))?;

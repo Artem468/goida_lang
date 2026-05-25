@@ -1,5 +1,6 @@
 use crate::ast::prelude::*;
 use crate::ast::program::{FieldData, MethodType};
+use crate::builtins::catalog::known_global_names;
 use crate::interpreter::prelude::{Module, Value};
 use crate::parser::prelude::{ParseError, Parser as ParserTrait};
 use std::collections::HashSet;
@@ -49,37 +50,7 @@ impl ParserTrait {
             Self::collect_module_exported_names(module, &mut names);
         }
 
-        for name in [
-            "печать",
-            "ввод",
-            "тип",
-            "является",
-            "число",
-            "строка",
-            "логический",
-            "дробь",
-            "список",
-            "массив",
-            "словарь",
-            "итератор",
-            "из_json",
-            "в_json",
-            "строка_из_указателя",
-            "Список",
-            "Массив",
-            "Словарь",
-            "Итератор",
-            "Строка",
-            "Файл",
-            "Система",
-            "Терминал",
-            "ДатаВремя",
-            "Поток",
-            "Мьютекс",
-            "БлокировкаЧтенияЗаписи",
-            "регулярное_выражение",
-            "РегулярноеВыражение",
-        ] {
+        for name in known_global_names() {
             names.insert(self.module.arena.intern_string(&self.interner, name));
         }
 

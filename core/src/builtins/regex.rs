@@ -123,7 +123,8 @@ fn capture_values(captures: regex::Captures<'_>) -> Value {
 }
 
 pub fn setup_regex_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassDefinition>) {
-    let name = interner.write(|i| i.get_or_intern("РегулярноеВыражение"));
+    let name =
+        interner.write(|i| i.get_or_intern(crate::builtins::catalog::class::REGEX.names.canonical));
     let mut class_def = ClassDefinition::new(name, Span::default());
 
     define_constructor!(class_def, (interp, args, span) {
@@ -148,12 +149,12 @@ pub fn setup_regex_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassD
         Ok(Value::Empty)
     });
 
-    define_method!(class_def, interner, "шаблон" => (interp, args, span) {
+    define_method!(class_def, interner, crate::builtins::catalog::method::PATTERN.canonical => (interp, args, span) {
         let (pattern, _) = get_regex_parts(interp, &args, span)?;
         Ok(Value::Text(pattern))
     });
 
-    define_method!(class_def, interner, "совпадает" => (interp, args, span) {
+    define_method!(class_def, interner, crate::builtins::catalog::method::MATCHES.canonical => (interp, args, span) {
         let (_, regex) = get_regex_parts(interp, &args, span)?;
         if let Some(Value::Text(text)) = CallArgListExt::get_value(&args, 1) {
             Ok(Value::Boolean(regex.is_match(text)))
@@ -162,7 +163,7 @@ pub fn setup_regex_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassD
         }
     });
 
-    define_method!(class_def, interner, "найти" => (interp, args, span) {
+    define_method!(class_def, interner, crate::builtins::catalog::method::FIND.canonical => (interp, args, span) {
         let (_, regex) = get_regex_parts(interp, &args, span)?;
         if let Some(Value::Text(text)) = CallArgListExt::get_value(&args, 1) {
             Ok(regex
@@ -174,7 +175,7 @@ pub fn setup_regex_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassD
         }
     });
 
-    define_method!(class_def, interner, "найти_все" => (interp, args, span) {
+    define_method!(class_def, interner, crate::builtins::catalog::method::FIND_ALL.canonical => (interp, args, span) {
         let (_, regex) = get_regex_parts(interp, &args, span)?;
         if let Some(Value::Text(text)) = CallArgListExt::get_value(&args, 1) {
             let matches = regex
@@ -187,7 +188,7 @@ pub fn setup_regex_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassD
         }
     });
 
-    define_method!(class_def, interner, "группы" => (interp, args, span) {
+    define_method!(class_def, interner, crate::builtins::catalog::method::GROUPS.canonical => (interp, args, span) {
         let (_, regex) = get_regex_parts(interp, &args, span)?;
         if let Some(Value::Text(text)) = CallArgListExt::get_value(&args, 1) {
             Ok(regex
@@ -199,7 +200,7 @@ pub fn setup_regex_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassD
         }
     });
 
-    define_method!(class_def, interner, "группы_все" => (interp, args, span) {
+    define_method!(class_def, interner, crate::builtins::catalog::method::GROUPS_ALL.canonical => (interp, args, span) {
         let (_, regex) = get_regex_parts(interp, &args, span)?;
         if let Some(Value::Text(text)) = CallArgListExt::get_value(&args, 1) {
             let groups = regex
@@ -212,7 +213,7 @@ pub fn setup_regex_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassD
         }
     });
 
-    define_method!(class_def, interner, "заменить" => (interp, args, span) {
+    define_method!(class_def, interner, crate::builtins::catalog::method::REPLACE.canonical => (interp, args, span) {
         let (_, regex) = get_regex_parts(interp, &args, span)?;
         if let (Some(Value::Text(text)), Some(Value::Text(replacement))) = (
             CallArgListExt::get_value(&args, 1),
@@ -224,7 +225,7 @@ pub fn setup_regex_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassD
         }
     });
 
-    define_method!(class_def, interner, "заменить_все" => (interp, args, span) {
+    define_method!(class_def, interner, crate::builtins::catalog::method::REPLACE_ALL.canonical => (interp, args, span) {
         let (_, regex) = get_regex_parts(interp, &args, span)?;
         if let (Some(Value::Text(text)), Some(Value::Text(replacement))) = (
             CallArgListExt::get_value(&args, 1),
@@ -236,7 +237,7 @@ pub fn setup_regex_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassD
         }
     });
 
-    define_method!(class_def, interner, "разделить" => (interp, args, span) {
+    define_method!(class_def, interner, crate::builtins::catalog::method::SPLIT.canonical => (interp, args, span) {
         let (_, regex) = get_regex_parts(interp, &args, span)?;
         if let Some(Value::Text(text)) = CallArgListExt::get_value(&args, 1) {
             let parts = regex
@@ -253,7 +254,7 @@ pub fn setup_regex_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassD
 }
 
 pub fn setup_regex_func(interpreter: &mut Interpreter, interner: &SharedInterner) {
-    define_builtin!(interpreter, interner, "регулярное_выражение" => (interp, arguments, span) {
+    define_builtin!(interpreter, interner, crate::builtins::catalog::function::REGEX.canonical => (interp, arguments, span) {
         expect_args!(arguments, 1, span, "выражение");
         if let Value::Text(pattern) = &arguments[0].value {
             build_regex_object(interp, pattern.clone(), span)

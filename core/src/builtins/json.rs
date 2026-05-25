@@ -4,7 +4,7 @@ use crate::traits::json::JsonParsable;
 use crate::{define_builtin, expect_args, runtime_error};
 
 pub fn setup_json_funcs(interpreter: &mut Interpreter, interner: &SharedInterner) {
-    define_builtin!(interpreter, interner, "из_json" => (_interpreter, arguments, span) {
+    define_builtin!(interpreter, interner, crate::builtins::catalog::function::FROM_JSON.canonical => (_interpreter, arguments, span) {
         expect_args!(arguments, 1, span, "из_json");
 
         let json_text = arguments[0].value.as_str().ok_or_else(|| {
@@ -18,7 +18,7 @@ pub fn setup_json_funcs(interpreter: &mut Interpreter, interner: &SharedInterner
         Ok(Value::from_json(parsed))
     });
 
-    define_builtin!(interpreter, interner, "в_json" => (_interpreter, arguments, span) {
+    define_builtin!(interpreter, interner, crate::builtins::catalog::function::TO_JSON.canonical => (_interpreter, arguments, span) {
             expect_args!(arguments, 1, span, "в_json");
 
             let json_value = arguments[0].value.to_json().map_err(|error| {

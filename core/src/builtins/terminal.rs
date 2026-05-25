@@ -7,7 +7,8 @@ use std::io::{stdin, stdout, Write};
 use string_interner::DefaultSymbol as Symbol;
 
 pub fn setup_terminal_class(interner_ref: &SharedInterner) -> (Symbol, SharedMut<ClassDefinition>) {
-    let name_sym = interner_ref.write(|i| i.get_or_intern("Терминал"));
+    let name_sym = interner_ref
+        .write(|i| i.get_or_intern(crate::builtins::catalog::class::TERMINAL.names.canonical));
     let mut class_def = ClassDefinition::new(name_sym, Span::default());
 
     let colors = [
@@ -73,7 +74,7 @@ pub fn setup_terminal_class(interner_ref: &SharedInterner) -> (Symbol, SharedMut
     }
 
     // --- Терминал.очистить() ---
-    define_method!(class_def, interner_ref, @static "очистить" => (_, _, _) {
+    define_method!(class_def, interner_ref, @static crate::builtins::catalog::method::CLEAR.canonical => (_, _, _) {
         // ANSI escape-последовательность для очистки экрана и возврата курсора в 1,1
         print!("\x1B[2J\x1B[1;1H");
         let _ = stdout().flush();
@@ -81,7 +82,7 @@ pub fn setup_terminal_class(interner_ref: &SharedInterner) -> (Symbol, SharedMut
     });
 
     // Метод: Терминал.заголовок(текст)
-    define_method!(class_def, interner_ref, @static "заголовок" => (_, args, _) {
+    define_method!(class_def, interner_ref, @static crate::builtins::catalog::method::TITLE.canonical => (_, args, _) {
         let title = CallArgListExt::get_value(&args, 1)
             .map(|v| v.to_string())
             .unwrap_or_default();
@@ -91,7 +92,7 @@ pub fn setup_terminal_class(interner_ref: &SharedInterner) -> (Symbol, SharedMut
     });
 
     // Метод: Терминал.скрыть_курсор()
-    define_method!(class_def, interner_ref, @static "скрыть_курсор" => (_, _, _) {
+    define_method!(class_def, interner_ref, @static crate::builtins::catalog::method::HIDE_CURSOR.canonical => (_, _, _) {
         // ANSI последовательность: скрыть курсор
         print!("\x1b[?25l");
         let _ = stdout().flush();
@@ -99,7 +100,7 @@ pub fn setup_terminal_class(interner_ref: &SharedInterner) -> (Symbol, SharedMut
     });
 
     // Метод: Терминал.показать_курсор()
-    define_method!(class_def, interner_ref, @static "показать_курсор" => (_, _, _) {
+    define_method!(class_def, interner_ref, @static crate::builtins::catalog::method::SHOW_CURSOR.canonical => (_, _, _) {
         // ANSI последовательность: показать курсор
         print!("\x1b[?25h");
         let _ = stdout().flush();
@@ -107,7 +108,7 @@ pub fn setup_terminal_class(interner_ref: &SharedInterner) -> (Symbol, SharedMut
     });
 
     // --- Терминал.позиция(х, у) ---
-    define_method!(class_def, interner_ref, @static "позиция" => (_, args, _span) {
+    define_method!(class_def, interner_ref, @static crate::builtins::catalog::method::POSITION.canonical => (_, args, _span) {
         let x = CallArgListExt::get_value(&args, 1)
             .and_then(|v| v.as_i64())
             .unwrap_or(1);
@@ -121,7 +122,7 @@ pub fn setup_terminal_class(interner_ref: &SharedInterner) -> (Symbol, SharedMut
     });
 
     // --- Терминал.пауза(сообщение) ---
-    define_method!(class_def, interner_ref, @static "пауза" => (_, args, _) {
+    define_method!(class_def, interner_ref, @static crate::builtins::catalog::method::PAUSE.canonical => (_, args, _) {
         let msg = CallArgListExt::get_value(&args, 1)
             .and_then(|v| v.as_str())
             .map(|s| s.as_str())

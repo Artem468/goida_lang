@@ -7,7 +7,11 @@ use std::ops::Range;
 use string_interner::Symbol;
 
 pub(crate) fn setup_macro_builtins(expander: &mut MacroExpander) -> Result<(), ParseError> {
-    expander.register_native("format", expand_format_macro);
+    for alias in
+        crate::builtins::catalog::macro_names(crate::builtins::catalog::macros::FORMAT.canonical)
+    {
+        expander.register_native(alias, expand_format_macro);
+    }
     Ok(())
 }
 
@@ -75,7 +79,9 @@ fn expand_format_macro(
             FormatPart::Text(text) if text.is_empty() => continue,
             FormatPart::Text(text) => vec![macro_token(Token::String(text), call.span.clone())],
             FormatPart::Placeholder => {
-                let tokens = value_parts[value_index].clone();
+                let mut tokens = vec![macro_token(Token::LParen, call.span.clone())];
+                tokens.extend(value_parts[value_index].clone());
+                tokens.push(macro_token(Token::RParen, call.span.clone()));
                 value_index += 1;
                 tokens
             }
