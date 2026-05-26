@@ -7,6 +7,7 @@ use std::{
 };
 
 use goida_core::ast::prelude::{ErrorData, Span};
+use goida_core::formatter::format_source;
 use goida_core::interpreter::prelude::RuntimeError;
 use goida_core::parser::prelude::{ParseError, Parser as ProgramParser};
 use goida_core::traits::prelude::CoreOperations;
@@ -74,6 +75,18 @@ enum Commands {
     },
     #[command(about = "Запустить интерактивный режим")]
     Repl,
+    #[command(about = "Format a .goida file")]
+    Fmt {
+        #[arg(help = "Path to a .goida file")]
+        file: String,
+        #[arg(long, help = "Rewrite the file in place")]
+        write: bool,
+    },
+    #[command(about = "Show macro expansion AST preview")]
+    ExpandMacros {
+        #[arg(help = "Path to a .goida file")]
+        file: String,
+    },
 }
 
 fn main() {
@@ -108,6 +121,18 @@ fn main() {
         Some(Commands::Remove { name }) => exit_on_package_error(package::remove_dependency(name)),
         Some(Commands::Venv { path }) => exit_on_package_error(package::create_venv(path)),
         Some(Commands::Repl) => run_repl(),
+        Some(Commands::Fmt { file, write }) => {
+            if let Err(err) = format_file(file, *write) {
+                eprintln!("{err}");
+                std::process::exit(1);
+            }
+        }
+        Some(Commands::ExpandMacros { file }) => {
+            if let Err(err) = expand_macros_file(file) {
+                eprintln!("{err}");
+                std::process::exit(1);
+            }
+        }
         None => {
             println!("Добро пожаловать в Гойда! Используйте --help для справки.");
         }
@@ -118,6 +143,40 @@ fn exit_on_package_error(result: Result<(), String>) {
     if let Err(err) = result {
         eprintln!("{err}");
         std::process::exit(1);
+    }
+}
+
+fn format_file(file: &str, write: bool) -> Result<(), String> {
+    let source = fs::read_to_string(file).map_err(|err| format!("{}: '{}'", err, file))?;
+    let formatted = format_source(&source);
+    if write {
+        fs::write(file, formatted).map_err(|err| format!("{}: '{}'", err, file))?;
+    } else {
+        print!("{formatted}");
+    }
+    Ok(())
+}
+
+fn expand_macros_file(file: &str) -> Result<(), String> {
+    let source = fs::read_to_string(file).map_err(|err| format!("{}: '{}'", err, file))?;
+    let parser = ProgramParser::new(
+        INTERPRETER.read().unwrap().interner.clone(),
+        file,
+        PathBuf::from(file),
+    );
+    match parser.macro_expansion_preview(&source) {
+        Ok(preview) => {
+            println!("{preview}");
+            Ok(())
+        }
+        Err(err) => {
+            let (kind, data) = match err {
+                ParseError::TypeError(e) => ("Ошибка типов", e),
+                ParseError::InvalidSyntax(e) => ("Ошибка синтаксиса", e),
+                ParseError::ImportError(e) => ("Ошибка импорта", e),
+            };
+            Err(format!("{kind}: {}", data.message))
+        }
     }
 }
 

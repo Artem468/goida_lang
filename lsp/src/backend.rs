@@ -1,3 +1,5 @@
+use crate::completion::{completion_items, module_member_completion_items};
+use crate::diagnostics::collect_lsp_diagnostics;
 use crate::document::{find_identifier_at_char_offset, Document};
 use crate::semantic::{
     collect_semantic_tokens, encode_semantic_tokens, TOKEN_MODIFIERS, TOKEN_TYPES,
@@ -45,10 +47,18 @@ impl LanguageServer for Backend {
 
         Ok(InitializeResult {
             capabilities: ServerCapabilities {
-                text_document_sync: Some(TextDocumentSyncCapability::Kind(
-                    TextDocumentSyncKind::FULL,
-                )),
+                text_document_sync: Some(text_document_sync_capability()),
                 definition_provider: Some(OneOf::Left(true)),
+                completion_provider: Some(CompletionOptions {
+                    resolve_provider: Some(false),
+                    trigger_characters: Some(vec![".".into()]),
+                    ..Default::default()
+                }),
+                document_formatting_provider: Some(OneOf::Left(true)),
+                execute_command_provider: Some(ExecuteCommandOptions {
+                    commands: vec!["goida.expandMacros".into()],
+                    ..Default::default()
+                }),
                 semantic_tokens_provider: Some(
                     SemanticTokensServerCapabilities::SemanticTokensOptions(
                         SemanticTokensOptions {
@@ -91,6 +101,29 @@ impl LanguageServer for Backend {
         }
     }
 
+    async fn did_save(&self, params: DidSaveTextDocumentParams) {
+        let uri = params.text_document.uri;
+        let text = match params.text {
+            Some(text) => Some(text),
+            None => uri
+                .to_file_path()
+                .ok()
+                .and_then(|path| fs::read_to_string(path).ok()),
+        };
+
+        if let Some(text) = text {
+            let document = Document::new(text);
+            self.state
+                .write()
+                .await
+                .documents
+                .insert(uri.clone(), document.clone());
+            self.validate(uri, &document).await;
+        } else {
+            self.client.publish_diagnostics(uri, Vec::new(), None).await;
+        }
+    }
+
     async fn did_close(&self, params: DidCloseTextDocumentParams) {
         let mut state = self.state.write().await;
         state.documents.remove(&params.text_document.uri);
@@ -102,6 +135,35 @@ impl LanguageServer for Backend {
         self.client
             .publish_diagnostics(params.text_document.uri, Vec::new(), None)
             .await;
+    }
+
+    async fn did_change_watched_files(&self, params: DidChangeWatchedFilesParams) {
+        for event in params.changes {
+            let uri = event.uri;
+            let Ok(path) = uri.to_file_path() else {
+                self.client.publish_diagnostics(uri, Vec::new(), None).await;
+                continue;
+            };
+
+            if event.typ == FileChangeType::DELETED {
+                self.state.write().await.modules.remove(&path);
+                self.client.publish_diagnostics(uri, Vec::new(), None).await;
+                continue;
+            }
+
+            let document = {
+                let state = self.state.read().await;
+                state.documents.get(&uri).cloned()
+            }
+            .or_else(|| fs::read_to_string(&path).ok().map(Document::new));
+
+            if let Some(document) = document {
+                self.validate(uri, &document).await;
+            } else {
+                self.state.write().await.modules.remove(&path);
+                self.client.publish_diagnostics(uri, Vec::new(), None).await;
+            }
+        }
     }
 
     async fn semantic_tokens_full(
@@ -128,6 +190,116 @@ impl LanguageServer for Backend {
             result_id: None,
             data: encoded,
         })))
+    }
+
+    async fn completion(&self, params: CompletionParams) -> Result<Option<CompletionResponse>> {
+        let uri = params.text_document_position.text_document.uri;
+        let position = params.text_document_position.position;
+        let Some(path) = uri.to_file_path().ok() else {
+            return Ok(None);
+        };
+
+        let document = {
+            let state = self.state.read().await;
+            state.documents.get(&uri).cloned()
+        }
+        .or_else(|| fs::read_to_string(&path).ok().map(Document::new));
+        let Some(document) = document else {
+            return Ok(None);
+        };
+        let cached = self.cached_module_for_uri(&uri, &path).await;
+
+        if let (Some(cached), Some(alias)) = (
+            cached.as_ref(),
+            module_alias_before_completion(
+                document.text(),
+                document.position_to_char_offset(position),
+            ),
+        ) {
+            if let Some(target) = self
+                .resolve_import_module(&cached.module, &path, &alias)
+                .await
+            {
+                return Ok(Some(CompletionResponse::Array(
+                    module_member_completion_items(&target.module, &self.interner),
+                )));
+            }
+        }
+
+        Ok(Some(CompletionResponse::Array(completion_items(
+            cached.as_ref().map(|cached| cached.module.as_ref()),
+            &self.interner,
+        ))))
+    }
+
+    async fn formatting(&self, params: DocumentFormattingParams) -> Result<Option<Vec<TextEdit>>> {
+        let uri = params.text_document.uri;
+        let document = {
+            let state = self.state.read().await;
+            state.documents.get(&uri).cloned()
+        }
+        .or_else(|| {
+            uri.to_file_path()
+                .ok()
+                .and_then(|path| fs::read_to_string(path).ok())
+                .map(Document::new)
+        });
+        let Some(document) = document else {
+            return Ok(None);
+        };
+
+        let end = document
+            .char_offset_to_position(document.text().chars().count())
+            .unwrap_or_else(|| Position::new(0, 0));
+        Ok(Some(vec![TextEdit {
+            range: Range::new(Position::new(0, 0), end),
+            new_text: goida_core::formatter::format_source(document.text()),
+        }]))
+    }
+
+    async fn execute_command(
+        &self,
+        params: ExecuteCommandParams,
+    ) -> Result<Option<serde_json::Value>> {
+        if params.command != "goida.expandMacros" {
+            return Ok(None);
+        }
+        let Some(uri) = params
+            .arguments
+            .first()
+            .and_then(|value| value.as_str())
+            .and_then(|value| Url::parse(value).ok())
+        else {
+            return Ok(Some(serde_json::Value::String(macro_preview_error(
+                "Expected first argument to be a document URI",
+            ))));
+        };
+
+        let text = {
+            let state = self.state.read().await;
+            state.documents.get(&uri).map(|doc| doc.text().to_string())
+        }
+        .or_else(|| {
+            uri.to_file_path()
+                .ok()
+                .and_then(|path| fs::read_to_string(path).ok())
+        });
+        let Some(text) = text else {
+            return Ok(Some(serde_json::Value::String(macro_preview_error(
+                "Document is not available",
+            ))));
+        };
+
+        let path = uri
+            .to_file_path()
+            .unwrap_or_else(|_| Path::new("macro-preview.goida").to_path_buf());
+        let filename = path.to_string_lossy().to_string();
+        let parser = Parser::new(self.interner.clone(), &filename, path);
+        let preview = match parser.macro_expansion_preview(&text) {
+            Ok(preview) => preview,
+            Err(err) => macro_preview_error(&format_parse_error(err)),
+        };
+        Ok(Some(serde_json::Value::String(preview)))
     }
 
     async fn goto_definition(
@@ -189,7 +361,14 @@ impl Backend {
 
         let mut diagnostics = Vec::new();
         match self.parse_and_cache_module(&path, document).await {
-            Ok(_) => {}
+            Ok(cached) => {
+                diagnostics.extend(collect_lsp_diagnostics(
+                    &cached.module,
+                    &self.interner,
+                    document.text(),
+                    document.line_starts(),
+                ));
+            }
             Err(err) => {
                 let (msg, err_data) = match err {
                     ParseError::TypeError(e) => ("Ошибка типов", e),
@@ -253,7 +432,7 @@ impl Backend {
     ) -> std::result::Result<CachedModule, ParseError> {
         let filename = path.to_string_lossy();
         let module = match Parser::new(self.interner.clone(), &filename, path.to_path_buf())
-            .parse(document.text())
+            .parse_unvalidated(document.text())
         {
             Ok(module) => module,
             Err(err) => {
@@ -323,6 +502,20 @@ impl Backend {
         span_to_location(&cached.document, uri, symbol.span)
     }
 
+    async fn resolve_import_module(
+        &self,
+        module: &Module,
+        current_file: &Path,
+        module_alias: &str,
+    ) -> Option<CachedModule> {
+        let imports = collect_imports(module, &self.interner);
+        let import_path = imports.get(module_alias)?;
+
+        let workspace_roots = self.state.read().await.workspace_roots.clone();
+        let target_file = resolve_import_path(current_file, import_path, &workspace_roots)?;
+        self.cached_module_for_path(&target_file).await
+    }
+
     fn resolve_local_definition(
         &self,
         cached: &CachedModule,
@@ -373,4 +566,78 @@ fn span_to_location(document: &Document, uri: Url, span: Span) -> Option<Locatio
     let start = document.char_offset_to_position(range.start)?;
     let end = document.char_offset_to_position(range.end)?;
     Some(Location::new(uri, Range::new(start, end)))
+}
+
+fn format_parse_error(err: ParseError) -> String {
+    let (kind, data) = match err {
+        ParseError::TypeError(e) => ("Ошибка типов", e),
+        ParseError::InvalidSyntax(e) => ("Некорректный синтаксис", e),
+        ParseError::ImportError(e) => ("Ошибка импортов", e),
+    };
+    format!("{kind}: {}", data.message)
+}
+
+fn macro_preview_error(message: &str) -> String {
+    format!("GOIDA_MACRO_PREVIEW_ERROR\n{message}")
+}
+
+fn module_alias_before_completion(text: &str, char_offset: usize) -> Option<String> {
+    let chars = text.chars().collect::<Vec<_>>();
+    let mut pos = char_offset.min(chars.len());
+
+    while pos > 0 && is_identifier_continue(chars[pos - 1]) {
+        pos -= 1;
+    }
+    if pos == 0 || chars[pos - 1] != '.' {
+        return None;
+    }
+
+    let alias_end = pos - 1;
+    let mut alias_start = alias_end;
+    while alias_start > 0 && is_identifier_continue(chars[alias_start - 1]) {
+        alias_start -= 1;
+    }
+    if alias_start == alias_end || !is_identifier_start(chars[alias_start]) {
+        return None;
+    }
+
+    Some(chars[alias_start..alias_end].iter().collect())
+}
+
+fn is_identifier_start(ch: char) -> bool {
+    ch == '_' || ch.is_alphabetic()
+}
+
+fn is_identifier_continue(ch: char) -> bool {
+    ch == '_' || ch.is_alphanumeric()
+}
+
+fn text_document_sync_capability() -> TextDocumentSyncCapability {
+    TextDocumentSyncCapability::Options(TextDocumentSyncOptions {
+        open_close: Some(true),
+        change: Some(TextDocumentSyncKind::FULL),
+        save: Some(TextDocumentSyncSaveOptions::SaveOptions(SaveOptions {
+            include_text: Some(true),
+        })),
+        ..Default::default()
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn sync_capability_requests_full_text_on_save() {
+        let TextDocumentSyncCapability::Options(options) = text_document_sync_capability() else {
+            panic!("sync capability should use detailed options");
+        };
+
+        assert_eq!(options.open_close, Some(true));
+        assert_eq!(options.change, Some(TextDocumentSyncKind::FULL));
+        let Some(TextDocumentSyncSaveOptions::SaveOptions(save)) = options.save else {
+            panic!("sync capability should include save options");
+        };
+        assert_eq!(save.include_text, Some(true));
+    }
 }

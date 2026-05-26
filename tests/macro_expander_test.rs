@@ -109,6 +109,27 @@ fn test_builtin_format_macro_formats_values() {
 }
 
 #[test]
+fn test_builtin_format_macro_accepts_method_call_arguments() {
+    let source = r#"
+class Response {
+    public function error(this) {
+        return "boom"
+    }
+}
+
+response = new Response()
+print(format!("Error: {}", response.error()))
+"#;
+
+    let (ok, out, err) = run_source("macro_builtin_format_method_call_test", source);
+    assert!(
+        ok,
+        "format macro method arg failed\nSTDOUT: {out}\nSTDERR: {err}"
+    );
+    assert_eq!("Error: boom\n", out);
+}
+
+#[test]
 fn test_macro_with_multiple_match_rules_uses_first_matching_rule() {
     let source = r#"
 macro choose {

@@ -18,15 +18,34 @@ impl ParserTrait {
         self.module.arena.init_builtin_types(&self.interner);
         self.init_builtin_error_classes();
 
+        self.parse_into_module(code)?;
+        self.validate_module_names()?;
+        self.module.arena.optimize_all(&self.interner);
+        Ok(self.module)
+    }
+
+    pub fn parse_unvalidated(mut self, code: &str) -> Result<Module, ParseError> {
+        self.module.arena.init_builtin_types(&self.interner);
+        self.init_builtin_error_classes();
+        self.parse_into_module(code)?;
+        self.module.arena.optimize_all(&self.interner);
+        Ok(self.module)
+    }
+
+    pub fn macro_expansion_preview(&self, code: &str) -> Result<String, ParseError> {
         let syntax = grammar::ProgramParser::new()
             .parse(lex(code))
             .map_err(|err| self.convert_parse_error(code, err))?;
         let syntax = self.expand_macros(syntax)?;
+        Ok(format!("{syntax:#?}"))
+    }
 
-        self.build_program(syntax)?;
-        self.validate_module_names()?;
-        self.module.arena.optimize_all(&self.interner);
-        Ok(self.module)
+    fn parse_into_module(&mut self, code: &str) -> Result<(), ParseError> {
+        let syntax = grammar::ProgramParser::new()
+            .parse(lex(code))
+            .map_err(|err| self.convert_parse_error(code, err))?;
+        let syntax = self.expand_macros(syntax)?;
+        self.build_program(syntax)
     }
 
     fn convert_parse_error(
@@ -113,5 +132,34 @@ fn token_name(token: &Token) -> String {
         Token::Number(value) => value.to_string(),
         Token::Float(value) => value.to_string(),
         other => format!("{:?}", other),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::interpreter::prelude::SharedInterner;
+    use crate::parser::prelude::Parser;
+    use crate::shared::SharedMut;
+    use std::path::PathBuf;
+    use string_interner::StringInterner;
+
+    #[test]
+    fn macro_expansion_preview_contains_expanded_program_without_macro_definition() {
+        let interner: SharedInterner = SharedMut::new(StringInterner::new());
+        let parser = Parser::new(interner, "preview_test", PathBuf::from("preview.goida"));
+        let preview = parser
+            .macro_expansion_preview(
+                r#"
+macro twice {
+    ($x:expr) => { $x + $x };
+}
+
+value = twice!(2)
+"#,
+            )
+            .expect("macro preview should expand");
+
+        assert!(preview.contains("Binary"));
+        assert!(!preview.contains("MacroDefinition"));
     }
 }

@@ -829,6 +829,7 @@ name = "lsp"
 version = "0.1.0"
 dependencies = [
  "goida_core",
+ "serde_json",
  "string-interner",
  "tokio",
  "tower-lsp",

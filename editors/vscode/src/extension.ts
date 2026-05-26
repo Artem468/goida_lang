@@ -1,6 +1,12 @@
 import * as fs from "fs";
 import * as path from "path";
-import { ExtensionContext, window, workspace } from "vscode";
+import {
+    commands,
+    ExtensionContext,
+    ViewColumn,
+    window,
+    workspace,
+} from "vscode";
 import { LanguageClient, LanguageClientOptions, ServerOptions } from "vscode-languageclient/node";
 
 function findServerBinary(context: ExtensionContext): string | undefined {
@@ -53,5 +59,46 @@ export function activate(context: ExtensionContext) {
     );
 
     context.subscriptions.push(client);
-    void client.start();
+    const clientReady = client.start();
+
+    context.subscriptions.push(
+        commands.registerCommand("goida.showMacroExpansion", async () => {
+            const editor = window.activeTextEditor;
+            if (!editor || editor.document.languageId !== "goida") {
+                await window.showInformationMessage("Open a Goida file to preview macro expansion.");
+                return;
+            }
+
+            await clientReady;
+            const result = await client.sendRequest<string | null>("workspace/executeCommand", {
+                command: "goida.expandMacros",
+                arguments: [editor.document.uri.toString()],
+            });
+
+            if (result === null) {
+                await window.showWarningMessage("Goida macro expansion preview returned no result.");
+                return;
+            }
+
+            if (result.startsWith("GOIDA_MACRO_PREVIEW_ERROR\n")) {
+                await window.showErrorMessage(
+                    result.replace("GOIDA_MACRO_PREVIEW_ERROR\n", ""),
+                );
+                return;
+            }
+
+            const document = await workspace.openTextDocument({
+                content: result,
+                language: "plaintext",
+            });
+            await window.showTextDocument(document, {
+                viewColumn: ViewColumn.Beside,
+                preview: true,
+            });
+            await commands
+                .executeCommand("workbench.action.files.setActiveEditorReadonlyInSession")
+                .then(undefined, () => undefined);
+        }),
+    );
+    void clientReady;
 }

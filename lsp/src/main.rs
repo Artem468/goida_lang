@@ -1,4 +1,6 @@
 mod backend;
+mod completion;
+mod diagnostics;
 mod document;
 mod semantic;
 mod state;
