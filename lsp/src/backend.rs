@@ -45,9 +45,7 @@ impl LanguageServer for Backend {
 
         Ok(InitializeResult {
             capabilities: ServerCapabilities {
-                text_document_sync: Some(TextDocumentSyncCapability::Kind(
-                    TextDocumentSyncKind::FULL,
-                )),
+                text_document_sync: Some(text_document_sync_capability()),
                 definition_provider: Some(OneOf::Left(true)),
                 semantic_tokens_provider: Some(
                     SemanticTokensServerCapabilities::SemanticTokensOptions(
@@ -91,6 +89,29 @@ impl LanguageServer for Backend {
         }
     }
 
+    async fn did_save(&self, params: DidSaveTextDocumentParams) {
+        let uri = params.text_document.uri;
+        let text = match params.text {
+            Some(text) => Some(text),
+            None => uri
+                .to_file_path()
+                .ok()
+                .and_then(|path| fs::read_to_string(path).ok()),
+        };
+
+        if let Some(text) = text {
+            let document = Document::new(text);
+            self.state
+                .write()
+                .await
+                .documents
+                .insert(uri.clone(), document.clone());
+            self.validate(uri, &document).await;
+        } else {
+            self.client.publish_diagnostics(uri, Vec::new(), None).await;
+        }
+    }
+
     async fn did_close(&self, params: DidCloseTextDocumentParams) {
         let mut state = self.state.write().await;
         state.documents.remove(&params.text_document.uri);
@@ -102,6 +123,35 @@ impl LanguageServer for Backend {
         self.client
             .publish_diagnostics(params.text_document.uri, Vec::new(), None)
             .await;
+    }
+
+    async fn did_change_watched_files(&self, params: DidChangeWatchedFilesParams) {
+        for event in params.changes {
+            let uri = event.uri;
+            let Ok(path) = uri.to_file_path() else {
+                self.client.publish_diagnostics(uri, Vec::new(), None).await;
+                continue;
+            };
+
+            if event.typ == FileChangeType::DELETED {
+                self.state.write().await.modules.remove(&path);
+                self.client.publish_diagnostics(uri, Vec::new(), None).await;
+                continue;
+            }
+
+            let document = {
+                let state = self.state.read().await;
+                state.documents.get(&uri).cloned()
+            }
+            .or_else(|| fs::read_to_string(&path).ok().map(Document::new));
+
+            if let Some(document) = document {
+                self.validate(uri, &document).await;
+            } else {
+                self.state.write().await.modules.remove(&path);
+                self.client.publish_diagnostics(uri, Vec::new(), None).await;
+            }
+        }
     }
 
     async fn semantic_tokens_full(
@@ -373,4 +423,34 @@ fn span_to_location(document: &Document, uri: Url, span: Span) -> Option<Locatio
     let start = document.char_offset_to_position(range.start)?;
     let end = document.char_offset_to_position(range.end)?;
     Some(Location::new(uri, Range::new(start, end)))
+}
+
+fn text_document_sync_capability() -> TextDocumentSyncCapability {
+    TextDocumentSyncCapability::Options(TextDocumentSyncOptions {
+        open_close: Some(true),
+        change: Some(TextDocumentSyncKind::FULL),
+        save: Some(TextDocumentSyncSaveOptions::SaveOptions(SaveOptions {
+            include_text: Some(true),
+        })),
+        ..Default::default()
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn sync_capability_requests_full_text_on_save() {
+        let TextDocumentSyncCapability::Options(options) = text_document_sync_capability() else {
+            panic!("sync capability should use detailed options");
+        };
+
+        assert_eq!(options.open_close, Some(true));
+        assert_eq!(options.change, Some(TextDocumentSyncKind::FULL));
+        let Some(TextDocumentSyncSaveOptions::SaveOptions(save)) = options.save else {
+            panic!("sync capability should include save options");
+        };
+        assert_eq!(save.include_text, Some(true));
+    }
 }
