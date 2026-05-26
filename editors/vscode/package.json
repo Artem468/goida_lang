@@ -12,8 +12,7 @@
         "vscode": "^1.75.0"
     },
     "activationEvents": [
-        "onLanguage:goida",
-        "onCommand:goida.showMacroExpansion"
+        "onLanguage:goida"
     ],
     "main": "./out/extension.js",
     "scripts": {
@@ -46,21 +45,6 @@
                 "language": "goida",
                 "scopeName": "source.goida",
                 "path": "./syntaxes/goida.tmLanguage.json"
-            }
-        ],
-        "commands": [
-            {
-                "command": "goida.showMacroExpansion",
-                "title": "Goida: Show Macro Expansion Preview",
-                "category": "Goida"
-            }
-        ],
-        "keybindings": [
-            {
-                "command": "goida.showMacroExpansion",
-                "key": "ctrl+k ctrl+m",
-                "mac": "cmd+k cmd+m",
-                "when": "editorTextFocus && editorLangId == goida"
             }
         ],
         "configuration": {

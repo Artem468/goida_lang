@@ -55,10 +55,6 @@ impl LanguageServer for Backend {
                     ..Default::default()
                 }),
                 document_formatting_provider: Some(OneOf::Left(true)),
-                execute_command_provider: Some(ExecuteCommandOptions {
-                    commands: vec!["goida.expandMacros".into()],
-                    ..Default::default()
-                }),
                 semantic_tokens_provider: Some(
                     SemanticTokensServerCapabilities::SemanticTokensOptions(
                         SemanticTokensOptions {
@@ -255,51 +251,6 @@ impl LanguageServer for Backend {
             range: Range::new(Position::new(0, 0), end),
             new_text: goida_core::formatter::format_source(document.text()),
         }]))
-    }
-
-    async fn execute_command(
-        &self,
-        params: ExecuteCommandParams,
-    ) -> Result<Option<serde_json::Value>> {
-        if params.command != "goida.expandMacros" {
-            return Ok(None);
-        }
-        let Some(uri) = params
-            .arguments
-            .first()
-            .and_then(|value| value.as_str())
-            .and_then(|value| Url::parse(value).ok())
-        else {
-            return Ok(Some(serde_json::Value::String(macro_preview_error(
-                "Expected first argument to be a document URI",
-            ))));
-        };
-
-        let text = {
-            let state = self.state.read().await;
-            state.documents.get(&uri).map(|doc| doc.text().to_string())
-        }
-        .or_else(|| {
-            uri.to_file_path()
-                .ok()
-                .and_then(|path| fs::read_to_string(path).ok())
-        });
-        let Some(text) = text else {
-            return Ok(Some(serde_json::Value::String(macro_preview_error(
-                "Document is not available",
-            ))));
-        };
-
-        let path = uri
-            .to_file_path()
-            .unwrap_or_else(|_| Path::new("macro-preview.goida").to_path_buf());
-        let filename = path.to_string_lossy().to_string();
-        let parser = Parser::new(self.interner.clone(), &filename, path);
-        let preview = match parser.macro_expansion_preview(&text) {
-            Ok(preview) => preview,
-            Err(err) => macro_preview_error(&format_parse_error(err)),
-        };
-        Ok(Some(serde_json::Value::String(preview)))
     }
 
     async fn goto_definition(
@@ -566,19 +517,6 @@ fn span_to_location(document: &Document, uri: Url, span: Span) -> Option<Locatio
     let start = document.char_offset_to_position(range.start)?;
     let end = document.char_offset_to_position(range.end)?;
     Some(Location::new(uri, Range::new(start, end)))
-}
-
-fn format_parse_error(err: ParseError) -> String {
-    let (kind, data) = match err {
-        ParseError::TypeError(e) => ("Ошибка типов", e),
-        ParseError::InvalidSyntax(e) => ("Некорректный синтаксис", e),
-        ParseError::ImportError(e) => ("Ошибка импортов", e),
-    };
-    format!("{kind}: {}", data.message)
-}
-
-fn macro_preview_error(message: &str) -> String {
-    format!("GOIDA_MACRO_PREVIEW_ERROR\n{message}")
 }
 
 fn module_alias_before_completion(text: &str, char_offset: usize) -> Option<String> {
