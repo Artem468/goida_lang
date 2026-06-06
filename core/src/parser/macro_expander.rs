@@ -141,9 +141,9 @@ impl MacroExpander {
                         expanded.extend(items);
                         continue;
                     }
-                    let stmt = self.expand_stmt(stmt, module_name)?;
+                    let stmt = self.expand_stmt(*stmt, module_name)?;
                     expanded.push(syn::Spanned::new(
-                        syn::ItemKind::Statement(stmt),
+                        syn::ItemKind::Statement(Box::new(stmt)),
                         item.span.start,
                         item.span.end,
                     ));
@@ -213,7 +213,7 @@ impl MacroExpander {
                 variable,
                 init: self.expand_expr(init, module_name)?,
                 condition: self.expand_expr(condition, module_name)?,
-                update: self.expand_for_update(update, module_name)?,
+                update: Box::new(self.expand_for_update(*update, module_name)?),
                 body: self.expand_items(body, module_name)?,
             },
             syn::StmtKind::ForEach {
@@ -656,7 +656,7 @@ fn parse_items(
 ) -> Result<Vec<syn::Item>, ParseError> {
     let stream = expansion_stream(tokens, true);
     grammar::ProgramParser::new()
-        .parse(stream.into_iter())
+        .parse(stream)
         .map(|program| program.items)
         .map_err(|_| {
             macro_error_with_module(
@@ -674,7 +674,7 @@ fn parse_stmt(
 ) -> Result<syn::Stmt, ParseError> {
     let stream = expansion_stream(tokens, true);
     grammar::StmtExpansionParser::new()
-        .parse(stream.into_iter())
+        .parse(stream)
         .map_err(|_| {
             macro_error_with_module(
                 module_name,
@@ -694,7 +694,7 @@ fn parse_expr(
     }
     let stream = expansion_stream(tokens, false);
     grammar::ExprExpansionParser::new()
-        .parse(stream.into_iter())
+        .parse(stream)
         .map_err(|_| {
             macro_error_with_module(
                 module_name,

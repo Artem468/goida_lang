@@ -44,7 +44,7 @@ Item: Item = {
     <l:@L> <item:Class> <r:@R> => Spanned::new(ItemKind::Class(item), l, r),
     <l:@L> <item:Library> <r:@R> => Spanned::new(ItemKind::Library(item), l, r),
     <l:@L> <item:MacroDefinition> <r:@R> => Spanned::new(ItemKind::MacroDefinition(item), l, r),
-    <l:@L> <stmt:Stmt> <r:@R> => Spanned::new(ItemKind::Statement(Spanned::new(stmt.node, l, r)), l, r),
+    <l:@L> <stmt:Stmt> <r:@R> => Spanned::new(ItemKind::Statement(Box::new(Spanned::new(stmt.node, l, r))), l, r),
 };
 
 IdentName: String = {
@@ -418,7 +418,7 @@ Stmt: Stmt = {
         variable,
         init,
         condition,
-        update,
+        update: Box::new(update),
         body,
     }, l, r),
     <l:@L> "for" <variable:IdentName> "from" <iterable:Expr> <body:Block> <r:@R> => Spanned::new(StmtKind::ForEach {

@@ -36,7 +36,7 @@ impl ParserTrait {
                 span,
                 "Макросы должны быть раскрыты до построения AST".into(),
             ))),
-            syn::ItemKind::Statement(stmt) => self.build_statement(stmt),
+            syn::ItemKind::Statement(stmt) => self.build_statement(*stmt),
         }
     }
 
@@ -329,7 +329,7 @@ impl ParserTrait {
             } => {
                 let init = self.build_expr(init)?;
                 let condition = self.build_expr(condition)?;
-                let update = self.build_for_update(update)?;
+                let update = self.build_for_update(*update)?;
                 let body_items = self.build_items_as_block(body)?;
                 let body = self
                     .module

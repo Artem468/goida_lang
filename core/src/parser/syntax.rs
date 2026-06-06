@@ -32,7 +32,7 @@ pub(crate) enum ItemKind {
     Class(Class),
     Library(Library),
     MacroDefinition(MacroDefinition),
-    Statement(Stmt),
+    Statement(Box<Stmt>),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -239,7 +239,7 @@ pub(crate) enum StmtKind {
         variable: String,
         init: Expr,
         condition: Expr,
-        update: ForUpdate,
+        update: Box<ForUpdate>,
         body: Vec<Item>,
     },
     ForEach {

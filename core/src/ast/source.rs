@@ -1,12 +1,12 @@
 use ariadne::{Cache, Source};
-use std::collections::HashMap;
+use std::collections::{hash_map::Entry, HashMap};
 use std::fmt::{Debug, Display};
 use std::sync::RwLock;
 
 #[derive(Debug)]
 /// File cache used by diagnostics to retrieve source text by path.
 pub struct SourceManager {
-    pub files: RwLock<HashMap<String, Source<String>>>,
+    files: RwLock<HashMap<String, Box<Source<String>>>>,
 }
 
 impl SourceManager {
@@ -20,10 +20,10 @@ impl SourceManager {
     /// Loads a file into the cache if it is not present yet.
     pub fn load_file(&self, path: &str) {
         let mut files = self.files.write().unwrap();
-        if !files.contains_key(path) {
-            if let Ok(content) = std::fs::read_to_string(path) {
+        if let Entry::Vacant(entry) = files.entry(path.to_string()) {
+            if let Ok(content) = std::fs::read_to_string(entry.key()) {
                 let normalized = content.replace("\r\n", "\n");
-                files.insert(path.to_string(), Source::from(normalized));
+                entry.insert(Box::new(Source::from(normalized)));
             }
         }
     }
@@ -72,21 +72,56 @@ impl<'a> Cache<&'a String> for &SourceManager {
         let path_str: &str = path;
 
         if let Some(source) = self.files.read().unwrap().get(path_str) {
-            return Ok::<&Source, String>(unsafe {
-                std::mem::transmute::<&Source, &Source>(source)
-            });
+            let source = source.as_ref() as *const Source<String>;
+            // Sources are boxed, never replaced or removed, and cannot outlive the manager.
+            return Ok::<&Source, String>(unsafe { &*source });
         }
 
         let content =
             std::fs::read_to_string(path).map_err(|e| format!("Ошибка чтения {}: {}", path, e))?;
 
         let mut map = self.files.write().unwrap();
-        map.insert(path_str.to_string(), Source::from(content));
+        let source = map
+            .entry(path_str.to_string())
+            .or_insert_with(|| Box::new(Source::from(content)))
+            .as_ref() as *const Source<String>;
 
-        Ok(unsafe { std::mem::transmute::<&Source, &Source>(map.get(path_str).unwrap()) })
+        // Dropping the lock guard cannot move the boxed source.
+        Ok(unsafe { &*source })
     }
 
     fn display<'d>(&self, id: &'d &'a String) -> Option<impl Display + 'd> {
         Some(id.to_string())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn cached_source_address_stays_stable_when_map_grows() {
+        let manager = SourceManager::new();
+        let path = String::from("first");
+        manager
+            .files
+            .write()
+            .unwrap()
+            .insert(path.clone(), Box::new(Source::from(String::from("first"))));
+
+        let mut cache = &manager;
+        let original = cache.fetch(&&path).unwrap() as *const Source<String>;
+
+        let mut files = manager.files.write().unwrap();
+        for index in 0..10_000 {
+            files.insert(
+                format!("source-{index}"),
+                Box::new(Source::from(index.to_string())),
+            );
+        }
+        drop(files);
+
+        let current = cache.fetch(&&path).unwrap() as *const Source<String>;
+        assert_eq!(original, current);
     }
 }
