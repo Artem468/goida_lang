@@ -1,5 +1,5 @@
 use goida_core::ast::prelude::StatementKind;
-use goida_core::builtins::catalog;
+use goida_core::builtins::registry::BUILTINS;
 use goida_core::interpreter::prelude::{Module, SharedInterner};
 use tower_lsp::lsp_types::{CompletionItem, CompletionItemKind};
 
@@ -9,7 +9,7 @@ pub(crate) fn completion_items(
 ) -> Vec<CompletionItem> {
     let mut items = Vec::new();
 
-    for entry in catalog::FUNCTIONS {
+    for entry in BUILTINS.functions() {
         push_names(
             &mut items,
             entry.names,
@@ -17,7 +17,7 @@ pub(crate) fn completion_items(
             "builtin function",
         );
     }
-    for entry in catalog::MACROS {
+    for entry in BUILTINS.macros() {
         push_names(
             &mut items,
             entry.names,
@@ -25,7 +25,7 @@ pub(crate) fn completion_items(
             "builtin macro",
         );
     }
-    for class in catalog::CLASSES {
+    for class in BUILTINS.classes() {
         push_names(
             &mut items,
             class.names.names,
@@ -33,7 +33,7 @@ pub(crate) fn completion_items(
             "builtin class",
         );
     }
-    for ty in catalog::TYPES {
+    for ty in BUILTINS.types() {
         push_names(
             &mut items,
             ty.names,
@@ -41,7 +41,7 @@ pub(crate) fn completion_items(
             "builtin type",
         );
     }
-    for entry in catalog::METHODS {
+    for entry in BUILTINS.methods() {
         push_names(
             &mut items,
             entry.names,

@@ -5,7 +5,7 @@ use crate::ast::prelude::{
     BinaryOperator, DataType, ExprId, ExpressionKind, ExpressionNode, LiteralValue, PrimitiveType,
     RuntimeType, Span, StatementKind, StatementNode, StmtId, TypeId,
 };
-use crate::builtins::catalog::{self, BuiltinTypeSpec};
+use crate::builtins::registry::BuiltinTypeSpec;
 use crate::interpreter::prelude::SharedInterner;
 
 #[derive(Debug, Clone)]
@@ -159,23 +159,7 @@ impl AstArena {
         }
     }
 
-    /// Registers built-in language and runtime types in the arena cache.
-    pub fn init_builtin_types(&mut self, interner: &SharedInterner) {
-        for builtin in catalog::TYPES {
-            self.register_builtin_type(interner, builtin.names, builtin.spec, None);
-        }
-
-        for class in catalog::CLASSES {
-            self.register_builtin_type(
-                interner,
-                class.names.names,
-                class.type_spec,
-                Some(class.names.canonical),
-            );
-        }
-    }
-
-    fn register_builtin_type(
+    pub(crate) fn register_builtin_type(
         &mut self,
         interner: &SharedInterner,
         names: &[&str],

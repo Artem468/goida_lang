@@ -23,7 +23,7 @@ macro_rules! define_method {
             let method = $crate::interpreter::prelude::BuiltinFn(std::sync::Arc::new(move |$interp, $args, $span| {
                     $body
                 }));
-            let aliases = $crate::builtins::catalog::method_names($name);
+            let aliases = $crate::builtins::registry::BUILTINS.method_names($name);
             if aliases.is_empty() {
                 $class.add_method($interner.write(|i| i.get_or_intern($name)), vis, is_static, method);
             } else {
@@ -55,7 +55,7 @@ macro_rules! define_builtin {
         let builtin = $crate::interpreter::prelude::BuiltinFn(std::sync::Arc::new(
             move |$interp, $args, $span| $body,
         ));
-        let aliases = $crate::builtins::catalog::function_names($name);
+        let aliases = $crate::builtins::registry::BUILTINS.function_names($name);
         if aliases.is_empty() {
             $interpreter
                 .builtins

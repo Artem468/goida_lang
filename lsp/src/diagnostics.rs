@@ -1,6 +1,6 @@
 use goida_core::ast::prelude::{ExpressionKind, Span, StatementKind, StmtId};
 use goida_core::ast::program::MethodType;
-use goida_core::builtins::catalog;
+use goida_core::builtins::registry::BUILTINS;
 use goida_core::interpreter::prelude::{Module, SharedInterner};
 use std::collections::HashSet;
 use tower_lsp::lsp_types::{Diagnostic, DiagnosticSeverity, Position, Range};
@@ -22,10 +22,11 @@ pub(crate) fn collect_lsp_diagnostics(
     collect_declarations(module, interner, &module.body, &mut declarations);
     collect_top_level_declarations(module, interner, &mut declarations);
 
-    let mut known = catalog::known_global_names()
+    let mut known = BUILTINS
+        .known_global_names()
         .map(str::to_string)
         .collect::<HashSet<_>>();
-    for method in catalog::METHODS {
+    for method in BUILTINS.methods() {
         known.extend(method.names.iter().map(|name| (*name).to_string()));
     }
     for declaration in &declarations {

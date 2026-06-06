@@ -1,5 +1,6 @@
 use crate::ast::prelude::{ClassDefinition, ErrorData, Span};
 use crate::builtins::iterator::values_from_iterable;
+use crate::builtins::registry::*;
 use crate::interpreter::prelude::{
     CallArgListExt, Interpreter, RuntimeError, RuntimeIterator, SharedInterner, Value,
 };
@@ -9,8 +10,7 @@ use std::collections::HashMap;
 use string_interner::DefaultSymbol as Symbol;
 
 pub fn setup_dict_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassDefinition>) {
-    let name =
-        interner.write(|i| i.get_or_intern(crate::builtins::catalog::class::DICT.names.canonical));
+    let name = interner.write(|i| i.get_or_intern(class::DICT.names.canonical));
 
     let mut class_def = ClassDefinition::new(name, Span::default());
 
@@ -32,7 +32,7 @@ pub fn setup_dict_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassDe
     });
 
     // 1. set(key: Text, value: Any) -> Empty
-    define_method!(class_def, interner, crate::builtins::catalog::method::SET.canonical => (_, args, span) {
+    define_method!(class_def, interner, method::SET.canonical => (_, args, span) {
         if let (Some(Value::Dict(dict)), Some(Value::Text(key)), Some(val)) = (
             CallArgListExt::first_value(&args),
             CallArgListExt::get_value(&args, 1),
@@ -50,7 +50,7 @@ pub fn setup_dict_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassDe
     });
 
     // 2. get(key: Text, default?: Any) -> Any
-    define_method!(class_def, interner, crate::builtins::catalog::method::GET.canonical => (_, args, span) {
+    define_method!(class_def, interner, method::GET.canonical => (_, args, span) {
         if let (Some(Value::Dict(dict)), Some(Value::Text(key))) = (
             CallArgListExt::first_value(&args),
             CallArgListExt::get_value(&args, 1),
@@ -76,7 +76,7 @@ pub fn setup_dict_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassDe
     });
 
     // 3. has(key: Text) -> Boolean
-    define_method!(class_def, interner, crate::builtins::catalog::method::HAS.canonical => (_, args, span) {
+    define_method!(class_def, interner, method::HAS.canonical => (_, args, span) {
         if let (Some(Value::Dict(dict)), Some(Value::Text(key))) = (
             CallArgListExt::first_value(&args),
             CallArgListExt::get_value(&args, 1),
@@ -92,7 +92,7 @@ pub fn setup_dict_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassDe
     });
 
     // 4. keys() -> List<Text>
-    define_method!(class_def, interner, crate::builtins::catalog::method::KEYS.canonical => (_, args, span) {
+    define_method!(class_def, interner, method::KEYS.canonical => (_, args, span) {
         if let Some(Value::Dict(dict)) = CallArgListExt::first_value(&args) {
             let keys: Vec<Value> =
                 dict.read(|i| i.keys().map(|k| Value::Text(k.clone())).collect());
@@ -107,7 +107,7 @@ pub fn setup_dict_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassDe
     });
 
     // values() -> List<Any>
-    define_method!(class_def, interner, crate::builtins::catalog::method::VALUES.canonical => (_, args, span) {
+    define_method!(class_def, interner, method::VALUES.canonical => (_, args, span) {
         if let Some(Value::Dict(dict)) = CallArgListExt::first_value(&args) {
             let values: Vec<Value> = dict.read(|i| i.values().cloned().collect());
             Ok(Value::List(SharedMut::new(values)))
@@ -121,7 +121,7 @@ pub fn setup_dict_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassDe
     });
 
     // 5. remove(key: Text) -> Any
-    define_method!(class_def, interner, crate::builtins::catalog::method::REMOVE.canonical => (_, args, span) {
+    define_method!(class_def, interner, method::REMOVE.canonical => (_, args, span) {
         if let (Some(Value::Dict(dict)), Some(Value::Text(key))) = (
             CallArgListExt::first_value(&args),
             CallArgListExt::get_value(&args, 1),
@@ -137,7 +137,7 @@ pub fn setup_dict_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassDe
     });
 
     // 6. len() -> Number
-    define_method!(class_def, interner, crate::builtins::catalog::method::LEN.canonical => (_, args, span) {
+    define_method!(class_def, interner, method::LEN.canonical => (_, args, span) {
         if let Some(Value::Dict(dict)) = CallArgListExt::first_value(&args) {
             Ok(Value::Number(dict.read(|i| i.len() as i64)))
         } else {
@@ -149,7 +149,7 @@ pub fn setup_dict_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassDe
         }
     });
 
-    define_method!(class_def, interner, crate::builtins::catalog::method::ITERATOR.canonical => (_, args, span) {
+    define_method!(class_def, interner, method::ITERATOR.canonical => (_, args, span) {
         let Some(value) = CallArgListExt::first_value(&args) else {
             return bail_runtime!(TypeError, span, "Ожидался словарь");
         };
@@ -160,7 +160,7 @@ pub fn setup_dict_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassDe
 }
 
 pub fn setup_dict_func(interpreter: &mut Interpreter, interner: &SharedInterner) {
-    define_builtin!(interpreter, interner, crate::builtins::catalog::function::DICT.canonical => (interpreter, arguments, span) {
+    define_builtin!(interpreter, interner, function::DICT.canonical => (interpreter, arguments, span) {
         if arguments.len() % 2 != 0 {
             return bail_runtime!(
                 InvalidOperation,

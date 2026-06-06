@@ -1,4 +1,5 @@
 use crate::ast::prelude::{ClassDefinition, ErrorData, Span, Visibility};
+use crate::builtins::registry::*;
 use crate::interpreter::prelude::{
     BuiltinFn, CallArgListExt, CallArgValue, RuntimeError, SharedInterner, Value,
 };
@@ -9,8 +10,7 @@ use std::sync::Arc;
 use string_interner::DefaultSymbol as Symbol;
 
 pub fn setup_datetime_class(interner_ref: &SharedInterner) -> (Symbol, SharedMut<ClassDefinition>) {
-    let name_sym = interner_ref
-        .write(|i| i.get_or_intern(crate::builtins::catalog::class::DATETIME.names.canonical));
+    let name_sym = interner_ref.write(|i| i.get_or_intern(class::DATETIME.names.canonical));
     let mut class_def = ClassDefinition::new(name_sym, Span::default());
 
     let ms_sym = interner_ref.write(|i| i.get_or_intern("_мс"));
@@ -66,16 +66,16 @@ pub fn setup_datetime_class(interner_ref: &SharedInterner) -> (Symbol, SharedMut
 
     // --- Методы получения компонентов (год, месяц, день, час, минута, секунда) ---
     let components = [
-        crate::builtins::catalog::method::YEAR.canonical,
-        crate::builtins::catalog::method::MONTH.canonical,
-        crate::builtins::catalog::method::DAY.canonical,
-        crate::builtins::catalog::method::HOUR.canonical,
-        crate::builtins::catalog::method::MINUTE.canonical,
-        crate::builtins::catalog::method::SECOND.canonical,
+        method::YEAR.canonical,
+        method::MONTH.canonical,
+        method::DAY.canonical,
+        method::HOUR.canonical,
+        method::MINUTE.canonical,
+        method::SECOND.canonical,
     ];
 
     for name in components {
-        let aliases = crate::builtins::catalog::method_names(name);
+        let aliases = BUILTINS.method_names(name);
         let method_name = name.to_string();
         let method = BuiltinFn(Arc::new(move |_, args, _| {
             let ms = get_ms(&args)?;
@@ -101,7 +101,7 @@ pub fn setup_datetime_class(interner_ref: &SharedInterner) -> (Symbol, SharedMut
         }
     }
 
-    for unit in crate::builtins::catalog::DATETIME_UNITS {
+    for unit in DATETIME_UNITS {
         // --- Метод: ДОБАВИТЬ ---
         let add_aliases = unit.add.names;
         let ms_unit = unit.millis;
@@ -154,7 +154,7 @@ pub fn setup_datetime_class(interner_ref: &SharedInterner) -> (Symbol, SharedMut
     }
 
     // --- Метод: .сейчас() (стандартный вывод) ---
-    define_method!(class_def, interner_ref, crate::builtins::catalog::method::NOW.canonical => (_, args, _) {
+    define_method!(class_def, interner_ref, method::NOW.canonical => (_, args, _) {
         let now = Local::now();
 
         let pattern = match CallArgListExt::get_value(&args, 1) {
@@ -167,7 +167,7 @@ pub fn setup_datetime_class(interner_ref: &SharedInterner) -> (Symbol, SharedMut
     });
 
     // --- Метод: .формат(шаблон) ---
-    define_method!(class_def, interner_ref, crate::builtins::catalog::method::FORMAT.canonical => (_, args, _) {
+    define_method!(class_def, interner_ref, method::FORMAT.canonical => (_, args, _) {
         let ms = get_ms(&args)?;
         let dt = Local.timestamp_millis_opt(ms).unwrap();
         let pattern = CallArgListExt::get_value(&args, 1)

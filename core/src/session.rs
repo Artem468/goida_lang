@@ -1,3 +1,4 @@
+use crate::builtins::registry::BUILTINS;
 use crate::interpreter::prelude::{Interpreter, SharedInterner};
 use crate::shared::SharedMut;
 use crate::traits::prelude::CoreOperations;
@@ -13,7 +14,7 @@ impl Session {
     pub fn new() -> Self {
         let interner = SharedMut::new(StringInterner::new());
         let mut runtime = Interpreter::new(interner);
-        runtime.define_builtins();
+        BUILTINS.install(&mut runtime).unwrap();
         Self { runtime }
     }
 

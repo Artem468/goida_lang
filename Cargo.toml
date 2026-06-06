@@ -11,5 +11,6 @@ members = [
     "cli",
     "lsp",
     "tests/native_ffi_test_lib",
+    "xtask",
 ]
 resolver = "2"

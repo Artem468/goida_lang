@@ -1,4 +1,5 @@
 use crate::ast::prelude::*;
+use crate::builtins::registry::{BuiltinParserTarget, BUILTINS};
 use crate::interpreter::prelude::{Module, SharedInterner};
 use crate::parser::grammar;
 use crate::parser::lexer::{lex, LexicalError, Token};
@@ -16,8 +17,7 @@ impl ParserTrait {
     }
 
     pub fn parse(mut self, code: &str) -> Result<Module, ParseError> {
-        self.module.arena.init_builtin_types(&self.interner);
-        self.init_builtin_error_classes();
+        self.install_builtins();
 
         self.parse_into_module(code)?;
         self.validate_module_names()?;
@@ -26,8 +26,7 @@ impl ParserTrait {
     }
 
     pub fn parse_unvalidated(mut self, code: &str) -> Result<Module, ParseError> {
-        self.module.arena.init_builtin_types(&self.interner);
-        self.init_builtin_error_classes();
+        self.install_builtins();
         self.parse_into_module(code)?;
         self.module.arena.optimize_all(&self.interner);
         Ok(self.module)
@@ -39,6 +38,15 @@ impl ParserTrait {
             .map_err(|err| self.convert_parse_error(code, err))?;
         let syntax = self.expand_macros(syntax)?;
         Ok(format_program(&syntax))
+    }
+
+    fn install_builtins(&mut self) {
+        BUILTINS
+            .install(&mut BuiltinParserTarget {
+                module: &mut self.module,
+                interner: &self.interner,
+            })
+            .unwrap();
     }
 
     fn parse_into_module(&mut self, code: &str) -> Result<(), ParseError> {

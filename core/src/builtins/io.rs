@@ -1,5 +1,6 @@
 use crate::ast::prelude::ErrorData;
 use crate::ast::span::Span;
+use crate::builtins::registry::*;
 use crate::interpreter::prelude::{Interpreter, RuntimeError, SharedInterner, Value};
 use crate::{bail_runtime, define_builtin, expect_args, runtime_error};
 use std::io;
@@ -11,7 +12,7 @@ pub fn setup_io_func(interpreter: &mut Interpreter, interner: &SharedInterner) {
     let ends = ["конец", "end"].map(|name| interner.write(|i| i.get_or_intern(name)));
     let outs = ["файл", "file"].map(|name| interner.write(|i| i.get_or_intern(name)));
 
-    define_builtin!(interpreter, interner, crate::builtins::catalog::function::PRINT.canonical => (interpreter, mut arguments, _span) {
+    define_builtin!(interpreter, interner, function::PRINT.canonical => (interpreter, mut arguments, _span) {
         let sep_idx = arguments
             .iter()
             .position(|arg| arg.name.is_some_and(|name| separators.contains(&name)));
@@ -74,7 +75,7 @@ pub fn setup_io_func(interpreter: &mut Interpreter, interner: &SharedInterner) {
         Ok(Value::Empty)
     });
 
-    define_builtin!(interpreter, interner, crate::builtins::catalog::function::INPUT.canonical => (interpreter, arguments, span) {
+    define_builtin!(interpreter, interner, function::INPUT.canonical => (interpreter, arguments, span) {
         expect_args!(arguments, 1, span, "ввод");
 
         print!("{}", interpreter.format_value(&arguments[0].value));

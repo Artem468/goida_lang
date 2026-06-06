@@ -1,5 +1,6 @@
 use crate::ast::prelude::{ClassDefinition, ErrorData, Span};
 use crate::builtins::iterator::values_from_iterable;
+use crate::builtins::registry::*;
 use crate::interpreter::prelude::{
     CallArgListExt, Interpreter, RuntimeError, RuntimeIterator, SharedInterner, Value,
 };
@@ -9,8 +10,7 @@ use std::sync::Arc;
 use string_interner::DefaultSymbol as Symbol;
 
 pub fn setup_array_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassDefinition>) {
-    let name =
-        interner.write(|i| i.get_or_intern(crate::builtins::catalog::class::ARRAY.names.canonical));
+    let name = interner.write(|i| i.get_or_intern(class::ARRAY.names.canonical));
 
     let mut class_def = ClassDefinition::new(name, Span::default());
 
@@ -26,7 +26,7 @@ pub fn setup_array_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassD
     });
 
     // len() - Получить длину
-    define_method!(class_def, interner, crate::builtins::catalog::method::LEN.canonical => (_, args, span) {
+    define_method!(class_def, interner, method::LEN.canonical => (_, args, span) {
         if let Some(Value::Array(arr)) = CallArgListExt::first_value(&args) {
             let length = arr.len();
             Ok(Value::Number(length as i64))
@@ -40,7 +40,7 @@ pub fn setup_array_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassD
     });
 
     // join(separator) - Склеить в строку
-    define_method!(class_def, interner, crate::builtins::catalog::method::JOIN.canonical => (interpreter, args, span) {
+    define_method!(class_def, interner, method::JOIN.canonical => (interpreter, args, span) {
         if let (Some(Value::Array(arr)), Some(Value::Text(sep))) = (
             CallArgListExt::first_value(&args),
             CallArgListExt::get_value(&args, 1),
@@ -62,7 +62,7 @@ pub fn setup_array_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassD
     });
 
     // get(index) - Безопасное получение (аналог list[i])
-    define_method!(class_def, interner, crate::builtins::catalog::method::GET.canonical => (_, args, span) {
+    define_method!(class_def, interner, method::GET.canonical => (_, args, span) {
         if let (Some(Value::Array(arr)), Some(idx)) = (
             CallArgListExt::first_value(&args),
             CallArgListExt::get_value(&args, 1),
@@ -78,7 +78,7 @@ pub fn setup_array_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassD
         }
     });
 
-    define_method!(class_def, interner, crate::builtins::catalog::method::ITERATOR.canonical => (_, args, span) {
+    define_method!(class_def, interner, method::ITERATOR.canonical => (_, args, span) {
         let Some(value) = CallArgListExt::first_value(&args) else {
             return bail_runtime!(TypeError, span, "Ожидался массив");
         };
@@ -89,7 +89,7 @@ pub fn setup_array_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassD
 }
 
 pub fn setup_array_func(interpreter: &mut Interpreter, interner: &SharedInterner) {
-    define_builtin!(interpreter, interner, crate::builtins::catalog::function::ARRAY.canonical => (_, arguments, _span) {
+    define_builtin!(interpreter, interner, function::ARRAY.canonical => (_, arguments, _span) {
         Ok(Value::Array(Arc::new(
             arguments.into_iter().map(|arg| arg.value).collect(),
         )))

@@ -27,16 +27,12 @@ type Captures = HashMap<String, Capture>;
 impl ParserTrait {
     pub(crate) fn expand_macros(&self, program: syn::Program) -> Result<syn::Program, ParseError> {
         let mut expander = MacroExpander::default();
-        expander.register_builtins()?;
+        crate::builtins::registry::BUILTINS.install(&mut expander)?;
         expander.expand_program(program, self.module.name)
     }
 }
 
 impl MacroExpander {
-    fn register_builtins(&mut self) -> Result<(), ParseError> {
-        crate::builtins::macros::setup_macro_builtins(self)
-    }
-
     pub(crate) fn register_native(&mut self, name: &str, expander: NativeMacroExpander) {
         self.native_definitions.insert(name.to_string(), expander);
     }
