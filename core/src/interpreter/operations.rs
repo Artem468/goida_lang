@@ -14,8 +14,8 @@ impl ValueOperations for Interpreter {
             (Value::Float(a), Value::Number(b)) => Ok(Value::Float(*a + *b as f64)),
 
             (Value::Text(a), Value::Text(b)) => Ok(Value::Text(format!("{}{}", a, b))),
-            (Value::Text(a), any) => Ok(Value::Text(format!("{}{}", a, any))),
-            (any, Value::Text(b)) => Ok(Value::Text(format!("{}{}", any, b))),
+            (Value::Text(a), any) => Ok(Value::Text(format!("{}{}", a, self.format_value(any)))),
+            (any, Value::Text(b)) => Ok(Value::Text(format!("{}{}", self.format_value(any), b))),
 
             (Value::List(a), Value::List(b)) => {
                 let new_vec = a.read(|vec_a| {

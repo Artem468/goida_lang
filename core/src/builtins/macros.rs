@@ -1,4 +1,5 @@
 use crate::ast::prelude::{ErrorData, Span};
+use crate::builtins::registry::*;
 use crate::parser::lexer::Token;
 use crate::parser::macro_expander::MacroExpander;
 use crate::parser::prelude::ParseError;
@@ -7,9 +8,7 @@ use std::ops::Range;
 use string_interner::Symbol;
 
 pub(crate) fn setup_macro_builtins(expander: &mut MacroExpander) -> Result<(), ParseError> {
-    for alias in
-        crate::builtins::catalog::macro_names(crate::builtins::catalog::macros::FORMAT.canonical)
-    {
+    for alias in BUILTINS.macro_names(macros::FORMAT.canonical) {
         expander.register_native(alias, expand_format_macro);
     }
     Ok(())

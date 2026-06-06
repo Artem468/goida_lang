@@ -1,10 +1,11 @@
 use crate::ast::prelude::ErrorData;
+use crate::builtins::registry::*;
 use crate::interpreter::prelude::{Interpreter, RuntimeError, SharedInterner, Value};
 use crate::traits::core::CoreOperations;
 use crate::{define_builtin, expect_args, runtime_error};
 
 pub fn setup_type_func(interpreter: &mut Interpreter, interner: &SharedInterner) {
-    define_builtin!(interpreter, interner, crate::builtins::catalog::function::TYPE.canonical => (interpreter, arguments, span) {
+    define_builtin!(interpreter, interner, function::TYPE.canonical => (interpreter, arguments, span) {
         expect_args!(arguments, 1, span, "тип");
 
         let val = &arguments[0].value;
@@ -51,7 +52,7 @@ pub fn setup_type_func(interpreter: &mut Interpreter, interner: &SharedInterner)
 }
 
 pub fn setup_is_instance_func(interpreter: &mut Interpreter, interner: &SharedInterner) {
-    define_builtin!(interpreter, interner, crate::builtins::catalog::function::IS.canonical => (interpreter, arguments, span) {
+    define_builtin!(interpreter, interner, function::IS.canonical => (interpreter, arguments, span) {
         expect_args!(arguments, 2, span, "является");
 
         let target = &arguments[0].value;

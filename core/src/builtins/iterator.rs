@@ -1,4 +1,5 @@
 use crate::ast::prelude::{ClassDefinition, ErrorData, Span};
+use crate::builtins::registry::*;
 use crate::interpreter::prelude::{
     CallArgListExt, CallArgValue, Interpreter, IteratorStep, RuntimeError, RuntimeIterator,
     SharedInterner, Value,
@@ -75,12 +76,11 @@ pub(crate) fn collect_iterator(
 }
 
 pub fn setup_iterator_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassDefinition>) {
-    let name = interner
-        .write(|i| i.get_or_intern(crate::builtins::catalog::class::ITERATOR.names.canonical));
+    let name = interner.write(|i| i.get_or_intern(class::ITERATOR.names.canonical));
 
     let mut class_def = ClassDefinition::new(name, Span::default());
 
-    define_method!(class_def, interner, crate::builtins::catalog::method::MAP.canonical => (_, args, span) {
+    define_method!(class_def, interner, method::MAP.canonical => (_, args, span) {
         if let (Some(Value::Iterator(iterator)), Some(callable)) = (
             CallArgListExt::first_value(&args),
             CallArgListExt::get_value(&args, 1),
@@ -91,7 +91,7 @@ pub fn setup_iterator_class(interner: &SharedInterner) -> (Symbol, SharedMut<Cla
         }
     });
 
-    define_method!(class_def, interner, crate::builtins::catalog::method::FILTER.canonical => (_, args, span) {
+    define_method!(class_def, interner, method::FILTER.canonical => (_, args, span) {
         if let (Some(Value::Iterator(iterator)), Some(callable)) = (
             CallArgListExt::first_value(&args),
             CallArgListExt::get_value(&args, 1),
@@ -102,7 +102,7 @@ pub fn setup_iterator_class(interner: &SharedInterner) -> (Symbol, SharedMut<Cla
         }
     });
 
-    define_method!(class_def, interner, crate::builtins::catalog::method::REDUCE.canonical => (interp, args, span) {
+    define_method!(class_def, interner, method::REDUCE.canonical => (interp, args, span) {
         if let (Some(Value::Iterator(iterator)), Some(callable), Some(initial)) = (
             CallArgListExt::first_value(&args),
             CallArgListExt::get_value(&args, 1),
@@ -118,7 +118,7 @@ pub fn setup_iterator_class(interner: &SharedInterner) -> (Symbol, SharedMut<Cla
         }
     });
 
-    define_method!(class_def, interner, crate::builtins::catalog::method::TO_LIST.canonical => (interp, args, span) {
+    define_method!(class_def, interner, method::TO_LIST.canonical => (interp, args, span) {
         if let Some(Value::Iterator(iterator)) = CallArgListExt::first_value(&args) {
             Ok(Value::List(SharedMut::new(collect_iterator(interp, iterator, span)?)))
         } else {
@@ -130,7 +130,7 @@ pub fn setup_iterator_class(interner: &SharedInterner) -> (Symbol, SharedMut<Cla
 }
 
 pub fn setup_iterator_func(interpreter: &mut Interpreter, interner: &SharedInterner) {
-    define_builtin!(interpreter, interner, crate::builtins::catalog::function::ITERATOR.canonical => (_, arguments, span) {
+    define_builtin!(interpreter, interner, function::ITERATOR.canonical => (_, arguments, span) {
         let Some(value) = arguments.first().map(|arg| &arg.value) else {
             return bail_runtime!(InvalidOperation, span, "итератор ожидает коллекцию");
         };

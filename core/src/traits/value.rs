@@ -1,11 +1,13 @@
 use crate::ast::prelude::{ErrorData, Span};
 use crate::ast::program::FieldData;
-use crate::interpreter::prelude::{ClassInstance, RuntimeError};
+use crate::interpreter::prelude::{ClassInstance, Interpreter, RuntimeError};
 use crate::interpreter::structs::Value;
 use crate::shared::SharedMut;
-use crate::{bail_runtime, runtime_error, INTERNER};
+use crate::traits::core::CoreOperations;
+use crate::{bail_runtime, runtime_error};
 use std::fmt;
 use std::sync::Arc;
+use string_interner::Symbol;
 
 pub trait ValueOperations {
     fn add_values(&self, left: Value, right: Value, span: Span) -> Result<Value, RuntimeError>;
@@ -130,6 +132,75 @@ impl Value {
     }
 }
 
+impl Interpreter {
+    /// Formats a runtime value using names from this interpreter's interner.
+    pub fn format_value(&self, value: &Value) -> String {
+        match value {
+            Value::Object(obj) => {
+                let name = self
+                    .resolve_symbol(obj.read(|object| object.class_name))
+                    .unwrap_or_else(|| "неизвестно".into());
+                format!("<Объект \"{}\" {:p}>", name, obj)
+            }
+            Value::Class(class) => {
+                let name = self
+                    .resolve_symbol(class.read(|class| class.name))
+                    .unwrap_or_else(|| "неизвестно".into());
+                format!("<Класс \"{}\" {:p}>", name, class)
+            }
+            Value::Function(function) => {
+                let name = self
+                    .resolve_symbol(function.name)
+                    .unwrap_or_else(|| "неизвестно".into());
+                format!("<Функция {} {:p}>", name, function)
+            }
+            Value::Module(module) => {
+                let name = self
+                    .resolve_symbol(*module)
+                    .unwrap_or_else(|| "неизвестно".into());
+                format!("<Модуль {}>", name)
+            }
+            Value::List(list) => list.read(|items| {
+                format!(
+                    "[{}]",
+                    items
+                        .iter()
+                        .map(|item| self.format_value(item))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                )
+            }),
+            Value::Array(items) => format!(
+                "[{}]",
+                items
+                    .iter()
+                    .map(|item| self.format_value(item))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
+            Value::Dict(dict) => dict.read(|items| {
+                let mut pairs = items.iter().collect::<Vec<_>>();
+                pairs.sort_by_key(|(key, _)| *key);
+                format!(
+                    "{{{}}}",
+                    pairs
+                        .into_iter()
+                        .map(|(key, value)| format!("\"{}\": {}", key, self.format_value(value)))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                )
+            }),
+            Value::NativeGlobal(binding) => {
+                let name = self
+                    .resolve_symbol(binding.symbol_name)
+                    .unwrap_or_else(|| "неизвестно".into());
+                format!("<Нативная переменная {}>", name)
+            }
+            _ => value.to_string(),
+        }
+    }
+}
+
 impl fmt::Display for Value {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -137,25 +208,18 @@ impl fmt::Display for Value {
             Value::Float(n) => write!(f, "{}", n),
             Value::Text(s) => write!(f, "{}", s),
             Value::Boolean(b) => write!(f, "{}", if *b { "истина" } else { "ложь" }),
-            Value::Object(obj) => INTERNER.read(|i| {
-                let cls_name = i
-                    .resolve(obj.read(|o| o.class_name))
-                    .unwrap_or("неизвестно");
-                write!(f, "<Объект \"{}\" {:p}>", cls_name, obj)
-            }),
-            Value::Class(cls) => INTERNER.read(|i| {
-                let cls_name = i.resolve(cls.read(|c| c.name)).unwrap_or("неизвестно");
-                write!(f, "<Класс \"{}\" {:p}>", cls_name, cls)
-            }),
-            Value::Function(func) => INTERNER.read(|i| {
-                let fun_name = i.resolve(func.as_ref().name).unwrap_or("неизвестно");
-                write!(f, "<Функция {} {:p}>", fun_name, func)
-            }),
+            Value::Object(obj) => write!(
+                f,
+                "<Объект #{} {:p}>",
+                obj.read(|o| o.class_name.to_usize()),
+                obj
+            ),
+            Value::Class(cls) => {
+                write!(f, "<Класс #{} {:p}>", cls.read(|c| c.name.to_usize()), cls)
+            }
+            Value::Function(func) => write!(f, "<Функция #{} {:p}>", func.name.to_usize(), func),
             Value::Builtin(func) => write!(f, "<Встроенная функция {:p}>", func),
-            Value::Module(module) => INTERNER.read(|i| {
-                let module_name = i.resolve(*module).unwrap_or("неизвестно");
-                write!(f, "<Модуль {}>", module_name)
-            }),
+            Value::Module(module) => write!(f, "<Модуль #{}>", module.to_usize()),
             Value::List(list) => list.read(|items| {
                 write!(f, "[")?;
                 for (i, item) in items.iter().enumerate() {
@@ -193,10 +257,13 @@ impl fmt::Display for Value {
             Value::Mutex(mutex) => write!(f, "<Мьютекс {:p}>", mutex),
             Value::RwLock(rwlock) => write!(f, "<БлокировкаЧтенияЗаписи {:p}>", rwlock),
             Value::NativeResource(resource) => write!(f, "<Ресурс {:p}>", resource),
-            Value::NativeGlobal(binding) => INTERNER.read(|i| {
-                let binding_name = i.resolve(binding.symbol_name).unwrap_or("неизвестно");
-                write!(f, "<Нативная переменная {}>", binding_name)
-            }),
+            Value::NativeGlobal(binding) => {
+                write!(
+                    f,
+                    "<Нативная переменная #{}>",
+                    binding.symbol_name.to_usize()
+                )
+            }
             Value::Empty => write!(f, "пустота"),
         }
     }

@@ -1,4 +1,5 @@
 use crate::ast::prelude::{ClassDefinition, ErrorData, Span};
+use crate::builtins::registry::*;
 use crate::interpreter::prelude::{
     CallArgListExt, CallArgValue, RuntimeError, SharedInterner, Value,
 };
@@ -9,8 +10,7 @@ use std::path::Path;
 use string_interner::DefaultSymbol as Symbol;
 
 pub fn setup_file_class(interner_ref: &SharedInterner) -> (Symbol, SharedMut<ClassDefinition>) {
-    let name = interner_ref
-        .write(|i| i.get_or_intern(crate::builtins::catalog::class::FILE.names.canonical));
+    let name = interner_ref.write(|i| i.get_or_intern(class::FILE.names.canonical));
 
     let mut class_def = ClassDefinition::new(name, Span::default());
 
@@ -46,13 +46,13 @@ pub fn setup_file_class(interner_ref: &SharedInterner) -> (Symbol, SharedMut<Cla
     };
 
     // --- .существует() -> Bool ---
-    define_method!(class_def, interner_ref, crate::builtins::catalog::method::EXISTS.canonical => (_, args, _) {
+    define_method!(class_def, interner_ref, method::EXISTS.canonical => (_, args, _) {
         let path = get_path(&args).unwrap_or_default();
         Ok(Value::Boolean(Path::new(&path).exists()))
     });
 
     // --- .читать() -> Text ---
-    define_method!(class_def, interner_ref, crate::builtins::catalog::method::READ.canonical => (_, args, span) {
+    define_method!(class_def, interner_ref, method::READ.canonical => (_, args, span) {
         let path = get_path(&args)?;
         let content = fs::read_to_string(path)
             .map_err(|e| runtime_error!(IOError, span, "{}", e.to_string()))?;
@@ -60,10 +60,10 @@ pub fn setup_file_class(interner_ref: &SharedInterner) -> (Symbol, SharedMut<Cla
     });
 
     // --- .записать(текст) ---
-    define_method!(class_def, interner_ref, crate::builtins::catalog::method::WRITE.canonical => (_, args, span) {
+    define_method!(class_def, interner_ref, method::WRITE.canonical => (interpreter, args, span) {
         let path = get_path(&args)?;
         let text = if let Some(t) = CallArgListExt::get_value(&args, 1) {
-            t.to_string()
+            interpreter.format_value(t)
         } else {
             "".into()
         };
@@ -79,10 +79,10 @@ pub fn setup_file_class(interner_ref: &SharedInterner) -> (Symbol, SharedMut<Cla
     });
 
     // --- .дописать(текст) ---
-    define_method!(class_def, interner_ref, crate::builtins::catalog::method::APPEND.canonical => (_, args, span) {
+    define_method!(class_def, interner_ref, method::APPEND.canonical => (interpreter, args, span) {
         let path = get_path(&args)?;
         let text = if let Some(t) = CallArgListExt::get_value(&args, 1) {
-            t.to_string()
+            interpreter.format_value(t)
         } else {
             "".into()
         };
@@ -106,7 +106,7 @@ pub fn setup_file_class(interner_ref: &SharedInterner) -> (Symbol, SharedMut<Cla
     });
 
     // --- .удалить() ---
-    define_method!(class_def, interner_ref, crate::builtins::catalog::method::REMOVE.canonical => (_, args, span) {
+    define_method!(class_def, interner_ref, method::REMOVE.canonical => (_, args, span) {
         let path = get_path(&args)?;
         fs::remove_file(path)
             .map_err(|e| runtime_error!(IOError, span, "{}", e.to_string()))?;

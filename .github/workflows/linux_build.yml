@@ -12,8 +12,10 @@ on:
       - "assets/**"
       - "cli/**"
       - "core/**"
+      - "docs/**"
       - "lsp/**"
       - "tests/**"
+      - "xtask/**"
       - "examples/**"
       - "editors/vscode/**"
   pull_request:
@@ -27,8 +29,10 @@ on:
       - "assets/**"
       - "cli/**"
       - "core/**"
+      - "docs/**"
       - "lsp/**"
       - "tests/**"
+      - "xtask/**"
       - "examples/**"
       - "editors/vscode/**"
   workflow_dispatch:
@@ -46,13 +50,19 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          components: rustfmt
+          components: rustfmt, clippy
 
       - name: Cache cargo dependencies
         uses: Swatinem/rust-cache@v2
 
       - name: Check formatting
         run: cargo fmt --all --check
+
+      - name: Run clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: Check generated built-in documentation
+        run: cargo run -p xtask -- builtin-docs --check
 
       - name: Build native FFI test library
         run: cargo build -p native_ffi_test_lib

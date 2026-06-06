@@ -10,8 +10,8 @@ use goida_core::ast::prelude::{ErrorData, Span};
 use goida_core::formatter::format_source;
 use goida_core::interpreter::prelude::RuntimeError;
 use goida_core::parser::prelude::{ParseError, Parser as ProgramParser};
+use goida_core::session::Session;
 use goida_core::traits::prelude::CoreOperations;
-use goida_core::INTERPRETER;
 
 mod package;
 
@@ -91,9 +91,10 @@ enum Commands {
 
 fn main() {
     let cli = Cli::parse();
+    let mut session = Session::new();
     match &cli.command {
         Some(Commands::Run { file, .. }) => {
-            if let Err((err, _)) = run_file(file) {
+            if let Err((err, _)) = run_file(&mut session, file) {
                 println!("{}", err.lines().next().unwrap_or(&err));
                 std::process::exit(1);
             }
@@ -120,7 +121,7 @@ fn main() {
         )),
         Some(Commands::Remove { name }) => exit_on_package_error(package::remove_dependency(name)),
         Some(Commands::Venv { path }) => exit_on_package_error(package::create_venv(path)),
-        Some(Commands::Repl) => run_repl(),
+        Some(Commands::Repl) => run_repl(&mut session),
         Some(Commands::Fmt { file, write }) => {
             if let Err(err) = format_file(file, *write) {
                 eprintln!("{err}");
@@ -128,7 +129,7 @@ fn main() {
             }
         }
         Some(Commands::ExpandMacros { file }) => {
-            if let Err(err) = expand_macros_file(file) {
+            if let Err(err) = expand_macros_file(&session, file) {
                 eprintln!("{err}");
                 std::process::exit(1);
             }
@@ -157,13 +158,9 @@ fn format_file(file: &str, write: bool) -> Result<(), String> {
     Ok(())
 }
 
-fn expand_macros_file(file: &str) -> Result<(), String> {
+fn expand_macros_file(session: &Session, file: &str) -> Result<(), String> {
     let source = fs::read_to_string(file).map_err(|err| format!("{}: '{}'", err, file))?;
-    let parser = ProgramParser::new(
-        INTERPRETER.read().unwrap().interner.clone(),
-        file,
-        PathBuf::from(file),
-    );
+    let parser = ProgramParser::new(session.interner(), file, PathBuf::from(file));
     match parser.macro_expansion_preview(&source) {
         Ok(preview) => {
             println!("{preview}");
@@ -180,37 +177,29 @@ fn expand_macros_file(file: &str) -> Result<(), String> {
     }
 }
 
-fn run_file(filename: &str) -> Result<(), (String, ErrorData)> {
+fn run_file(session: &mut Session, filename: &str) -> Result<(), (String, ErrorData)> {
     let content = fs::read_to_string(filename).map_err(|e| {
         let msg = format!("{}: '{}'", e, filename);
         (msg.clone(), ErrorData::new(Span::default(), msg))
     })?;
-    execute_code(&content, filename)
+    execute_code(session, &content, filename)
 }
 
-fn execute_code(code: &str, filename: &str) -> Result<(), (String, ErrorData)> {
+fn execute_code(
+    session: &mut Session,
+    code: &str,
+    filename: &str,
+) -> Result<(), (String, ErrorData)> {
     let path = PathBuf::from(filename);
 
-    let parser = ProgramParser::new(
-        INTERPRETER.read().unwrap().interner.clone(),
-        filename,
-        path.clone(),
-    );
+    let parser = ProgramParser::new(session.interner(), filename, path.clone());
     let _module = parser.module.clone();
 
     match parser.parse(code) {
         Ok(program) => {
             let name = program.name;
-            {
-                let mut intp = INTERPRETER.write().unwrap();
-                intp.load_start_module(program);
-                intp.define_builtins();
-            }
-
-            let interpret_result = {
-                let mut interpreter = INTERPRETER.write().unwrap();
-                interpreter.interpret(name)
-            };
+            session.runtime.load_start_module(program);
+            let interpret_result = session.runtime.interpret(name);
 
             interpret_result.map_err(|e| {
                 let (msg, error_data) = match e {
@@ -247,30 +236,26 @@ fn execute_code(code: &str, filename: &str) -> Result<(), (String, ErrorData)> {
                         ParseError::ImportError(e) => ("Ошибка импорта".to_string(), e),
                     },
                 };
-                render_error(&msg, &error_data);
+                render_error(session, &msg, &error_data);
                 (msg, error_data)
             })?;
         }
         Err(err) => {
-            INTERPRETER
-                .write()
-                .unwrap()
-                .modules
-                .insert(_module.name, _module);
+            session.runtime.modules.insert(_module.name, _module);
             let (msg, data): (&'static str, ErrorData) = match err {
                 ParseError::TypeError(e) => ("Ошибка типов", e),
                 ParseError::InvalidSyntax(e) => ("Ошибка синтаксиса", e),
                 ParseError::ImportError(e) => ("Ошибка импорта", e),
             };
-            render_error(msg, &data);
+            render_error(session, msg, &data);
             return Err((msg.to_string(), data));
         }
     }
     Ok(())
 }
 
-fn render_error(msg: &str, error: &ErrorData) {
-    let intp = INTERPRETER.read().unwrap();
+fn render_error(session: &Session, msg: &str, error: &ErrorData) {
+    let intp = &session.runtime;
     let file_name = intp.get_file_path(&error.location.file_id);
     let file_code = intp.source_manager.get_file_content(file_name.as_str());
     let ariadne_span = error.location.as_ariadne(file_code.as_str());
@@ -304,7 +289,7 @@ fn render_error(msg: &str, error: &ErrorData) {
         .expect("Can't build report message");
 }
 
-fn run_repl() {
+fn run_repl(session: &mut Session) {
     println!("Интерактивный режим Гойда. Введите 'выход' для завершения.");
     loop {
         print!("гойда> ");
@@ -318,7 +303,7 @@ fn run_repl() {
             if input.is_empty() {
                 continue;
             }
-            if let Err(e) = execute_code(input, "repl") {
+            if let Err(e) = execute_code(session, input, "repl") {
                 eprintln!("Ошибка: {}", e.0.lines().next().unwrap_or(&e.0));
             }
         }

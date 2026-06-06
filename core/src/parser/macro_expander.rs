@@ -27,16 +27,12 @@ type Captures = HashMap<String, Capture>;
 impl ParserTrait {
     pub(crate) fn expand_macros(&self, program: syn::Program) -> Result<syn::Program, ParseError> {
         let mut expander = MacroExpander::default();
-        expander.register_builtins()?;
+        crate::builtins::registry::BUILTINS.install(&mut expander)?;
         expander.expand_program(program, self.module.name)
     }
 }
 
 impl MacroExpander {
-    fn register_builtins(&mut self) -> Result<(), ParseError> {
-        crate::builtins::macros::setup_macro_builtins(self)
-    }
-
     pub(crate) fn register_native(&mut self, name: &str, expander: NativeMacroExpander) {
         self.native_definitions.insert(name.to_string(), expander);
     }
@@ -141,9 +137,9 @@ impl MacroExpander {
                         expanded.extend(items);
                         continue;
                     }
-                    let stmt = self.expand_stmt(stmt, module_name)?;
+                    let stmt = self.expand_stmt(*stmt, module_name)?;
                     expanded.push(syn::Spanned::new(
-                        syn::ItemKind::Statement(stmt),
+                        syn::ItemKind::Statement(Box::new(stmt)),
                         item.span.start,
                         item.span.end,
                     ));
@@ -213,7 +209,7 @@ impl MacroExpander {
                 variable,
                 init: self.expand_expr(init, module_name)?,
                 condition: self.expand_expr(condition, module_name)?,
-                update: self.expand_for_update(update, module_name)?,
+                update: Box::new(self.expand_for_update(*update, module_name)?),
                 body: self.expand_items(body, module_name)?,
             },
             syn::StmtKind::ForEach {
@@ -656,7 +652,7 @@ fn parse_items(
 ) -> Result<Vec<syn::Item>, ParseError> {
     let stream = expansion_stream(tokens, true);
     grammar::ProgramParser::new()
-        .parse(stream.into_iter())
+        .parse(stream)
         .map(|program| program.items)
         .map_err(|_| {
             macro_error_with_module(
@@ -674,7 +670,7 @@ fn parse_stmt(
 ) -> Result<syn::Stmt, ParseError> {
     let stream = expansion_stream(tokens, true);
     grammar::StmtExpansionParser::new()
-        .parse(stream.into_iter())
+        .parse(stream)
         .map_err(|_| {
             macro_error_with_module(
                 module_name,
@@ -694,7 +690,7 @@ fn parse_expr(
     }
     let stream = expansion_stream(tokens, false);
     grammar::ExprExpansionParser::new()
-        .parse(stream.into_iter())
+        .parse(stream)
         .map_err(|_| {
             macro_error_with_module(
                 module_name,

@@ -1,5 +1,4 @@
 mod builder;
-mod builtin_errors;
 mod imports;
 pub(crate) mod lexer;
 pub(crate) mod macro_expander;
