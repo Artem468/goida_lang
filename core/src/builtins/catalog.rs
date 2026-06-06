@@ -1,11 +1,11 @@
 #[derive(Clone, Copy)]
-pub(crate) struct BuiltinNames {
+pub struct BuiltinNames {
     pub canonical: &'static str,
     pub names: &'static [&'static str],
 }
 
 #[derive(Clone, Copy)]
-pub(crate) enum BuiltinTypeSpec {
+pub enum BuiltinTypeSpec {
     Number,
     Text,
     Boolean,
@@ -24,13 +24,13 @@ pub(crate) enum BuiltinTypeSpec {
 }
 
 #[derive(Clone, Copy)]
-pub(crate) struct BuiltinTypeNames {
+pub struct BuiltinTypeNames {
     pub names: &'static [&'static str],
     pub spec: BuiltinTypeSpec,
 }
 
 #[derive(Clone, Copy)]
-pub(crate) struct DateTimeUnit {
+pub struct DateTimeUnit {
     pub millis: i64,
     pub add: BuiltinNames,
     pub subtract: BuiltinNames,
@@ -109,7 +109,7 @@ pub(crate) mod class {
     use super::{BuiltinNames, BuiltinTypeSpec};
 
     #[derive(Clone, Copy)]
-    pub(crate) struct BuiltinClass {
+    pub struct BuiltinClass {
         pub names: BuiltinNames,
         pub type_spec: BuiltinTypeSpec,
     }
@@ -525,7 +525,7 @@ pub(crate) mod macros {
     };
 }
 
-pub(crate) const FUNCTIONS: &[BuiltinNames] = &[
+pub const FUNCTIONS: &[BuiltinNames] = &[
     function::PRINT,
     function::INPUT,
     function::TYPE,
@@ -544,7 +544,7 @@ pub(crate) const FUNCTIONS: &[BuiltinNames] = &[
     function::REGEX,
 ];
 
-pub(crate) const CLASSES: &[class::BuiltinClass] = &[
+pub const CLASSES: &[class::BuiltinClass] = &[
     class::STRING,
     class::LIST,
     class::ARRAY,
@@ -560,7 +560,7 @@ pub(crate) const CLASSES: &[class::BuiltinClass] = &[
     class::RWLOCK,
 ];
 
-pub(crate) const METHODS: &[BuiltinNames] = &[
+pub const METHODS: &[BuiltinNames] = &[
     method::LEN,
     method::JOIN,
     method::GET,
@@ -639,7 +639,7 @@ pub(crate) const METHODS: &[BuiltinNames] = &[
     method::READ_UNLOCK,
 ];
 
-pub(crate) const DATETIME_UNITS: &[DateTimeUnit] = &[
+pub const DATETIME_UNITS: &[DateTimeUnit] = &[
     DateTimeUnit {
         millis: 1_000,
         add: method::ADD_SECONDS,
@@ -672,9 +672,9 @@ pub(crate) const DATETIME_UNITS: &[DateTimeUnit] = &[
     },
 ];
 
-pub(crate) const MACROS: &[BuiltinNames] = &[macros::FORMAT];
+pub const MACROS: &[BuiltinNames] = &[macros::FORMAT];
 
-pub(crate) const TYPES: &[BuiltinTypeNames] = &[
+pub const TYPES: &[BuiltinTypeNames] = &[
     BuiltinTypeNames {
         names: &["число", "number"],
         spec: BuiltinTypeSpec::Number,
@@ -733,7 +733,7 @@ pub(crate) const TYPES: &[BuiltinTypeNames] = &[
     },
 ];
 
-pub(crate) fn names_for(entries: &[BuiltinNames], canonical: &str) -> &'static [&'static str] {
+pub fn names_for(entries: &[BuiltinNames], canonical: &str) -> &'static [&'static str] {
     entries
         .iter()
         .find(|entry| entry.canonical == canonical)
@@ -741,19 +741,19 @@ pub(crate) fn names_for(entries: &[BuiltinNames], canonical: &str) -> &'static [
         .unwrap_or(&[])
 }
 
-pub(crate) fn function_names(canonical: &str) -> &'static [&'static str] {
+pub fn function_names(canonical: &str) -> &'static [&'static str] {
     names_for(FUNCTIONS, canonical)
 }
 
-pub(crate) fn method_names(canonical: &str) -> &'static [&'static str] {
+pub fn method_names(canonical: &str) -> &'static [&'static str] {
     names_for(METHODS, canonical)
 }
 
-pub(crate) fn macro_names(canonical: &str) -> &'static [&'static str] {
+pub fn macro_names(canonical: &str) -> &'static [&'static str] {
     names_for(MACROS, canonical)
 }
 
-pub(crate) fn class_names(canonical: &str) -> &'static [&'static str] {
+pub fn class_names(canonical: &str) -> &'static [&'static str] {
     CLASSES
         .iter()
         .find(|entry| entry.names.canonical == canonical)
@@ -761,7 +761,7 @@ pub(crate) fn class_names(canonical: &str) -> &'static [&'static str] {
         .unwrap_or(&[])
 }
 
-pub(crate) fn known_global_names() -> impl Iterator<Item = &'static str> {
+pub fn known_global_names() -> impl Iterator<Item = &'static str> {
     FUNCTIONS
         .iter()
         .flat_map(|entry| entry.names.iter().copied())

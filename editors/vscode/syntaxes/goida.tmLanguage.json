@@ -46,6 +46,26 @@
       "patterns": [
         {
           "name": "keyword.control.goida",
+          "match": "\\b(if|else|while|for|thread|return|try|catch|raise|as|import|from|new|and|or|macro|function|library|variable|const)\\b"
+        },
+        {
+          "name": "support.function.builtin.goida",
+          "match": "\\b(print|input|type|is|number|string|bool|float|list|array|dict|iterator|from_json|to_json|string_from_pointer|regex|create|wait|lock|unlock|read_lock|read_unlock|write_lock|write_unlock|get|set|read|write|format)\\b"
+        },
+        {
+          "name": "storage.type.goida",
+          "match": "\\b(text|number|string|bool|float|list|array|dict|pointer|void|any|module|resource|class|String|List|Array|Dict|Regex|File|Terminal|DateTime|System|Thread|Mutex|RwLock|Iterator)\\b"
+        },
+        {
+          "name": "storage.modifier.goida",
+          "match": "\\b(public|private|static)\\b"
+        },
+        {
+          "name": "constant.language.goida",
+          "match": "\\b(true|false|this|void)\\b"
+        },
+        {
+          "name": "keyword.control.goida",
           "match": "\\b(если|иначе|пока|для|поток|вернуть|попробовать|перехватить|выбросить|как|подключить|из|новый|и|или)\\b"
         },
         {
@@ -105,6 +125,20 @@
     },
     "classes": {
       "patterns": [
+        {
+          "match": "\\b(class)\\s+([\\p{L}_][\\p{L}\\p{N}_]*)(?:\\s*(\\()\\s*([\\p{L}_][\\p{L}\\p{N}_]*)\\s*(\\)))?",
+          "captures": {
+            "1": { "name": "storage.type.class.goida" },
+            "2": { "name": "entity.name.class.goida" },
+            "3": { "name": "punctuation.definition.inheritance.begin.goida" },
+            "4": { "name": "entity.other.inherited-class.goida" },
+            "5": { "name": "punctuation.definition.inheritance.end.goida" }
+          }
+        },
+        {
+          "name": "storage.type.class.goida",
+          "match": "\\bconstructor\\b"
+        },
         {
           "match": "\\b(класс)\\s+([\\p{L}_][\\p{L}\\p{N}_]*)(?:\\s*(\\()\\s*([\\p{L}_][\\p{L}\\p{N}_]*)\\s*(\\)))?",
           "captures": {

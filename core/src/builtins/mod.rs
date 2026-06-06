@@ -5,7 +5,7 @@ use string_interner::DefaultSymbol as Symbol;
 
 mod array;
 mod bool;
-pub(crate) mod catalog;
+pub mod catalog;
 mod common;
 mod datetime;
 mod dict;

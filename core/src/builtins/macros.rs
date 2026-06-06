@@ -79,9 +79,7 @@ fn expand_format_macro(
             FormatPart::Text(text) if text.is_empty() => continue,
             FormatPart::Text(text) => vec![macro_token(Token::String(text), call.span.clone())],
             FormatPart::Placeholder => {
-                let mut tokens = vec![macro_token(Token::LParen, call.span.clone())];
-                tokens.extend(value_parts[value_index].clone());
-                tokens.push(macro_token(Token::RParen, call.span.clone()));
+                let tokens = parenthesize_value_part(&value_parts[value_index], call.span.clone());
                 value_index += 1;
                 tokens
             }
@@ -91,6 +89,25 @@ fn expand_format_macro(
     }
 
     Ok(output)
+}
+
+fn parenthesize_value_part(
+    tokens: &[syn::MacroToken],
+    fallback_span: Range<usize>,
+) -> Vec<syn::MacroToken> {
+    let open_span = tokens
+        .first()
+        .map(|token| token.span.start..token.span.start)
+        .unwrap_or_else(|| fallback_span.clone());
+    let close_span = tokens
+        .last()
+        .map(|token| token.span.end..token.span.end)
+        .unwrap_or(fallback_span);
+
+    let mut output = vec![macro_token(Token::LParen, open_span)];
+    output.extend(tokens.iter().cloned());
+    output.push(macro_token(Token::RParen, close_span));
+    output
 }
 
 fn split_top_level_args(tokens: &[syn::MacroToken]) -> Option<Vec<Vec<syn::MacroToken>>> {
@@ -104,9 +121,18 @@ fn split_top_level_args(tokens: &[syn::MacroToken]) -> Option<Vec<Vec<syn::Macro
 
     for token in tokens {
         match token.token {
-            Token::LParen => stack.push(Token::RParen),
-            Token::LBracket => stack.push(Token::RBracket),
-            Token::LBrace => stack.push(Token::RBrace),
+            Token::LParen => {
+                stack.push(Token::RParen);
+                current.push(token.clone());
+            }
+            Token::LBracket => {
+                stack.push(Token::RBracket);
+                current.push(token.clone());
+            }
+            Token::LBrace => {
+                stack.push(Token::RBrace);
+                current.push(token.clone());
+            }
             Token::RParen | Token::RBracket | Token::RBrace => {
                 if stack.pop().as_ref() != Some(&token.token) {
                     return None;

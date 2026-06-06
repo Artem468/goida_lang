@@ -1,5 +1,6 @@
 pub mod ast;
 pub mod builtins;
+pub mod formatter;
 pub mod import_paths;
 pub mod interpreter;
 pub mod r#macro;

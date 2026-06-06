@@ -9,6 +9,7 @@ on:
       - ".github/workflows/windows_build.yml"
       - "Cargo.toml"
       - "Cargo.lock"
+      - "assets/**"
       - "cli/**"
       - "core/**"
       - "lsp/**"
@@ -23,6 +24,7 @@ on:
       - ".github/workflows/windows_build.yml"
       - "Cargo.toml"
       - "Cargo.lock"
+      - "assets/**"
       - "cli/**"
       - "core/**"
       - "lsp/**"
@@ -64,8 +66,8 @@ jobs:
       - name: Upload CLI artifact
         uses: actions/upload-artifact@v4
         with:
-          name: linux-cli
-          path: target/release/cli
+          name: linux-goida
+          path: target/release/goida
 
       - name: Upload LSP artifact
         uses: actions/upload-artifact@v4

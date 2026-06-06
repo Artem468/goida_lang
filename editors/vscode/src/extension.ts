@@ -1,6 +1,10 @@
 import * as fs from "fs";
 import * as path from "path";
-import { ExtensionContext, window, workspace } from "vscode";
+import {
+    ExtensionContext,
+    window,
+    workspace,
+} from "vscode";
 import { LanguageClient, LanguageClientOptions, ServerOptions } from "vscode-languageclient/node";
 
 function findServerBinary(context: ExtensionContext): string | undefined {
@@ -53,5 +57,6 @@ export function activate(context: ExtensionContext) {
     );
 
     context.subscriptions.push(client);
-    void client.start();
+    const clientReady = client.start();
+    void clientReady;
 }
