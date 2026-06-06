@@ -102,14 +102,14 @@ pub fn setup_list_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassDe
     });
 
     // join(separator) - Склеить в строку
-    define_method!(class_def, interner, crate::builtins::catalog::method::JOIN.canonical => (_, args, span) {
+    define_method!(class_def, interner, crate::builtins::catalog::method::JOIN.canonical => (interpreter, args, span) {
         if let (Some(Value::List(list)), Some(Value::Text(sep))) = (
             CallArgListExt::first_value(&args),
             CallArgListExt::get_value(&args, 1),
         ) {
             let joined = list.read(|i| {
                 i.iter()
-                    .map(|v| v.to_string())
+                    .map(|v| interpreter.format_value(v))
                     .collect::<Vec<_>>()
                     .join(sep)
             });

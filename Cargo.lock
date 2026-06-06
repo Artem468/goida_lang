@@ -475,7 +475,6 @@ dependencies = [
  "chrono",
  "lalrpop",
  "lalrpop-util",
- "lazy_static",
  "libffi",
  "libloading",
  "logos",

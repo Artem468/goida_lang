@@ -213,7 +213,7 @@ impl StatementExecutor for Interpreter {
                 } else {
                     Value::Empty
                 };
-                bail_runtime!(Return, stmt_kind.span, "{}", value.to_string() => value)
+                bail_runtime!(Return, stmt_kind.span, "{}", self.format_value(&value) => value)
             }
 
             StatementKind::PropertyAssign {
@@ -276,7 +276,7 @@ impl StatementExecutor for Interpreter {
                         Ok(())
                     }),
                     Value::Dict(dict) => dict.write(|d| {
-                        d.insert(idx_val.to_string(), val_to_set);
+                        d.insert(self.format_value(&idx_val), val_to_set);
                         Ok(())
                     }),
                     _ => bail_runtime!(
@@ -528,7 +528,7 @@ impl Interpreter {
                         Ok(())
                     }),
                     Value::Dict(dict) => dict.write(|d| {
-                        let key = idx_val.to_string();
+                        let key = self.format_value(&idx_val);
                         let left = d.get(&key).cloned().ok_or_else(|| {
                             runtime_error!(
                                 InvalidOperation,

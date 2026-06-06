@@ -21,9 +21,9 @@ pub fn setup_system_class(interner_ref: &SharedInterner) -> (Symbol, SharedMut<C
     });
 
     // --- Система.паника(сообщение) ---
-    define_method!(class_def, interner_ref, @static crate::builtins::catalog::method::PANIC.canonical => (_, args, span) {
+    define_method!(class_def, interner_ref, @static crate::builtins::catalog::method::PANIC.canonical => (interpreter, args, span) {
         let msg = CallArgListExt::first_value(&args)
-            .map(|v| v.to_string())
+            .map(|v| interpreter.format_value(v))
             .unwrap_or_else(|| "Неизвестная ошибка".into());
         bail_runtime!(
             Panic,
@@ -93,9 +93,9 @@ pub fn setup_system_class(interner_ref: &SharedInterner) -> (Symbol, SharedMut<C
     });
 
     // --- Система.окружение("SOME") ---
-    define_method!(class_def, interner_ref, @static crate::builtins::catalog::method::ENV.canonical => (_, args, span) {
+    define_method!(class_def, interner_ref, @static crate::builtins::catalog::method::ENV.canonical => (interpreter, args, span) {
         let arg = CallArgListExt::first_value(&args)
-            .map(|v| v.to_string())
+            .map(|v| interpreter.format_value(v))
             .unwrap_or_else(|| "Неизвестная ошибка".into());
         match std::env::var(arg) {
             Ok(v) => Ok(Value::Text(v)),

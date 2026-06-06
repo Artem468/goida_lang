@@ -263,7 +263,7 @@ impl ExpressionEvaluator for Interpreter {
                     }
 
                     Value::Dict(dict) => dict.read(|d| {
-                        let key = idx_val.to_string();
+                        let key = self.format_value(&idx_val);
                         d.get(&key).cloned().ok_or_else(|| {
                             runtime_error!(
                                 InvalidOperation,

@@ -160,7 +160,7 @@ pub fn setup_dict_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassDe
 }
 
 pub fn setup_dict_func(interpreter: &mut Interpreter, interner: &SharedInterner) {
-    define_builtin!(interpreter, interner, crate::builtins::catalog::function::DICT.canonical => (_, arguments, span) {
+    define_builtin!(interpreter, interner, crate::builtins::catalog::function::DICT.canonical => (interpreter, arguments, span) {
         if arguments.len() % 2 != 0 {
             return bail_runtime!(
                 InvalidOperation,
@@ -173,7 +173,7 @@ pub fn setup_dict_func(interpreter: &mut Interpreter, interner: &SharedInterner)
         for i in (0..arguments.len()).step_by(2) {
             let key = match &arguments[i].value {
                 Value::Text(s) => s.clone(),
-                v => v.to_string(),
+                v => interpreter.format_value(v),
             };
             let value = arguments[i + 1].value.clone();
             dict.insert(key, value);

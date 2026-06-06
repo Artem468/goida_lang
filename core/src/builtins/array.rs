@@ -40,14 +40,14 @@ pub fn setup_array_class(interner: &SharedInterner) -> (Symbol, SharedMut<ClassD
     });
 
     // join(separator) - Склеить в строку
-    define_method!(class_def, interner, crate::builtins::catalog::method::JOIN.canonical => (_, args, span) {
+    define_method!(class_def, interner, crate::builtins::catalog::method::JOIN.canonical => (interpreter, args, span) {
         if let (Some(Value::Array(arr)), Some(Value::Text(sep))) = (
             CallArgListExt::first_value(&args),
             CallArgListExt::get_value(&args, 1),
         ) {
             let res = arr
                 .iter()
-                .map(|v| v.to_string())
+                .map(|v| interpreter.format_value(v))
                 .collect::<Vec<_>>()
                 .join(sep);
 

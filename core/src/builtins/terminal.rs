@@ -82,9 +82,9 @@ pub fn setup_terminal_class(interner_ref: &SharedInterner) -> (Symbol, SharedMut
     });
 
     // Метод: Терминал.заголовок(текст)
-    define_method!(class_def, interner_ref, @static crate::builtins::catalog::method::TITLE.canonical => (_, args, _) {
+    define_method!(class_def, interner_ref, @static crate::builtins::catalog::method::TITLE.canonical => (interpreter, args, _) {
         let title = CallArgListExt::get_value(&args, 1)
-            .map(|v| v.to_string())
+            .map(|v| interpreter.format_value(v))
             .unwrap_or_default();
         print!("\x1b]0;{}\x07", title);
         let _ = stdout().flush();

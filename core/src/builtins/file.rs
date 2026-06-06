@@ -60,10 +60,10 @@ pub fn setup_file_class(interner_ref: &SharedInterner) -> (Symbol, SharedMut<Cla
     });
 
     // --- .записать(текст) ---
-    define_method!(class_def, interner_ref, crate::builtins::catalog::method::WRITE.canonical => (_, args, span) {
+    define_method!(class_def, interner_ref, crate::builtins::catalog::method::WRITE.canonical => (interpreter, args, span) {
         let path = get_path(&args)?;
         let text = if let Some(t) = CallArgListExt::get_value(&args, 1) {
-            t.to_string()
+            interpreter.format_value(t)
         } else {
             "".into()
         };
@@ -79,10 +79,10 @@ pub fn setup_file_class(interner_ref: &SharedInterner) -> (Symbol, SharedMut<Cla
     });
 
     // --- .дописать(текст) ---
-    define_method!(class_def, interner_ref, crate::builtins::catalog::method::APPEND.canonical => (_, args, span) {
+    define_method!(class_def, interner_ref, crate::builtins::catalog::method::APPEND.canonical => (interpreter, args, span) {
         let path = get_path(&args)?;
         let text = if let Some(t) = CallArgListExt::get_value(&args, 1) {
-            t.to_string()
+            interpreter.format_value(t)
         } else {
             "".into()
         };
