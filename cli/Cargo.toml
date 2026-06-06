@@ -3,9 +3,16 @@ name = "cli"
 version = "0.1.0"
 edition = "2021"
 
+[[bin]]
+name = "goida"
+path = "src/main.rs"
+
 [dependencies]
 goida_core = { path = "../core" }
 ariadne = { version = "0.6.0" }
 clap = { version = "4.0", features = ["derive"] }
 serde = { version = "1.0", features = ["derive"] }
 toml = "0.8"
+
+[target.'cfg(windows)'.build-dependencies]
+winresource = "0.1"
