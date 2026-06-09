@@ -44,7 +44,7 @@ impl Interpreter {
             self.environment
                 .write(|env| env.define(function.name, value.clone()));
             if let Some(module) = self.modules.get_mut(&current_module_id) {
-                module.globals.insert(function.name, value);
+                module.set_global(function.name, value);
             }
         }
 
@@ -59,7 +59,7 @@ impl Interpreter {
             self.environment
                 .write(|env| env.define(global.name, value.clone()));
             if let Some(module) = self.modules.get_mut(&current_module_id) {
-                module.globals.insert(global.name, value);
+                module.set_global(global.name, value);
             }
         }
 

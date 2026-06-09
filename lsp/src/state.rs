@@ -1,6 +1,6 @@
 use crate::document::Document;
 use goida_runtime::interpreter::prelude::Module;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::Arc;
 use tower_lsp::lsp_types::Url;
@@ -16,4 +16,5 @@ pub(crate) struct ServerState {
     pub(crate) documents: HashMap<Url, Document>,
     pub(crate) modules: HashMap<PathBuf, CachedModule>,
     pub(crate) workspace_roots: Vec<PathBuf>,
+    pub(crate) workspace_files: HashSet<PathBuf>,
 }

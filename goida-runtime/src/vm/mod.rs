@@ -16,6 +16,7 @@ pub struct Vm<'a> {
     module: Symbol,
     locals: Vec<Option<Value>>,
     local_constants: HashSet<u32>,
+    prefer_environment_globals: bool,
 }
 
 impl<'a> Vm<'a> {
@@ -25,6 +26,7 @@ impl<'a> Vm<'a> {
             module,
             locals: Vec::new(),
             local_constants: HashSet::new(),
+            prefer_environment_globals: false,
         }
     }
 
@@ -49,7 +51,9 @@ impl<'a> Vm<'a> {
                     "Compiled expression is missing"
                 )
             })?;
-        Self::new(interpreter, module).run_value(&chunk)
+        let mut vm = Self::new(interpreter, module);
+        vm.prefer_environment_globals = true;
+        vm.run_value(&chunk)
     }
 
     fn run_chunk(&mut self, chunk: &Chunk) -> Result<(), RuntimeError> {
@@ -126,6 +130,47 @@ impl<'a> Vm<'a> {
             }
         }
         bail_runtime!(UndefinedVariable, span, "{}", name)
+    }
+
+    fn load_global(&mut self, slot: u32, name: Symbol, span: Span) -> Result<Value, RuntimeError> {
+        if self.prefer_environment_globals {
+            if let Some(value) = self.interpreter.environment.read(|env| env.get(&name)) {
+                return self.interpreter.resolve_runtime_value(value, span);
+            }
+        }
+        if let Some(value) = self
+            .interpreter
+            .modules
+            .get(&self.module)
+            .and_then(|module| module.global_slot(slot))
+        {
+            return self.interpreter.resolve_runtime_value(value, span);
+        }
+        self.load_identifier(name, span)
+    }
+
+    fn store_global(
+        &mut self,
+        slot: u32,
+        name: Symbol,
+        value: Value,
+        is_const: bool,
+        span: Span,
+    ) -> Result<(), RuntimeError> {
+        if is_const {
+            self.interpreter
+                .define_constant(name, value.clone(), self.module, span)?;
+        } else {
+            self.interpreter
+                .assign_identifier(name, value.clone(), self.module, span)?;
+        }
+        if let Some(module) = self.interpreter.modules.get_mut(&self.module) {
+            module.set_global_slot(slot, value);
+            if is_const {
+                module.global_constants.insert(slot);
+            }
+        }
+        Ok(())
     }
 
     fn binary(

@@ -3,6 +3,7 @@ use crate::ast::prelude::{
     AstArena, ExprId, ExpressionKind, FunctionDefinition, Span, StatementKind, StmtId,
 };
 use crate::hir::{Binding, HirModule};
+use std::collections::BTreeSet;
 use std::sync::Arc;
 use string_interner::DefaultSymbol as Symbol;
 
@@ -68,18 +69,19 @@ pub struct Compiler;
 
 impl Compiler {
     pub fn compile(module: &dyn BytecodeSource, hir: &HirModule) -> BytecodeModule {
+        let functions = module.functions_to_compile();
         let mut bytecode = BytecodeModule {
             module: Arc::new(Self::statements_chunk(module, hir, module.body())),
             ..BytecodeModule::default()
         };
-        for id in 0..module.arena().expressions.len() as ExprId {
+        for id in Self::standalone_expression_ids(module, &functions) {
             let mut compiler = ChunkCompiler::new(module, hir);
             let result = compiler.expression(id);
             bytecode
                 .expressions
                 .insert(id, Arc::new(compiler.finish(Some(result))));
         }
-        for function in module.functions_to_compile() {
+        for function in functions {
             bytecode.bodies.insert(
                 function.body,
                 Arc::new(Self::statement_chunk(module, hir, function.body)),
@@ -101,6 +103,56 @@ impl Compiler {
             }
         }
         bytecode
+    }
+
+    fn standalone_expression_ids(
+        module: &dyn BytecodeSource,
+        functions: &[Arc<FunctionDefinition>],
+    ) -> BTreeSet<ExprId> {
+        let mut ids = BTreeSet::new();
+
+        for function in functions {
+            Self::collect_parameter_defaults(&function.params, &mut ids);
+        }
+        for statement in &module.arena().statements {
+            match &statement.kind {
+                StatementKind::FunctionDefinition(function) => {
+                    Self::collect_parameter_defaults(&function.params, &mut ids);
+                }
+                StatementKind::ClassDefinition(class) => {
+                    for (_, _, field) in class.fields.values() {
+                        if let crate::ast::program::FieldData::Expression(Some(id)) = field {
+                            ids.insert(*id);
+                        }
+                    }
+                    for (_, _, method) in class.methods.values() {
+                        if let crate::ast::program::MethodType::User(function) = method {
+                            Self::collect_parameter_defaults(&function.params, &mut ids);
+                        }
+                    }
+                    if let Some(crate::ast::program::MethodType::User(function)) =
+                        &class.constructor
+                    {
+                        Self::collect_parameter_defaults(&function.params, &mut ids);
+                    }
+                }
+                _ => {}
+            }
+        }
+        for expression in &module.arena().expressions {
+            if let ExpressionKind::Lambda { params, .. } = &expression.kind {
+                Self::collect_parameter_defaults(params, &mut ids);
+            }
+        }
+
+        ids
+    }
+
+    fn collect_parameter_defaults(
+        params: &[crate::ast::prelude::Parameter],
+        ids: &mut BTreeSet<ExprId>,
+    ) {
+        ids.extend(params.iter().filter_map(|param| param.default_value));
     }
 
     fn statements_chunk(

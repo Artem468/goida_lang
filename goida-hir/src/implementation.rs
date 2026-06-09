@@ -30,6 +30,7 @@ pub enum MethodResolution {
 
 #[derive(Clone, Debug, Default)]
 pub struct HirModule {
+    pub global_names: Vec<Symbol>,
     pub names: HashMap<ExprId, Binding>,
     pub stores: HashMap<StmtId, Binding>,
     pub types: HashMap<ExprId, TypeId>,
@@ -235,6 +236,9 @@ impl Resolver {
         for function in module.functions() {
             resolver.visit_function(module, &function);
         }
+        let mut global_names = resolver.globals.into_iter().collect::<Vec<_>>();
+        global_names.sort_unstable_by_key(|(_, slot)| *slot);
+        resolver.hir.global_names = global_names.into_iter().map(|(name, _)| name).collect();
         resolver.hir
     }
 
@@ -348,6 +352,25 @@ impl Visitor for Resolver {
                     .methods
                     .insert(id, MethodResolution::Dynamic(method));
                 walk_expression(self, module, id);
+            }
+            ExpressionKind::Lambda { ref params, body } => {
+                for param in params {
+                    if let Some(default) = param.default_value {
+                        self.visit_expression(module, default);
+                    }
+                }
+                self.function_depth += 1;
+                self.scopes.push(HashMap::new());
+                self.function_scope_starts.push(self.scopes.len() - 1);
+                self.next_local_slots.push(0);
+                for param in params {
+                    self.declare(param.name);
+                }
+                self.visit_statement(module, body);
+                self.next_local_slots.pop();
+                self.function_scope_starts.pop();
+                self.scopes.pop();
+                self.function_depth -= 1;
             }
             _ => walk_expression(self, module, id),
         }

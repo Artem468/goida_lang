@@ -182,7 +182,9 @@ impl Interpreter {
                 if let Some(imported_module) = self.modules.get(&imported_module_id).cloned() {
                     if let Some(current_module) = self.modules.get_mut(&module.name) {
                         for (name, value) in imported_module.globals {
-                            current_module.globals.entry(name).or_insert(value);
+                            if !current_module.globals.contains_key(&name) {
+                                current_module.set_global(name, value);
+                            }
                         }
                     }
                 }
@@ -202,7 +204,7 @@ impl Interpreter {
                     .environment
                     .write(|env| env.define(*class_name, class_value.clone()));
                 if let Some(mod_entry) = interpreter.modules.get_mut(&module.name) {
-                    mod_entry.globals.insert(*class_name, class_value);
+                    mod_entry.set_global(*class_name, class_value);
                 }
 
                 let fields = class_def.read(|i| i.fields.clone());
@@ -227,7 +229,7 @@ impl Interpreter {
                     .environment
                     .write(|env| env.define(*function_name, func_value.clone()));
                 if let Some(mod_entry) = interpreter.modules.get_mut(&module.name) {
-                    mod_entry.globals.insert(*function_name, func_value);
+                    mod_entry.set_global(*function_name, func_value);
                 }
             }
 
@@ -243,9 +245,7 @@ impl Interpreter {
                     .write(|env| env.define(*name_symbol, Value::Class(class_def.clone())));
 
                 if let Some(mod_entry) = interpreter.modules.get_mut(&module.name) {
-                    mod_entry
-                        .globals
-                        .insert(*name_symbol, Value::Class(class_def.clone()));
+                    mod_entry.set_global(*name_symbol, Value::Class(class_def.clone()));
                 }
             }
 

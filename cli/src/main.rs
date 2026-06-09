@@ -1,5 +1,5 @@
 use ariadne::{Color, Label, Report, ReportKind};
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, ValueEnum};
 use std::{
     fs,
     io::{self, Write},
@@ -7,7 +7,7 @@ use std::{
 };
 
 use goida_runtime::interpreter::prelude::RuntimeError;
-use goida_runtime::parser::prelude::{ParseError, Parser as ProgramParser};
+use goida_runtime::parser::prelude::{FormatLanguage, ParseError, Parser as ProgramParser};
 use goida_runtime::session::Session;
 use goida_runtime::traits::prelude::CoreOperations;
 use goida_syntax::ast::prelude::{ErrorData, Span};
@@ -80,12 +80,29 @@ enum Commands {
         file: String,
         #[arg(long, help = "Rewrite the file in place")]
         write: bool,
+        #[arg(long, value_enum, default_value_t = FormatLanguageArg::English)]
+        language: FormatLanguageArg,
     },
     #[command(about = "Show macro expansion AST preview")]
     ExpandMacros {
         #[arg(help = "Path to a .goida file")]
         file: String,
     },
+}
+
+#[derive(Debug, Clone, Copy, ValueEnum)]
+enum FormatLanguageArg {
+    English,
+    Russian,
+}
+
+impl From<FormatLanguageArg> for FormatLanguage {
+    fn from(value: FormatLanguageArg) -> Self {
+        match value {
+            FormatLanguageArg::English => Self::English,
+            FormatLanguageArg::Russian => Self::Russian,
+        }
+    }
 }
 
 fn main() {
@@ -121,8 +138,12 @@ fn main() {
         Some(Commands::Remove { name }) => exit_on_package_error(package::remove_dependency(name)),
         Some(Commands::Venv { path }) => exit_on_package_error(package::create_venv(path)),
         Some(Commands::Repl) => run_repl(&mut session),
-        Some(Commands::Fmt { file, write }) => {
-            if let Err(err) = format_file(&session, file, *write) {
+        Some(Commands::Fmt {
+            file,
+            write,
+            language,
+        }) => {
+            if let Err(err) = format_file(&session, file, *write, (*language).into()) {
                 eprintln!("{err}");
                 std::process::exit(1);
             }
@@ -146,11 +167,16 @@ fn exit_on_package_error(result: Result<(), String>) {
     }
 }
 
-fn format_file(session: &Session, file: &str, write: bool) -> Result<(), String> {
+fn format_file(
+    session: &Session,
+    file: &str,
+    write: bool,
+    language: FormatLanguage,
+) -> Result<(), String> {
     let source = fs::read_to_string(file).map_err(|err| format!("{}: '{}'", err, file))?;
     let parser = ProgramParser::new(session.interner(), file, PathBuf::from(file));
     let formatted = parser
-        .format_source_ast(&source)
+        .format_source_ast_with_language(&source, language)
         .map_err(|err| format_parse_error(&err))?;
     if write {
         fs::write(file, formatted).map_err(|err| format!("{}: '{}'", err, file))?;

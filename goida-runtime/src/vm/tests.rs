@@ -142,3 +142,43 @@ result = sum(5)
         Some(&Value::Number(20))
     );
 }
+
+#[test]
+fn known_globals_use_dense_module_slots() {
+    let mut session = Session::new();
+    let module = Parser::new(
+        session.interner(),
+        "global_slots",
+        PathBuf::from("global_slots.goida"),
+    )
+    .parse(
+        r#"
+answer = 40
+result = answer + 2
+"#,
+    )
+    .expect("program should compile");
+    let module_id = module.name;
+
+    assert!(module
+        .bytecode
+        .module
+        .code
+        .iter()
+        .any(|instruction| matches!(
+            instruction,
+            Instruction::LoadName {
+                binding: Binding::GlobalSlot(_),
+                ..
+            }
+        )));
+
+    session
+        .execute(module)
+        .expect("global slots should execute");
+    let result = session.runtime().intern_string("result");
+    assert_eq!(
+        session.runtime().modules[&module_id].globals.get(&result),
+        Some(&Value::Number(42))
+    );
+}

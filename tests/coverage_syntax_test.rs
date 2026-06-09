@@ -1,7 +1,7 @@
-use std::process::Command;
+mod common;
 
 fn run(file: &str) -> (bool, String, String) {
-    let output = Command::new("cargo")
+    let output = common::goida_command()
         .args(["run", "-q", "-p", "goida-cli", "--", "run", file])
         .output()
         .expect("failed to run");
@@ -80,7 +80,7 @@ fn test_compound_assignment_in_statements() {
     let main_file = dir.join("main.goida");
     std::fs::write(&main_file, source).expect("Не удалось записать временный файл");
 
-    let output = Command::new("cargo")
+    let output = common::goida_command()
         .args([
             "run",
             "-q",
@@ -123,7 +123,7 @@ fn test_foreach_statement_iterates_collections() {
     let main_file = dir.join("main.goida");
     std::fs::write(&main_file, source).expect("Не удалось записать временный файл");
 
-    let output = Command::new("cargo")
+    let output = common::goida_command()
         .args([
             "run",
             "-q",
@@ -157,7 +157,7 @@ fn test_constant_assignment_cannot_be_changed() {
     )
     .expect("Не удалось записать временный файл");
 
-    let output = Command::new("cargo")
+    let output = common::goida_command()
         .args([
             "run",
             "-q",
@@ -218,7 +218,7 @@ fn test_lazy_iterator_map_filter_reduce() {
     let main_file = dir.join("main.goida");
     std::fs::write(&main_file, source).expect("Не удалось записать временный файл");
 
-    let output = Command::new("cargo")
+    let output = common::goida_command()
         .args([
             "run",
             "-q",
@@ -254,7 +254,7 @@ fn test_string_utilities_and_regular_expressions() {
     let main_file = dir.join("main.goida");
     std::fs::write(&main_file, source).expect("Не удалось записать временный файл");
 
-    let output = Command::new("cargo")
+    let output = common::goida_command()
         .args([
             "run",
             "-q",
@@ -292,7 +292,7 @@ fn test_regex_class_uses_russian_name() {
     )
     .expect("Не удалось записать временный файл");
 
-    let output = Command::new("cargo")
+    let output = common::goida_command()
         .args([
             "run",
             "-q",
@@ -341,7 +341,7 @@ fn test_lambda_expression_and_block_forms() {
     )
     .expect("Не удалось записать временный файл");
 
-    let output = Command::new("cargo")
+    let output = common::goida_command()
         .args([
             "run",
             "-q",
@@ -394,7 +394,7 @@ x = 100
     )
     .expect("Не удалось записать временный файл");
 
-    let output = Command::new("cargo")
+    let output = common::goida_command()
         .args([
             "run",
             "-q",
@@ -443,7 +443,7 @@ fn test_inline_lambdas_in_iterator_pipeline() {
     )
     .expect("Не удалось записать временный файл");
 
-    let output = Command::new("cargo")
+    let output = common::goida_command()
         .args([
             "run",
             "-q",
@@ -486,7 +486,7 @@ fn test_foreach_array_dict_and_constant_compound_assignment() {
     let ok_file = dir.join("ok.goida");
     std::fs::write(&ok_file, ok_source).expect("Не удалось записать временный файл");
 
-    let ok_output = Command::new("cargo")
+    let ok_output = common::goida_command()
         .args([
             "run",
             "-q",
@@ -510,7 +510,7 @@ fn test_foreach_array_dict_and_constant_compound_assignment() {
     let fail_file = dir.join("fail.goida");
     std::fs::write(&fail_file, "константа x = 1\nx += 1\n")
         .expect("Не удалось записать временный файл");
-    let fail_output = Command::new("cargo")
+    let fail_output = common::goida_command()
         .args([
             "run",
             "-q",

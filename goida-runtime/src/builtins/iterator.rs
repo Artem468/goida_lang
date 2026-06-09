@@ -8,19 +8,25 @@ use crate::interpreter::prelude::{
 use crate::shared::SharedMut;
 use crate::traits::prelude::InterpreterFunctions;
 use crate::{bail_runtime, define_builtin, define_method, runtime_error};
+use std::sync::Arc;
 use string_interner::DefaultSymbol as Symbol;
 
-pub(crate) fn values_from_iterable(value: &Value, span: Span) -> Result<Vec<Value>, RuntimeError> {
+pub(crate) fn values_from_iterable(
+    value: &Value,
+    span: Span,
+) -> Result<Arc<Vec<Value>>, RuntimeError> {
     match value {
-        Value::List(list) => Ok(list.read(|items| items.clone())),
-        Value::Array(items) => Ok(items.as_ref().clone()),
-        Value::Text(text) => Ok(text.chars().map(|ch| Value::Text(ch.to_string())).collect()),
-        Value::Dict(dict) => Ok(dict.read(|items| {
+        Value::List(list) => Ok(Arc::new(list.read(|items| items.clone()))),
+        Value::Array(items) => Ok(items.clone()),
+        Value::Text(text) => Ok(Arc::new(
+            text.chars().map(|ch| Value::Text(ch.to_string())).collect(),
+        )),
+        Value::Dict(dict) => Ok(Arc::new(dict.read(|items| {
             let mut keys: Vec<_> = items.keys().cloned().collect();
             keys.sort();
             keys.into_iter().map(Value::Text).collect()
-        })),
-        Value::Iterator(iterator) => Ok(iterator.source.as_ref().clone()),
+        }))),
+        Value::Iterator(iterator) => Ok(iterator.source.clone()),
         _ => bail_runtime!(TypeError, span, "Значение нельзя преобразовать в итератор"),
     }
 }

@@ -1,4 +1,4 @@
-use std::process::Command;
+mod common;
 
 #[test]
 fn test_english_syntax_aliases() {
@@ -37,7 +37,7 @@ noop()
     )
     .expect("Не удалось записать временный файл");
 
-    let output = Command::new("cargo")
+    let output = common::goida_command()
         .args([
             "run",
             "-q",
@@ -61,7 +61,7 @@ noop()
 
 #[test]
 fn test_control_flow_example() {
-    let output = Command::new("cargo")
+    let output = common::goida_command()
         .args([
             "run",
             "-q",
@@ -89,7 +89,7 @@ fn test_control_flow_example() {
 
 #[test]
 fn test_classes_example() {
-    let output = Command::new("cargo")
+    let output = common::goida_command()
         .args([
             "run",
             "-q",
@@ -156,7 +156,7 @@ fn test_method_chain_can_continue_on_new_lines() {
     )
     .expect("Не удалось записать временный файл");
 
-    let output = Command::new("cargo")
+    let output = common::goida_command()
         .args([
             "run",
             "-q",
@@ -203,7 +203,7 @@ fn test_binary_expressions_can_continue_on_new_lines() {
     )
     .expect("Не удалось записать временный файл");
 
-    let output = Command::new("cargo")
+    let output = common::goida_command()
         .args([
             "run",
             "-q",
@@ -227,7 +227,7 @@ fn test_binary_expressions_can_continue_on_new_lines() {
 
 #[test]
 fn test_queue_example() {
-    let output = Command::new("cargo")
+    let output = common::goida_command()
         .args([
             "run",
             "-q",
@@ -252,7 +252,7 @@ fn test_queue_example() {
 
 #[test]
 fn test_json_roundtrip_example() {
-    let output = Command::new("cargo")
+    let output = common::goida_command()
         .args([
             "run",
             "-q",
@@ -277,7 +277,7 @@ fn test_json_roundtrip_example() {
 
 #[test]
 fn test_thread_example() {
-    let output = Command::new("cargo")
+    let output = common::goida_command()
         .args([
             "run",
             "-q",
@@ -316,7 +316,7 @@ fn test_top_level_thread_block_executes_and_updates_outer_variable() {
     let main_file = dir.join("main.goida");
     std::fs::write(&main_file, source).expect("Не удалось записать временный файл");
 
-    let output = Command::new("cargo")
+    let output = common::goida_command()
         .args([
             "run",
             "-q",

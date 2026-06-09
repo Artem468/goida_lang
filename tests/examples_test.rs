@@ -1,6 +1,7 @@
 use std::fs;
 use std::path::Path;
-use std::process::Command;
+
+mod common;
 
 #[test]
 fn test_all_examples() {
@@ -34,7 +35,7 @@ fn test_all_examples() {
     for file_path in goida_files {
         println!("Тестируем файл: {:?}", file_path);
 
-        let output = Command::new("cargo")
+        let output = common::goida_command()
             .args([
                 "run",
                 "-p",
@@ -66,7 +67,7 @@ fn test_all_examples() {
 
 #[test]
 fn test_imported_top_level_globals_are_available() {
-    let output = Command::new("cargo")
+    let output = common::goida_command()
         .args([
             "run",
             "-q",
@@ -101,7 +102,7 @@ fn test_local_binding_shadows_import_alias_for_property_access() {
     .expect("Не удалось записать временный основной файл");
 
     let main_file = dir.join("main.goida");
-    let output = Command::new("cargo")
+    let output = common::goida_command()
         .args([
             "run",
             "-q",
@@ -148,7 +149,7 @@ fn test_class_inheritance_reuses_base_members() {
     let main_file = dir.join("main.goida");
     fs::write(&main_file, source).expect("Не удалось записать временный файл");
 
-    let output = Command::new("cargo")
+    let output = common::goida_command()
         .args([
             "run",
             "-q",
@@ -190,7 +191,7 @@ fn test_try_catch_catches_by_base_error_class() {
     let main_file = dir.join("main.goida");
     fs::write(&main_file, source).expect("Не удалось записать временный файл");
 
-    let output = Command::new("cargo")
+    let output = common::goida_command()
         .args([
             "run",
             "-q",
@@ -232,7 +233,7 @@ fn test_raise_can_be_caught_by_base_class() {
     let main_file = dir.join("main.goida");
     fs::write(&main_file, source).expect("Не удалось записать временный файл");
 
-    let output = Command::new("cargo")
+    let output = common::goida_command()
         .args([
             "run",
             "-q",
@@ -274,7 +275,7 @@ fn test_builtin_error_classes_do_not_need_declarations() {
     let main_file = dir.join("main.goida");
     fs::write(&main_file, source).expect("Не удалось записать временный файл");
 
-    let output = Command::new("cargo")
+    let output = common::goida_command()
         .args([
             "run",
             "-q",
@@ -318,7 +319,7 @@ fn test_catch_can_receive_error_text_and_try_multiple_handlers() {
     let main_file = dir.join("main.goida");
     fs::write(&main_file, source).expect("Не удалось записать временный файл");
 
-    let output = Command::new("cargo")
+    let output = common::goida_command()
         .args([
             "run",
             "-q",
@@ -350,7 +351,7 @@ fn test_unknown_variable_is_reported_while_parsing() {
     let main_file = dir.join("main.goida");
     fs::write(&main_file, "печать(не_существует)\n").expect("Не удалось записать временный файл");
 
-    let output = Command::new("cargo")
+    let output = common::goida_command()
         .args([
             "run",
             "-q",

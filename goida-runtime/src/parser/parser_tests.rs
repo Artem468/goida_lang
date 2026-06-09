@@ -57,6 +57,33 @@ answer = identity(42)
 }
 
 #[test]
+fn compiler_only_emits_standalone_expression_chunks_when_needed() {
+    let interner = goida_model::new_interner();
+    let module = Parser::new(
+        interner,
+        "standalone_expressions",
+        PathBuf::from("standalone_expressions.goida"),
+    )
+    .parse(
+        r#"
+function answer(value = 40 + 2) {
+    return value
+}
+
+class Box {
+    public value: number = 6 * 7
+}
+
+result = answer() + 1
+"#,
+    )
+    .expect("module should compile");
+
+    assert_eq!(module.bytecode.expressions.len(), 2);
+    assert!(module.bytecode.expressions.len() < module.arena.expressions.len());
+}
+
+#[test]
 fn syntax_only_parse_does_not_build_hir_or_bytecode() {
     let interner = goida_model::new_interner();
     let module = Parser::new(interner, "syntax_only", PathBuf::from("syntax_only.goida"))
@@ -98,6 +125,28 @@ fn syntax_parse_retains_import_node_but_emits_no_import_bytecode() {
 }
 
 #[test]
+fn parser_reports_cyclic_module_imports() {
+    let root = std::env::temp_dir().join(format!("goida-import-cycle-{}", std::process::id()));
+    std::fs::create_dir_all(&root).expect("test directory should exist");
+    std::fs::write(root.join("a.goida"), "import \"b.goida\" as b\n")
+        .expect("module a should be written");
+    std::fs::write(root.join("b.goida"), "import \"a.goida\" as a\n")
+        .expect("module b should be written");
+
+    let interner = goida_model::new_interner();
+    let error = Parser::new(interner, "cycle", root.join("a.goida"))
+        .parse("import \"b.goida\" as b\n")
+        .expect_err("cyclic import should fail");
+
+    let crate::parser::prelude::ParseError::ImportError(data) = error else {
+        panic!("cycle should produce an import error");
+    };
+    assert!(data.message.contains("Cyclic module import"));
+
+    std::fs::remove_dir_all(root).expect("test directory should be removed");
+}
+
+#[test]
 fn ast_formatter_preserves_comments_and_ignores_comment_markers_in_strings() {
     let interner = goida_model::new_interner();
     let parser = Parser::new(interner, "format", PathBuf::from("format.goida"));
@@ -106,4 +155,22 @@ fn ast_formatter_preserves_comments_and_ignores_comment_markers_in_strings() {
         .expect("source should format");
 
     assert_eq!(formatted, "// before\nvalue = \"// text\"\n// trailing\n");
+}
+
+#[test]
+fn format_language_detection_prefers_the_dominant_keyword_language() {
+    use crate::parser::prelude::FormatLanguage;
+
+    assert_eq!(
+        FormatLanguage::detect("функция main() { вернуть истина }\n"),
+        FormatLanguage::Russian
+    );
+    assert_eq!(
+        FormatLanguage::detect("function main() { return true }\n"),
+        FormatLanguage::English
+    );
+    assert_eq!(
+        FormatLanguage::detect("value = 1\n"),
+        FormatLanguage::English
+    );
 }

@@ -38,6 +38,7 @@ impl<'a> Vm<'a> {
                                 value
                             }
                         }
+                        Binding::GlobalSlot(slot) => self.load_global(*slot, *name, span)?,
                         _ => self.load_identifier(*name, span)?,
                     };
                     Self::set(&mut registers, *dst, value);
@@ -192,6 +193,8 @@ impl<'a> Vm<'a> {
                         if *is_const {
                             self.local_constants.insert(*slot);
                         }
+                    } else if let Binding::GlobalSlot(slot) = binding {
+                        self.store_global(*slot, *name, value, *is_const, span)?;
                     } else if *is_const {
                         self.interpreter
                             .define_constant(*name, value, self.module, span)?;

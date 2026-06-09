@@ -1,8 +1,8 @@
-use std::process::Command;
+mod common;
 
 #[test]
 fn test_stack_algorithm() {
-    let output = Command::new("cargo")
+    let output = common::goida_command()
         .args([
             "run",
             "-q",
@@ -27,7 +27,7 @@ fn test_stack_algorithm() {
 
 #[test]
 fn test_sort_algorithm() {
-    let output = Command::new("cargo")
+    let output = common::goida_command()
         .args([
             "run",
             "-q",
@@ -52,7 +52,7 @@ fn test_sort_algorithm() {
 
 #[test]
 fn test_filter_map_algorithm() {
-    let output = Command::new("cargo")
+    let output = common::goida_command()
         .args([
             "run",
             "-q",
@@ -77,7 +77,7 @@ fn test_filter_map_algorithm() {
 
 #[test]
 fn test_recursion_factorial() {
-    let output = Command::new("cargo")
+    let output = common::goida_command()
         .args([
             "run",
             "-q",

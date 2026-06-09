@@ -1,7 +1,8 @@
 use crate::ast::prelude::{AstArena, FunctionDefinition, StmtId};
 use crate::bytecode::{BytecodeModule, BytecodeSource};
 use crate::hir::{HirModule, HirSource};
-use crate::interpreter::prelude::{Module, SharedInterner};
+use crate::interpreter::prelude::{CompiledModule, Module, SharedInterner, Value};
+use crate::shared::SharedMut;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -14,16 +15,71 @@ impl Module {
         Self {
             name: symbol,
             path,
-            arena: AstArena::new(),
-            hir: HirModule::default(),
-            bytecode: BytecodeModule::default(),
-            functions: HashMap::new(),
+            compiled: CompiledModule {
+                arena: AstArena::new(),
+                hir: HirModule::default(),
+                bytecode: BytecodeModule::default(),
+                functions: HashMap::new(),
+                body: Vec::new(),
+                imports: Vec::new(),
+            },
             classes: HashMap::new(),
-            body: Vec::new(),
-            imports: Vec::new(),
             modules: HashMap::new(),
             globals: HashMap::new(),
+            global_slots: Vec::new(),
+            global_constants: std::collections::HashSet::new(),
         }
+    }
+
+    pub(crate) fn initialize_global_slots(&mut self) {
+        self.global_slots = self
+            .hir
+            .global_names
+            .iter()
+            .map(|name| self.globals.get(name).cloned().map(SharedMut::new))
+            .collect();
+        self.global_constants.clear();
+    }
+
+    pub(crate) fn global_slot(&self, slot: u32) -> Option<Value> {
+        self.global_slots
+            .get(slot as usize)
+            .and_then(|value| value.as_ref())
+            .map(|value| value.read(Clone::clone))
+    }
+
+    pub(crate) fn set_global_slot(&mut self, slot: u32, value: Value) {
+        let Some(name) = self.hir.global_names.get(slot as usize).copied() else {
+            return;
+        };
+        if self.global_slots.len() <= slot as usize {
+            self.global_slots.resize(slot as usize + 1, None);
+        }
+        if let Some(target) = &self.global_slots[slot as usize] {
+            target.write(|target| *target = value.clone());
+        } else {
+            self.global_slots[slot as usize] = Some(SharedMut::new(value.clone()));
+        }
+        self.globals.insert(name, value);
+    }
+
+    pub(crate) fn set_global(&mut self, name: Symbol, value: Value) {
+        if let Some(slot) = self
+            .hir
+            .global_names
+            .iter()
+            .position(|candidate| *candidate == name)
+        {
+            if self.global_slots.len() <= slot {
+                self.global_slots.resize(slot + 1, None);
+            }
+            if let Some(target) = &self.global_slots[slot] {
+                target.write(|target| *target = value.clone());
+            } else {
+                self.global_slots[slot] = Some(SharedMut::new(value.clone()));
+            }
+        }
+        self.globals.insert(name, value);
     }
 }
 

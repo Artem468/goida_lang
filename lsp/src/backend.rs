@@ -11,7 +11,7 @@ use crate::symbols::{
 use crate::workspace::{collect_goida_files, resolve_import_path};
 use goida_model::SharedInterner;
 use goida_runtime::interpreter::prelude::Module;
-use goida_runtime::parser::prelude::{ParseError, Parser};
+use goida_runtime::parser::prelude::{FormatLanguage, ParseError, Parser};
 use goida_syntax::ast::prelude::Span;
 use std::fs;
 use std::path::Path;
@@ -44,7 +44,10 @@ impl LanguageServer for Backend {
             }
         }
 
-        self.state.write().await.workspace_roots = roots;
+        let workspace_files = collect_goida_files(&roots).into_iter().collect();
+        let mut state = self.state.write().await;
+        state.workspace_roots = roots;
+        state.workspace_files = workspace_files;
 
         Ok(InitializeResult {
             capabilities: ServerCapabilities {
@@ -77,11 +80,12 @@ impl LanguageServer for Backend {
     async fn did_open(&self, params: DidOpenTextDocumentParams) {
         let uri = params.text_document.uri;
         let document = Document::new(params.text_document.text);
-        self.state
-            .write()
-            .await
-            .documents
-            .insert(uri.clone(), document.clone());
+        let mut state = self.state.write().await;
+        state.documents.insert(uri.clone(), document.clone());
+        if let Ok(path) = uri.to_file_path() {
+            state.workspace_files.insert(path);
+        }
+        drop(state);
         self.validate(uri, &document).await;
     }
 
@@ -143,11 +147,18 @@ impl LanguageServer for Backend {
             };
 
             if event.typ == FileChangeType::DELETED {
-                self.state.write().await.modules.remove(&path);
+                let mut state = self.state.write().await;
+                state.modules.remove(&path);
+                state.workspace_files.remove(&path);
                 self.client.publish_diagnostics(uri, Vec::new(), None).await;
                 continue;
             }
 
+            self.state
+                .write()
+                .await
+                .workspace_files
+                .insert(path.clone());
             let document = {
                 let state = self.state.read().await;
                 state.documents.get(&uri).cloned()
@@ -248,8 +259,9 @@ impl LanguageServer for Backend {
             return Ok(None);
         };
         let name = path.to_string_lossy().into_owned();
+        let language = FormatLanguage::detect(document.text());
         let formatted = Parser::new(self.interner.clone(), &name, path)
-            .format_source_ast(document.text())
+            .format_source_ast_with_language(document.text(), language)
             .ok();
         let Some(formatted) = formatted else {
             return Ok(None);
@@ -419,8 +431,14 @@ impl Backend {
         current_file: &Path,
         symbol_name: &str,
     ) -> Option<Location> {
-        let roots = self.state.read().await.workspace_roots.clone();
-        let files = collect_goida_files(&roots);
+        let files = self
+            .state
+            .read()
+            .await
+            .workspace_files
+            .iter()
+            .cloned()
+            .collect::<Vec<_>>();
 
         for file in files {
             if file == current_file {

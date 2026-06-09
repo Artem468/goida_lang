@@ -4,15 +4,32 @@ use crate::interpreter::prelude::{Module, SharedInterner};
 use crate::parser::formatter::format_program;
 use crate::parser::grammar;
 use crate::parser::lexer::{lex, LexicalError, Token};
-use crate::parser::prelude::{ParseError, Parser as ParserTrait};
+use crate::parser::prelude::{FormatLanguage, ParseError, Parser as ParserTrait};
+use crate::parser::structs::ModuleLoader;
+use crate::shared::SharedMut;
 use lalrpop_util::ParseError as LalrpopParseError;
 use std::path::PathBuf;
 
 impl ParserTrait {
     pub fn new(interner: SharedInterner, name: &str, path: PathBuf) -> Self {
+        Self::with_module_loader(
+            interner,
+            name,
+            path,
+            SharedMut::new(ModuleLoader::default()),
+        )
+    }
+
+    pub(crate) fn with_module_loader(
+        interner: SharedInterner,
+        name: &str,
+        path: PathBuf,
+        module_loader: SharedMut<ModuleLoader>,
+    ) -> Self {
         Self {
             module: Module::new(&interner, name, path),
             interner,
+            module_loader,
         }
     }
 
@@ -46,12 +63,20 @@ impl ParserTrait {
     pub fn macro_expansion_preview(&self, code: &str) -> Result<String, ParseError> {
         let syntax = self.parse_source_ast(code)?;
         let syntax = self.expand_macros(syntax)?;
-        Ok(format_program(&syntax))
+        Ok(format_program(&syntax, FormatLanguage::English))
     }
 
     pub fn format_source_ast(&self, code: &str) -> Result<String, ParseError> {
+        self.format_source_ast_with_language(code, FormatLanguage::English)
+    }
+
+    pub fn format_source_ast_with_language(
+        &self,
+        code: &str,
+        language: FormatLanguage,
+    ) -> Result<String, ParseError> {
         self.parse_source_ast(code)
-            .map(|syntax| format_program(&syntax))
+            .map(|syntax| format_program(&syntax, language))
     }
 
     fn install_builtins(&mut self) {
@@ -82,6 +107,7 @@ impl ParserTrait {
         let bytecode = crate::bytecode::Compiler::compile(&self.module, &hir);
         self.module.hir = hir;
         self.module.bytecode = bytecode;
+        self.module.initialize_global_slots();
     }
 
     fn convert_parse_error(

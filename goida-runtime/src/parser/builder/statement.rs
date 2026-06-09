@@ -14,9 +14,10 @@ impl ParserTrait {
             } => {
                 let type_hint = self.build_optional_type(type_hint, span)?;
                 let value = self.build_expr(value)?;
+                let name = self.intern(&name);
                 Ok(self.module.arena.add_statement(
                     StatementKind::Assign {
-                        name: self.intern(&name),
+                        name,
                         is_const,
                         type_hint,
                         value,
@@ -32,14 +33,11 @@ impl ParserTrait {
             syn::StmtKind::CompoundAssign { target, op, value } => {
                 let target = self.build_expr(target)?;
                 let value = self.build_expr(value)?;
-                Ok(self.module.arena.add_statement(
-                    StatementKind::CompoundAssign {
-                        target,
-                        op: self.compound_op(op),
-                        value,
-                    },
-                    span,
-                ))
+                let op = self.compound_op(op);
+                Ok(self
+                    .module
+                    .arena
+                    .add_statement(StatementKind::CompoundAssign { target, op, value }, span))
             }
             syn::StmtKind::If {
                 condition,
@@ -101,9 +99,10 @@ impl ParserTrait {
                     .module
                     .arena
                     .add_statement(StatementKind::Block(body_items), span);
+                let variable = self.intern(&variable);
                 Ok(self.module.arena.add_statement(
                     StatementKind::For {
-                        variable: self.intern(&variable),
+                        variable,
                         init,
                         condition,
                         update,
@@ -123,9 +122,10 @@ impl ParserTrait {
                     .module
                     .arena
                     .add_statement(StatementKind::Block(body_items), span);
+                let variable = self.intern(&variable);
                 Ok(self.module.arena.add_statement(
                     StatementKind::ForEach {
-                        variable: self.intern(&variable),
+                        variable,
                         iterable,
                         body,
                     },
@@ -238,9 +238,10 @@ impl ParserTrait {
             syn::ForUpdate::Assign { name, value, span } => {
                 let span = self.span(span);
                 let value = self.build_expr(value)?;
+                let name = self.intern(&name);
                 Ok(self.module.arena.add_statement(
                     StatementKind::Assign {
-                        name: self.intern(&name),
+                        name,
                         is_const: false,
                         type_hint: None,
                         value,
@@ -267,14 +268,11 @@ impl ParserTrait {
                 let span = self.span(span);
                 let target = self.build_expr(target)?;
                 let value = self.build_expr(value)?;
-                Ok(self.module.arena.add_statement(
-                    StatementKind::CompoundAssign {
-                        target,
-                        op: self.compound_op(op),
-                        value,
-                    },
-                    span,
-                ))
+                let op = self.compound_op(op);
+                Ok(self
+                    .module
+                    .arena
+                    .add_statement(StatementKind::CompoundAssign { target, op, value }, span))
             }
             syn::ForUpdate::Expr(expr) => {
                 let span = self.span(expr.span.clone());

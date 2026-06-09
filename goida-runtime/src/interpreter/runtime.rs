@@ -53,7 +53,7 @@ impl Interpreter {
             .read(|environment| environment.parent.is_none())
         {
             if let Some(module) = self.modules.get_mut(&module) {
-                module.globals.insert(name, value);
+                module.set_global(name, value);
             }
         }
         Ok(())
@@ -79,7 +79,7 @@ impl Interpreter {
             .read(|environment| environment.parent.is_none())
         {
             if let Some(module) = self.modules.get_mut(&module) {
-                module.globals.insert(name, value);
+                module.set_global(name, value);
             }
         }
         Ok(())

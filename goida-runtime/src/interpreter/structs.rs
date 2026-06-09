@@ -11,6 +11,7 @@ use crate::parser::structs::ParseError;
 use crate::shared::SharedMut;
 use libloading::Library;
 use std::fmt::Debug;
+use std::ops::{Deref, DerefMut};
 use std::path::PathBuf;
 use std::sync::{Arc, Condvar, Mutex, RwLock};
 use std::thread::{JoinHandle, ThreadId};
@@ -52,9 +53,9 @@ pub struct RuntimeIterator {
 }
 
 impl RuntimeIterator {
-    pub fn new(source: Vec<Value>) -> Self {
+    pub fn new(source: Arc<Vec<Value>>) -> Self {
         Self {
-            source: Arc::new(source),
+            source,
             steps: Arc::new(Vec::new()),
         }
     }
@@ -354,20 +355,39 @@ pub struct Interpreter {
 }
 
 #[derive(Clone, Debug)]
-/// Parsed module plus runtime declarations and globals.
-pub struct Module {
-    pub name: Symbol,
-    pub path: PathBuf,
+/// Immutable compiler artifacts retained for tooling and execution.
+pub struct CompiledModule {
     pub arena: AstArena,
     pub hir: HirModule,
     pub bytecode: BytecodeModule,
-
     pub functions: HashMap<Symbol, Arc<FunctionDefinition>>,
-    pub classes: HashMap<Symbol, SharedMut<RuntimeClassDefinition>>,
-
     pub body: Vec<StmtId>,
     pub imports: Vec<Import>,
-    pub modules: HashMap<Symbol, Module>,
+}
 
+#[derive(Clone, Debug)]
+/// Compiled module identity plus mutable runtime declarations and globals.
+pub struct Module {
+    pub name: Symbol,
+    pub path: PathBuf,
+    pub compiled: CompiledModule,
+    pub classes: HashMap<Symbol, SharedMut<RuntimeClassDefinition>>,
+    pub modules: HashMap<Symbol, Module>,
     pub globals: HashMap<Symbol, Value>,
+    pub(crate) global_slots: Vec<Option<SharedMut<Value>>>,
+    pub(crate) global_constants: HashSet<u32>,
+}
+
+impl Deref for Module {
+    type Target = CompiledModule;
+
+    fn deref(&self) -> &Self::Target {
+        &self.compiled
+    }
+}
+
+impl DerefMut for Module {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.compiled
+    }
 }
