@@ -223,7 +223,9 @@ impl ParserTrait {
                 }
                 Ok(())
             }
-            StatementKind::NativeLibraryDefinition(_) | StatementKind::Empty => Ok(()),
+            StatementKind::Import(_)
+            | StatementKind::NativeLibraryDefinition(_)
+            | StatementKind::Empty => Ok(()),
         }
     }
 

@@ -210,7 +210,7 @@ impl<'a> ChunkCompiler<'a> {
                     span,
                 );
             }
-            StatementKind::Empty => {}
+            StatementKind::Import(_) | StatementKind::Empty => {}
         }
     }
 

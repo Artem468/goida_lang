@@ -11,7 +11,6 @@ use goida_runtime::parser::prelude::{ParseError, Parser as ProgramParser};
 use goida_runtime::session::Session;
 use goida_runtime::traits::prelude::CoreOperations;
 use goida_syntax::ast::prelude::{ErrorData, Span};
-use goida_syntax::formatter::format_source;
 
 mod package;
 
@@ -123,7 +122,7 @@ fn main() {
         Some(Commands::Venv { path }) => exit_on_package_error(package::create_venv(path)),
         Some(Commands::Repl) => run_repl(&mut session),
         Some(Commands::Fmt { file, write }) => {
-            if let Err(err) = format_file(file, *write) {
+            if let Err(err) = format_file(&session, file, *write) {
                 eprintln!("{err}");
                 std::process::exit(1);
             }
@@ -147,9 +146,12 @@ fn exit_on_package_error(result: Result<(), String>) {
     }
 }
 
-fn format_file(file: &str, write: bool) -> Result<(), String> {
+fn format_file(session: &Session, file: &str, write: bool) -> Result<(), String> {
     let source = fs::read_to_string(file).map_err(|err| format!("{}: '{}'", err, file))?;
-    let formatted = format_source(&source);
+    let parser = ProgramParser::new(session.interner(), file, PathBuf::from(file));
+    let formatted = parser
+        .format_source_ast(&source)
+        .map_err(|err| format_parse_error(&err))?;
     if write {
         fs::write(file, formatted).map_err(|err| format!("{}: '{}'", err, file))?;
     } else {
@@ -175,6 +177,15 @@ fn expand_macros_file(session: &Session, file: &str) -> Result<(), String> {
             Err(format!("{kind}: {}", data.message))
         }
     }
+}
+
+fn format_parse_error(err: &ParseError) -> String {
+    let (kind, data) = match err {
+        ParseError::TypeError(e) => ("Ошибка типов", e),
+        ParseError::InvalidSyntax(e) => ("Ошибка синтаксиса", e),
+        ParseError::ImportError(e) => ("Ошибка импорта", e),
+    };
+    format!("{kind}: {}", data.message)
 }
 
 fn run_file(session: &mut Session, filename: &str) -> Result<(), (String, ErrorData)> {

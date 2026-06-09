@@ -4,7 +4,7 @@ use crate::parser::syntax::*;
 grammar;
 
 pub Program: Program = {
-    <items:ProgramItems> => Program { items },
+    <items:ProgramItems> => Program { items, comments: Vec::new() },
 };
 
 pub ExprExpansion: Expr = {

@@ -231,17 +231,27 @@ impl LanguageServer for Backend {
 
     async fn formatting(&self, params: DocumentFormattingParams) -> Result<Option<Vec<TextEdit>>> {
         let uri = params.text_document.uri;
+        let path = uri.to_file_path().ok();
         let document = {
             let state = self.state.read().await;
             state.documents.get(&uri).cloned()
         }
         .or_else(|| {
-            uri.to_file_path()
-                .ok()
+            path.clone()
                 .and_then(|path| fs::read_to_string(path).ok())
                 .map(Document::new)
         });
         let Some(document) = document else {
+            return Ok(None);
+        };
+        let Some(path) = path else {
+            return Ok(None);
+        };
+        let name = path.to_string_lossy().into_owned();
+        let formatted = Parser::new(self.interner.clone(), &name, path)
+            .format_source_ast(document.text())
+            .ok();
+        let Some(formatted) = formatted else {
             return Ok(None);
         };
 
@@ -250,7 +260,7 @@ impl LanguageServer for Backend {
             .unwrap_or_else(|| Position::new(0, 0));
         Ok(Some(vec![TextEdit {
             range: Range::new(Position::new(0, 0), end),
-            new_text: goida_syntax::formatter::format_source(document.text()),
+            new_text: formatted,
         }]))
     }
 

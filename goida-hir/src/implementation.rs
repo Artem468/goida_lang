@@ -141,7 +141,9 @@ pub fn walk_statement<V: Visitor + ?Sized>(visitor: &mut V, module: &dyn HirSour
             visitor.visit_expression(module, *object);
             visitor.visit_expression(module, *value);
         }
-        StatementKind::NativeLibraryDefinition(_) | StatementKind::Empty => {}
+        StatementKind::Import(_)
+        | StatementKind::NativeLibraryDefinition(_)
+        | StatementKind::Empty => {}
     }
 }
 

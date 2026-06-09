@@ -381,7 +381,9 @@ fn collect_usages(
                     }
                 }
             }
-            StatementKind::NativeLibraryDefinition(_) | StatementKind::Empty => {}
+            StatementKind::Import(_)
+            | StatementKind::NativeLibraryDefinition(_)
+            | StatementKind::Empty => {}
         }
     }
 }

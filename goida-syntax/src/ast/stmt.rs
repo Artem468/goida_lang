@@ -1,6 +1,6 @@
 use crate::ast::prelude::{
-    BinaryOperator, ClassDefinition, ExprId, FunctionDefinition, NativeLibraryDefinition, Span,
-    TypeId,
+    BinaryOperator, ClassDefinition, ExprId, FunctionDefinition, ImportItem,
+    NativeLibraryDefinition, Span, TypeId,
 };
 use string_interner::DefaultSymbol as Symbol;
 
@@ -18,6 +18,8 @@ pub struct StatementNode {
 /// All executable and declarative statement forms.
 pub enum StatementKind {
     Expression(ExprId),
+    /// Source import retained for tooling; bytecode compilation intentionally ignores it.
+    Import(ImportItem),
     Assign {
         name: Symbol,
         is_const: bool,

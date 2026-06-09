@@ -265,7 +265,9 @@ pub(crate) fn collect_declarations(
                     }
                 }
             }
-            StatementKind::NativeLibraryDefinition(_) | StatementKind::Empty => {}
+            StatementKind::Import(_)
+            | StatementKind::NativeLibraryDefinition(_)
+            | StatementKind::Empty => {}
         }
     }
 }

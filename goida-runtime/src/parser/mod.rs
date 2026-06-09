@@ -1,4 +1,5 @@
 mod builder;
+mod formatter;
 mod imports;
 pub(crate) mod lexer;
 pub(crate) mod macro_expander;

@@ -19,6 +19,39 @@ impl<T> Spanned<T> {
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct Program {
     pub items: Vec<Item>,
+    pub comments: Vec<Comment>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct Comment {
+    pub text: String,
+    pub span: Range<usize>,
+}
+
+pub(crate) trait Visitor {
+    fn visit_program(&mut self, program: &Program) {
+        walk_program(self, program);
+    }
+
+    fn visit_item(&mut self, item: &Item);
+
+    fn visit_comment(&mut self, _comment: &Comment) {}
+}
+
+pub(crate) fn walk_program<V: Visitor + ?Sized>(visitor: &mut V, program: &Program) {
+    let mut comments = program.comments.iter().peekable();
+    for item in &program.items {
+        while comments
+            .peek()
+            .is_some_and(|comment| comment.span.start <= item.span.start)
+        {
+            visitor.visit_comment(comments.next().expect("peeked comment"));
+        }
+        visitor.visit_item(item);
+    }
+    for comment in comments {
+        visitor.visit_comment(comment);
+    }
 }
 
 pub(crate) type Item = Spanned<ItemKind>;

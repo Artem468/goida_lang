@@ -80,8 +80,9 @@ impl MacroExpander {
         program: syn::Program,
         module_name: string_interner::DefaultSymbol,
     ) -> Result<syn::Program, ParseError> {
+        let comments = program.comments;
         let items = self.expand_items(program.items, module_name)?;
-        Ok(syn::Program { items })
+        Ok(syn::Program { items, comments })
     }
 
     fn expand_items(

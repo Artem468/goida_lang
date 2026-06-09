@@ -1,7 +1,6 @@
 use super::{BytecodeModule, Chunk, Instruction, Register};
 use crate::ast::prelude::{
-    AstArena, ExprId, ExpressionKind, FunctionDefinition, Span,
-    StatementKind, StmtId,
+    AstArena, ExprId, ExpressionKind, FunctionDefinition, Span, StatementKind, StmtId,
 };
 use crate::hir::{Binding, HirModule};
 use std::sync::Arc;

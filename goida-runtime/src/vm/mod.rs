@@ -1,11 +1,8 @@
-use crate::ast::prelude::{
-    BinaryOperator, ErrorData, Span, Visibility,
-};
+use crate::ast::prelude::{BinaryOperator, ErrorData, Span, Visibility};
 use crate::bytecode::{Chunk, Instruction, Register, RegisterArg};
 use crate::hir::Binding;
 use crate::interpreter::prelude::{
-    CallArgValue, Interpreter, RuntimeError, RuntimeFieldData
-    , Value,
+    CallArgValue, Interpreter, RuntimeError, RuntimeFieldData, Value,
 };
 use crate::traits::prelude::{
     CoreOperations, InterpreterClasses, InterpreterFunctions, ValueOperations,
