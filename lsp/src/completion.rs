@@ -1,6 +1,7 @@
-use goida_core::ast::prelude::StatementKind;
-use goida_core::builtins::registry::BUILTINS;
-use goida_core::interpreter::prelude::{Module, SharedInterner};
+use goida_model::SharedInterner;
+use goida_runtime::builtins::registry::BUILTINS;
+use goida_runtime::interpreter::prelude::Module;
+use goida_syntax::ast::prelude::StatementKind;
 use tower_lsp::lsp_types::{CompletionItem, CompletionItemKind};
 
 pub(crate) fn completion_items(
@@ -122,14 +123,12 @@ fn item(label: String, kind: CompletionItemKind, detail: &'static str) -> Comple
 #[cfg(test)]
 mod tests {
     use super::completion_items;
-    use goida_core::interpreter::prelude::SharedInterner;
-    use goida_core::shared::SharedMut;
-    use string_interner::StringInterner;
+    use goida_model::new_interner;
     use tower_lsp::lsp_types::CompletionItemKind;
 
     #[test]
     fn includes_builtin_functions_macros_classes_and_types() {
-        let interner: SharedInterner = SharedMut::new(StringInterner::new());
+        let interner = new_interner();
         let items = completion_items(None, &interner);
 
         assert!(items

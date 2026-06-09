@@ -17,7 +17,7 @@
     "main": "./out/extension.js",
     "scripts": {
         "vscode:prepublish": "npm run compile",
-        "build:lsp": "cargo build --release -p lsp",
+        "build:lsp": "cargo build --release -p goida-lsp",
         "copy:lsp": "node ./scripts/copy-lsp.js",
         "typecheck": "tsc -p ./ --noEmit",
         "bundle": "esbuild src/extension.ts --bundle --platform=node --format=cjs --external:vscode --sourcemap --outfile=out/extension.js",

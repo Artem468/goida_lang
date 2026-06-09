@@ -1,5 +1,5 @@
 [package]
-name = "cli"
+name = "goida-cli"
 version = "0.1.0"
 edition = "2021"
 
@@ -8,7 +8,8 @@ name = "goida"
 path = "src/main.rs"
 
 [dependencies]
-goida_core = { path = "../core" }
+goida-runtime = { path = "../goida-runtime" }
+goida-syntax = { path = "../goida-syntax" }
 ariadne = { version = "0.6.0" }
 clap = { version = "4.0", features = ["derive"] }
 serde = { version = "1.0", features = ["derive"] }

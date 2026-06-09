@@ -9,9 +9,10 @@ use crate::symbols::{
     collect_declarations, collect_imports, find_top_level_symbol, ResolvedSymbol,
 };
 use crate::workspace::{collect_goida_files, resolve_import_path};
-use goida_core::ast::prelude::Span;
-use goida_core::interpreter::prelude::{Module, SharedInterner};
-use goida_core::parser::prelude::{ParseError, Parser};
+use goida_model::SharedInterner;
+use goida_runtime::interpreter::prelude::Module;
+use goida_runtime::parser::prelude::{ParseError, Parser};
+use goida_syntax::ast::prelude::Span;
 use std::fs;
 use std::path::Path;
 use std::sync::Arc;
@@ -249,7 +250,7 @@ impl LanguageServer for Backend {
             .unwrap_or_else(|| Position::new(0, 0));
         Ok(Some(vec![TextEdit {
             range: Range::new(Position::new(0, 0), end),
-            new_text: goida_core::formatter::format_source(document.text()),
+            new_text: goida_syntax::formatter::format_source(document.text()),
         }]))
     }
 
@@ -383,7 +384,7 @@ impl Backend {
     ) -> std::result::Result<CachedModule, ParseError> {
         let filename = path.to_string_lossy();
         let module = match Parser::new(self.interner.clone(), &filename, path.to_path_buf())
-            .parse_unvalidated(document.text())
+            .parse_syntax(document.text())
         {
             Ok(module) => module,
             Err(err) => {

@@ -6,12 +6,12 @@ use std::{
     path::PathBuf,
 };
 
-use goida_core::ast::prelude::{ErrorData, Span};
-use goida_core::formatter::format_source;
-use goida_core::interpreter::prelude::RuntimeError;
-use goida_core::parser::prelude::{ParseError, Parser as ProgramParser};
-use goida_core::session::Session;
-use goida_core::traits::prelude::CoreOperations;
+use goida_runtime::interpreter::prelude::RuntimeError;
+use goida_runtime::parser::prelude::{ParseError, Parser as ProgramParser};
+use goida_runtime::session::Session;
+use goida_runtime::traits::prelude::CoreOperations;
+use goida_syntax::ast::prelude::{ErrorData, Span};
+use goida_syntax::formatter::format_source;
 
 mod package;
 
@@ -197,9 +197,7 @@ fn execute_code(
 
     match parser.parse(code) {
         Ok(program) => {
-            let name = program.name;
-            session.runtime.load_start_module(program);
-            let interpret_result = session.runtime.interpret(name);
+            let interpret_result = session.execute(program);
 
             interpret_result.map_err(|e| {
                 let (msg, error_data) = match e {
@@ -241,7 +239,7 @@ fn execute_code(
             })?;
         }
         Err(err) => {
-            session.runtime.modules.insert(_module.name, _module);
+            session.register_diagnostic_module(_module);
             let (msg, data): (&'static str, ErrorData) = match err {
                 ParseError::TypeError(e) => ("Ошибка типов", e),
                 ParseError::InvalidSyntax(e) => ("Ошибка синтаксиса", e),
@@ -255,7 +253,7 @@ fn execute_code(
 }
 
 fn render_error(session: &Session, msg: &str, error: &ErrorData) {
-    let intp = &session.runtime;
+    let intp = session.runtime();
     let file_name = intp.get_file_path(&error.location.file_id);
     let file_code = intp.source_manager.get_file_content(file_name.as_str());
     let ariadne_span = error.location.as_ariadne(file_code.as_str());

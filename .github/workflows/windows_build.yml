@@ -11,9 +11,11 @@ on:
       - "Cargo.lock"
       - "assets/**"
       - "cli/**"
-      - "core/**"
+      - "docs/**"
+      - "goida-*/**"
       - "lsp/**"
       - "tests/**"
+      - "xtask/**"
       - "examples/**"
       - "editors/vscode/**"
   pull_request:
@@ -26,9 +28,11 @@ on:
       - "Cargo.lock"
       - "assets/**"
       - "cli/**"
-      - "core/**"
+      - "docs/**"
+      - "goida-*/**"
       - "lsp/**"
       - "tests/**"
+      - "xtask/**"
       - "examples/**"
       - "editors/vscode/**"
   workflow_dispatch:
@@ -57,6 +61,9 @@ jobs:
       - name: Run clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
 
+      - name: Check generated built-in documentation
+        run: cargo run -p xtask -- builtin-docs --check
+
       - name: Build native FFI test library
         run: cargo build -p native_ffi_test_lib
 
@@ -64,7 +71,7 @@ jobs:
         run: cargo test --workspace --all-targets
 
       - name: Build release binaries
-        run: cargo build --release -p cli -p lsp
+        run: cargo build --release -p goida-cli -p goida-lsp
 
       - name: Upload CLI artifact
         uses: actions/upload-artifact@v4
@@ -76,4 +83,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: windows-lsp
-          path: target/release/lsp.exe
+          path: target/release/goida-lsp.exe

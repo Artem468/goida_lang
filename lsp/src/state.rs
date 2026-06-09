@@ -1,5 +1,5 @@
 use crate::document::Document;
-use goida_core::interpreter::prelude::Module;
+use goida_runtime::interpreter::prelude::Module;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;

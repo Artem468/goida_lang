@@ -1,4 +1,4 @@
-use goida_core::builtins::registry::BUILTINS;
+use goida_runtime::builtins::registry::BUILTINS;
 use std::path::Path;
 
 const BUILTIN_DOCS_PATH: &str = "docs/builtins.md";

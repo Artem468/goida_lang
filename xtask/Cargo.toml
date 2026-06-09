@@ -5,4 +5,4 @@ edition = "2021"
 publish = false
 
 [dependencies]
-goida_core = { path = "../core" }
+goida-runtime = { path = "../goida-runtime" }

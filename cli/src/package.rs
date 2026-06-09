@@ -6,7 +6,7 @@ use std::{
     process::Command,
 };
 
-use goida_core::import_paths::GOIDA_VENV_ENV;
+use goida_syntax::import_paths::GOIDA_VENV_ENV;
 
 const MANIFEST_FILE: &str = "goida.toml";
 const LOCK_FILE: &str = "goida.lock";

@@ -1,0 +1,98 @@
+use crate::ast::prelude::{ErrorData, Span};
+use crate::builtins::iterator::values_from_iterable;
+use crate::builtins::registry::*;
+use crate::interpreter::prelude::RuntimeClassDefinition;
+use crate::interpreter::prelude::{
+    CallArgListExt, Interpreter, RuntimeError, RuntimeIterator, SharedInterner, Value,
+};
+use crate::shared::SharedMut;
+use crate::{bail_runtime, define_builtin, define_constructor, define_method, runtime_error};
+use std::sync::Arc;
+use string_interner::DefaultSymbol as Symbol;
+
+pub fn setup_array_class(interner: &SharedInterner) -> (Symbol, SharedMut<RuntimeClassDefinition>) {
+    let name = interner.write(|i| i.get_or_intern(class::ARRAY.names.canonical));
+
+    let mut class_def = RuntimeClassDefinition::new(name, Span::default());
+
+    define_constructor!(class_def, (interp, args, _) {
+        if let Some(Value::Object(instance)) = CallArgListExt::first_value(&args) {
+            let items: Vec<Value> = args[1..].iter().map(|arg| arg.value.clone()).collect();
+            let internal_array = Value::Array(Arc::new(items));
+
+            let data_sym = interp.interner.write(|i| i.get_or_intern("__data"));
+            instance.write(|i| i.field_values.insert(data_sym, internal_array));
+        }
+        Ok(Value::Empty)
+    });
+
+    // len() - Получить длину
+    define_method!(class_def, interner, method::LEN.canonical => (_, args, span) {
+        if let Some(Value::Array(arr)) = CallArgListExt::first_value(&args) {
+            let length = arr.len();
+            Ok(Value::Number(length as i64))
+        } else {
+            bail_runtime!(
+                TypeError,
+                span,
+                "Ожидался массив"
+            )
+        }
+    });
+
+    // join(separator) - Склеить в строку
+    define_method!(class_def, interner, method::JOIN.canonical => (interpreter, args, span) {
+        if let (Some(Value::Array(arr)), Some(Value::Text(sep))) = (
+            CallArgListExt::first_value(&args),
+            CallArgListExt::get_value(&args, 1),
+        ) {
+            let res = arr
+                .iter()
+                .map(|v| interpreter.format_value(v))
+                .collect::<Vec<_>>()
+                .join(sep);
+
+            Ok(Value::Text(res))
+        } else {
+            bail_runtime!(
+                TypeError,
+                span,
+                "Использование: array.join(string)"
+            )
+        }
+    });
+
+    // get(index) - Безопасное получение (аналог list[i])
+    define_method!(class_def, interner, method::GET.canonical => (_, args, span) {
+        if let (Some(Value::Array(arr)), Some(idx)) = (
+            CallArgListExt::first_value(&args),
+            CallArgListExt::get_value(&args, 1),
+        ) {
+            let i = idx.resolve_index(arr.len(), span)?;
+            Ok(arr[i].clone())
+        } else {
+            bail_runtime!(
+                TypeError,
+                span,
+                "Использование: array.get(number)"
+            )
+        }
+    });
+
+    define_method!(class_def, interner, method::ITERATOR.canonical => (_, args, span) {
+        let Some(value) = CallArgListExt::first_value(&args) else {
+            return bail_runtime!(TypeError, span, "Ожидался массив");
+        };
+        Ok(Value::Iterator(RuntimeIterator::new(values_from_iterable(value, span)?)))
+    });
+
+    (name, SharedMut::new(class_def))
+}
+
+pub fn setup_array_func(interpreter: &mut Interpreter, interner: &SharedInterner) {
+    define_builtin!(interpreter, interner, function::ARRAY.canonical => (_, arguments, _span) {
+        Ok(Value::Array(Arc::new(
+            arguments.into_iter().map(|arg| arg.value).collect(),
+        )))
+    });
+}

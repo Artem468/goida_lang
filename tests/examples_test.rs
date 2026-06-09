@@ -35,7 +35,14 @@ fn test_all_examples() {
         println!("Тестируем файл: {:?}", file_path);
 
         let output = Command::new("cargo")
-            .args(["run", "-p", "cli", "--", "run", file_path.to_str().unwrap()])
+            .args([
+                "run",
+                "-p",
+                "goida-cli",
+                "--",
+                "run",
+                file_path.to_str().unwrap(),
+            ])
             .output()
             .expect("Не удалось запустить команду cargo run");
 
@@ -64,7 +71,7 @@ fn test_imported_top_level_globals_are_available() {
             "run",
             "-q",
             "-p",
-            "cli",
+            "goida-cli",
             "--",
             "run",
             "examples/import_globals.goida",
@@ -99,7 +106,7 @@ fn test_local_binding_shadows_import_alias_for_property_access() {
             "run",
             "-q",
             "-p",
-            "cli",
+            "goida-cli",
             "--",
             "run",
             main_file.to_str().unwrap(),
@@ -146,7 +153,7 @@ fn test_class_inheritance_reuses_base_members() {
             "run",
             "-q",
             "-p",
-            "cli",
+            "goida-cli",
             "--",
             "run",
             main_file.to_str().unwrap(),
@@ -188,7 +195,7 @@ fn test_try_catch_catches_by_base_error_class() {
             "run",
             "-q",
             "-p",
-            "cli",
+            "goida-cli",
             "--",
             "run",
             main_file.to_str().unwrap(),
@@ -230,7 +237,7 @@ fn test_raise_can_be_caught_by_base_class() {
             "run",
             "-q",
             "-p",
-            "cli",
+            "goida-cli",
             "--",
             "run",
             main_file.to_str().unwrap(),
@@ -272,7 +279,7 @@ fn test_builtin_error_classes_do_not_need_declarations() {
             "run",
             "-q",
             "-p",
-            "cli",
+            "goida-cli",
             "--",
             "run",
             main_file.to_str().unwrap(),
@@ -316,7 +323,7 @@ fn test_catch_can_receive_error_text_and_try_multiple_handlers() {
             "run",
             "-q",
             "-p",
-            "cli",
+            "goida-cli",
             "--",
             "run",
             main_file.to_str().unwrap(),
@@ -348,7 +355,7 @@ fn test_unknown_variable_is_reported_while_parsing() {
             "run",
             "-q",
             "-p",
-            "cli",
+            "goida-cli",
             "--",
             "run",
             main_file.to_str().unwrap(),

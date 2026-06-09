@@ -1,7 +1,8 @@
-use goida_core::ast::prelude::{ExpressionKind, Span, StatementKind, StmtId};
-use goida_core::ast::program::MethodType;
-use goida_core::builtins::registry::BUILTINS;
-use goida_core::interpreter::prelude::{Module, SharedInterner};
+use goida_model::SharedInterner;
+use goida_runtime::builtins::registry::BUILTINS;
+use goida_runtime::interpreter::prelude::Module;
+use goida_syntax::ast::prelude::{ExpressionKind, Span, StatementKind, StmtId};
+use goida_syntax::ast::program::MethodType;
 use std::collections::HashSet;
 use tower_lsp::lsp_types::{Diagnostic, DiagnosticSeverity, Position, Range};
 
@@ -228,7 +229,7 @@ fn collect_declarations(
 fn collect_function_declarations(
     module: &Module,
     interner: &SharedInterner,
-    function: &goida_core::ast::prelude::FunctionDefinition,
+    function: &goida_syntax::ast::prelude::FunctionDefinition,
     out: &mut Vec<Declaration>,
 ) {
     for param in &function.params {
@@ -472,23 +473,21 @@ fn char_offset_to_position(line_starts: &[usize], char_offset: usize) -> Option<
 mod tests {
     use super::collect_lsp_diagnostics;
     use crate::document::Document;
-    use goida_core::interpreter::prelude::SharedInterner;
-    use goida_core::parser::prelude::Parser;
-    use goida_core::shared::SharedMut;
+    use goida_model::new_interner;
+    use goida_runtime::parser::prelude::Parser;
     use std::fs;
     use std::path::PathBuf;
-    use string_interner::StringInterner;
 
     #[test]
     fn reports_multiple_unknown_names_and_unused_declarations() {
         let source = "unused = 1\nvalue = missing_one + missing_two\n";
-        let interner: SharedInterner = SharedMut::new(StringInterner::new());
+        let interner = new_interner();
         let module = Parser::new(
             interner.clone(),
             "diagnostics_test",
             PathBuf::from("test.goida"),
         )
-        .parse_unvalidated(source)
+        .parse_syntax(source)
         .expect("source should parse without name validation");
         let document = Document::new(source);
 
@@ -522,9 +521,9 @@ mod tests {
 
         let source = "import \"module\" as m\nvalue = 1\n";
         let main_path = root.join("main.goida");
-        let interner: SharedInterner = SharedMut::new(StringInterner::new());
+        let interner = new_interner();
         let module = Parser::new(interner.clone(), "main", main_path)
-            .parse_unvalidated(source)
+            .parse_syntax(source)
             .expect("source should parse");
         let document = Document::new(source);
 

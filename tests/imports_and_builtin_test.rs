@@ -2,7 +2,7 @@ use std::process::Command;
 
 fn run(file: &str) -> (bool, String, String) {
     let output = Command::new("cargo")
-        .args(["run", "-q", "-p", "cli", "--", "run", file])
+        .args(["run", "-q", "-p", "goida-cli", "--", "run", file])
         .output()
         .expect("failed to run");
 

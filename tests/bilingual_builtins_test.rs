@@ -11,7 +11,7 @@ fn run_source(name: &str, source: &str) -> (bool, String, String) {
             "run",
             "-q",
             "-p",
-            "cli",
+            "goida-cli",
             "--",
             "run",
             file.to_str().unwrap(),
