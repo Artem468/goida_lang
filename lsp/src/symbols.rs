@@ -1,6 +1,7 @@
-use goida_core::ast::prelude::{ExpressionKind, Span, StatementKind, StmtId};
-use goida_core::ast::program::MethodType;
-use goida_core::interpreter::prelude::{Module, SharedInterner};
+use goida_model::SharedInterner;
+use goida_runtime::interpreter::prelude::Module;
+use goida_syntax::ast::prelude::{ExpressionKind, Span, StatementKind, StmtId};
+use goida_syntax::ast::program::MethodType;
 use std::collections::HashMap;
 
 #[derive(Clone)]
@@ -264,7 +265,9 @@ pub(crate) fn collect_declarations(
                     }
                 }
             }
-            StatementKind::NativeLibraryDefinition(_) | StatementKind::Empty => {}
+            StatementKind::Import(_)
+            | StatementKind::NativeLibraryDefinition(_)
+            | StatementKind::Empty => {}
         }
     }
 }

@@ -1,16 +1,16 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use goida_core::import_paths::resolve_import_path as resolve_core_import_path;
+use goida_syntax::import_paths::resolve_import_path as resolve_direct_import_path;
 
 pub(crate) fn resolve_import_path(
     current_file: &Path,
     import_path: &str,
     workspace_roots: &[PathBuf],
 ) -> Option<PathBuf> {
-    let core_candidate = resolve_core_import_path(current_file, import_path);
-    if core_candidate.exists() {
-        return Some(core_candidate);
+    let direct_candidate = resolve_direct_import_path(current_file, import_path);
+    if direct_candidate.exists() {
+        return Some(direct_candidate);
     }
 
     let mut with_ext = PathBuf::from(import_path);

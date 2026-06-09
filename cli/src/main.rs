@@ -1,17 +1,16 @@
 use ariadne::{Color, Label, Report, ReportKind};
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, ValueEnum};
 use std::{
     fs,
     io::{self, Write},
     path::PathBuf,
 };
 
-use goida_core::ast::prelude::{ErrorData, Span};
-use goida_core::formatter::format_source;
-use goida_core::interpreter::prelude::RuntimeError;
-use goida_core::parser::prelude::{ParseError, Parser as ProgramParser};
-use goida_core::session::Session;
-use goida_core::traits::prelude::CoreOperations;
+use goida_runtime::interpreter::prelude::RuntimeError;
+use goida_runtime::parser::prelude::{FormatLanguage, ParseError, Parser as ProgramParser};
+use goida_runtime::session::Session;
+use goida_runtime::traits::prelude::CoreOperations;
+use goida_syntax::ast::prelude::{ErrorData, Span};
 
 mod package;
 
@@ -81,12 +80,29 @@ enum Commands {
         file: String,
         #[arg(long, help = "Rewrite the file in place")]
         write: bool,
+        #[arg(long, value_enum, default_value_t = FormatLanguageArg::English)]
+        language: FormatLanguageArg,
     },
     #[command(about = "Show macro expansion AST preview")]
     ExpandMacros {
         #[arg(help = "Path to a .goida file")]
         file: String,
     },
+}
+
+#[derive(Debug, Clone, Copy, ValueEnum)]
+enum FormatLanguageArg {
+    English,
+    Russian,
+}
+
+impl From<FormatLanguageArg> for FormatLanguage {
+    fn from(value: FormatLanguageArg) -> Self {
+        match value {
+            FormatLanguageArg::English => Self::English,
+            FormatLanguageArg::Russian => Self::Russian,
+        }
+    }
 }
 
 fn main() {
@@ -122,8 +138,12 @@ fn main() {
         Some(Commands::Remove { name }) => exit_on_package_error(package::remove_dependency(name)),
         Some(Commands::Venv { path }) => exit_on_package_error(package::create_venv(path)),
         Some(Commands::Repl) => run_repl(&mut session),
-        Some(Commands::Fmt { file, write }) => {
-            if let Err(err) = format_file(file, *write) {
+        Some(Commands::Fmt {
+            file,
+            write,
+            language,
+        }) => {
+            if let Err(err) = format_file(&session, file, *write, (*language).into()) {
                 eprintln!("{err}");
                 std::process::exit(1);
             }
@@ -147,9 +167,17 @@ fn exit_on_package_error(result: Result<(), String>) {
     }
 }
 
-fn format_file(file: &str, write: bool) -> Result<(), String> {
+fn format_file(
+    session: &Session,
+    file: &str,
+    write: bool,
+    language: FormatLanguage,
+) -> Result<(), String> {
     let source = fs::read_to_string(file).map_err(|err| format!("{}: '{}'", err, file))?;
-    let formatted = format_source(&source);
+    let parser = ProgramParser::new(session.interner(), file, PathBuf::from(file));
+    let formatted = parser
+        .format_source_ast_with_language(&source, language)
+        .map_err(|err| format_parse_error(&err))?;
     if write {
         fs::write(file, formatted).map_err(|err| format!("{}: '{}'", err, file))?;
     } else {
@@ -177,6 +205,15 @@ fn expand_macros_file(session: &Session, file: &str) -> Result<(), String> {
     }
 }
 
+fn format_parse_error(err: &ParseError) -> String {
+    let (kind, data) = match err {
+        ParseError::TypeError(e) => ("Ошибка типов", e),
+        ParseError::InvalidSyntax(e) => ("Ошибка синтаксиса", e),
+        ParseError::ImportError(e) => ("Ошибка импорта", e),
+    };
+    format!("{kind}: {}", data.message)
+}
+
 fn run_file(session: &mut Session, filename: &str) -> Result<(), (String, ErrorData)> {
     let content = fs::read_to_string(filename).map_err(|e| {
         let msg = format!("{}: '{}'", e, filename);
@@ -197,9 +234,7 @@ fn execute_code(
 
     match parser.parse(code) {
         Ok(program) => {
-            let name = program.name;
-            session.runtime.load_start_module(program);
-            let interpret_result = session.runtime.interpret(name);
+            let interpret_result = session.execute(program);
 
             interpret_result.map_err(|e| {
                 let (msg, error_data) = match e {
@@ -241,7 +276,7 @@ fn execute_code(
             })?;
         }
         Err(err) => {
-            session.runtime.modules.insert(_module.name, _module);
+            session.register_diagnostic_module(_module);
             let (msg, data): (&'static str, ErrorData) = match err {
                 ParseError::TypeError(e) => ("Ошибка типов", e),
                 ParseError::InvalidSyntax(e) => ("Ошибка синтаксиса", e),
@@ -255,7 +290,7 @@ fn execute_code(
 }
 
 fn render_error(session: &Session, msg: &str, error: &ErrorData) {
-    let intp = &session.runtime;
+    let intp = session.runtime();
     let file_name = intp.get_file_path(&error.location.file_id);
     let file_code = intp.source_manager.get_file_content(file_name.as_str());
     let ariadne_span = error.location.as_ariadne(file_code.as_str());

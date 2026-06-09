@@ -1,0 +1,902 @@
+use crate::parser::lexer::{LexicalError, Token};
+use crate::parser::syntax::*;
+
+grammar;
+
+pub Program: Program = {
+    <items:ProgramItems> => Program { items, comments: Vec::new() },
+};
+
+pub ExprExpansion: Expr = {
+    <expr:Expr> "eof" => expr,
+};
+
+pub StmtExpansion: Stmt = {
+    <stmt:Stmt> "newline" "eof" => stmt,
+    <stmt:Stmt> "eof" => stmt,
+};
+
+ProgramItems: Vec<Item> = {
+    <_s:Semis> "eof" => Vec::new(),
+    <_s:Semis> <item:Item> "newline" <mut items:ProgramItems> => {
+        items.insert(0, item);
+        items
+    },
+};
+
+BlockItems: Vec<Item> = {
+    <_s:Semis> "}" => Vec::new(),
+    <_s:Semis> <item:Item> "newline" <mut items:BlockItems> => {
+        items.insert(0, item);
+        items
+    },
+};
+
+#[inline]
+Semis: () = {
+    => (),
+    "newline" => (),
+};
+
+Item: Item = {
+    <l:@L> <item:Import> <r:@R> => Spanned::new(ItemKind::Import(item), l, r),
+    <l:@L> <item:Function> <r:@R> => Spanned::new(ItemKind::Function(item), l, r),
+    <l:@L> <item:Class> <r:@R> => Spanned::new(ItemKind::Class(item), l, r),
+    <l:@L> <item:Library> <r:@R> => Spanned::new(ItemKind::Library(item), l, r),
+    <l:@L> <item:MacroDefinition> <r:@R> => Spanned::new(ItemKind::MacroDefinition(item), l, r),
+    <l:@L> <stmt:Stmt> <r:@R> => Spanned::new(ItemKind::Statement(Box::new(Spanned::new(stmt.node, l, r))), l, r),
+};
+
+IdentName: String = {
+    <name:"identifier"> => name.to_string(),
+};
+
+Import: Import = {
+    "import" <path:"string"> "as" <alias:IdentName> => Import { path, alias },
+};
+
+Function: Function = {
+    "function" <name:IdentName> "(" <params:ParamListOpt> ")" <return_type:ReturnTypeOpt> <body:Block> => Function {
+        name,
+        params,
+        return_type,
+        body,
+    },
+};
+
+#[inline]
+ReturnTypeOpt: Option<String> = {
+    => None,
+    "->" <ty:TypeName> => Some(ty),
+};
+
+Block: Vec<Item> = {
+    "{" <items:BlockItems> => items,
+};
+
+Class: Class = {
+    "class" <name:IdentName> <base:InheritanceOpt> "{" <items:ClassItems> => Class { name, base, items },
+};
+
+InheritanceOpt: Option<String> = {
+    => None,
+    "(" <base:IdentName> ")" => Some(base),
+};
+
+ClassItems: Vec<ClassItem> = {
+    <_s:Semis> "}" => Vec::new(),
+    <_s:Semis> <item:ClassItem> "newline" <mut items:ClassItems> => {
+        items.insert(0, item);
+        items
+    },
+};
+
+ClassItem: ClassItem = {
+    <l:@L> <item:ClassField> <r:@R> => Spanned::new(ClassItemKind::Field(item), l, r),
+    <l:@L> <item:Constructor> <r:@R> => Spanned::new(ClassItemKind::Constructor(item), l, r),
+    <l:@L> <item:ClassMethod> <r:@R> => Spanned::new(ClassItemKind::Method(item), l, r),
+};
+
+ClassField: ClassField = {
+    <visibility:VisibilityOpt> <is_static:StaticOpt> <name:IdentName> ":" <type_name:TypeName> "type=" <default_value:Expr> => ClassField {
+        visibility,
+        is_static,
+        name,
+        type_name,
+        default_value: Some(default_value),
+    },
+    <visibility:VisibilityOpt> <is_static:StaticOpt> <name:IdentName> ":" <type_name:TypeName> => ClassField {
+        visibility,
+        is_static,
+        name,
+        type_name,
+        default_value: None,
+    },
+};
+
+Constructor: ClassMethod = {
+    <visibility:VisibilityOpt> "constructor" <name:ConstructorName> "(" <params:ParamListOpt> ")" <return_type:ReturnTypeOpt> <body:Block> => ClassMethod {
+        visibility,
+        is_static: false,
+        name,
+        params,
+        return_type,
+        body,
+    },
+};
+
+ConstructorName: String = {
+    <name:IdentName> => name,
+    "new" => "new".to_string(),
+};
+
+ClassMethod: ClassMethod = {
+    <visibility:VisibilityOpt> <is_static:StaticOpt> "function" <name:IdentName> "(" <params:ParamListOpt> ")" <return_type:ReturnTypeOpt> <body:Block> => ClassMethod {
+        visibility,
+        is_static,
+        name,
+        params,
+        return_type,
+        body,
+    },
+};
+
+#[inline]
+VisibilityOpt: Option<Visibility> = {
+    => None,
+    "public" => Some(Visibility::Public),
+    "private" => Some(Visibility::Private),
+};
+
+#[inline]
+StaticOpt: bool = {
+    => false,
+    "static" => true,
+};
+
+Library: Library = {
+    "library" <path:"string"> "{" <items:LibraryItems> => Library { path, items },
+};
+
+LibraryItems: Vec<LibraryItem> = {
+    <_s:Semis> "}" => Vec::new(),
+    <_s:Semis> <item:LibraryItem> "newline" <mut items:LibraryItems> => {
+        items.insert(0, item);
+        items
+    },
+};
+
+LibraryItem: LibraryItem = {
+    <l:@L> <item:LibraryFunction> <r:@R> => Spanned::new(LibraryItemKind::Function(item), l, r),
+    <l:@L> <item:LibraryGlobal> <r:@R> => Spanned::new(LibraryItemKind::Global(item), l, r),
+};
+
+LibraryFunction: LibraryFunction = {
+    "function" <name:IdentName> "(" <params:LibraryParamListOpt> ")" <return_type:ReturnTypeOpt> EmptyBlock => LibraryFunction {
+        name,
+        params,
+        return_type,
+    },
+};
+
+LibraryGlobal: LibraryGlobal = {
+    "variable" <name:IdentName> ":" <type_name:TypeName> => LibraryGlobal { name, type_name },
+};
+
+MacroDefinition: MacroDefinition = {
+    "macro" <name:IdentName> "{" <rules:MacroRules> => MacroDefinition { name, rules },
+};
+
+MacroRules: Vec<MacroRule> = {
+    <_s:Semis> "}" => Vec::new(),
+    <_s:Semis> <rule:MacroRule> "newline" <mut rules:MacroRules> => {
+        rules.insert(0, rule);
+        rules
+    },
+};
+
+MacroRule: MacroRule = {
+    <_open:MacroRuleOpen> <matcher:MacroMatcherList> ")" "=>" "{" <template:MacroTemplateList> "}" => MacroRule {
+        matcher,
+        template,
+    },
+};
+
+MacroRuleOpen: () = {
+    "(" => (),
+    "lambda(" => (),
+};
+
+MacroMatcherList: Vec<MacroMatcher> = {
+    => Vec::new(),
+    <mut items:MacroMatcherList> <item:MacroMatcherItem> => {
+        items.push(item);
+        items
+    },
+};
+
+MacroMatcherItem: MacroMatcher = {
+    "$" <name:IdentName> ":" <kind:MacroFragmentKind> => MacroMatcher::Fragment { name, kind },
+    "$" "(" <matcher:MacroMatcherList> ")" <separator:MacroSeparatorOpt> <op:MacroRepeatOp> => MacroMatcher::Repeat {
+        matcher,
+        separator,
+        op,
+    },
+    <token:MacroPlainToken> => MacroMatcher::Token(token),
+};
+
+MacroTemplateList: Vec<MacroTemplate> = {
+    => Vec::new(),
+    <mut items:MacroTemplateList> <item:MacroTemplateItem> => {
+        items.push(item);
+        items
+    },
+};
+
+MacroTemplateItem: MacroTemplate = {
+    "$" <name:IdentName> => MacroTemplate::Variable(name),
+    "$" "(" <template:MacroTemplateList> ")" <separator:MacroSeparatorOpt> <op:MacroRepeatOp> => MacroTemplate::Repeat {
+        template,
+        separator,
+        op,
+    },
+    <l:@L> "(" <template:MacroTemplateList> ")" <r:@R> => MacroTemplate::Delimited {
+        delimiter: MacroDelimiter::Paren,
+        template,
+        span: l..r,
+    },
+    <l:@L> "[" <template:MacroTemplateList> "]" <r:@R> => MacroTemplate::Delimited {
+        delimiter: MacroDelimiter::Bracket,
+        template,
+        span: l..r,
+    },
+    <l:@L> "{" <template:MacroTemplateList> "}" <r:@R> => MacroTemplate::Delimited {
+        delimiter: MacroDelimiter::Brace,
+        template,
+        span: l..r,
+    },
+    <token:MacroPlainToken> => MacroTemplate::Token(token),
+};
+
+MacroFragmentKind: MacroFragmentKind = {
+    <name:IdentName> => match name.as_str() {
+        "expr" | "выр" => MacroFragmentKind::Expr,
+        "ident" | "имя" => MacroFragmentKind::Ident,
+        "block" | "блок" => MacroFragmentKind::Block,
+        "stmt" | "инстр" => MacroFragmentKind::Stmt,
+        _ => MacroFragmentKind::Ident,
+    },
+};
+
+MacroRepeatOp: MacroRepeatOp = {
+    "*" => MacroRepeatOp::ZeroOrMore,
+    "+" => MacroRepeatOp::OneOrMore,
+};
+
+MacroSeparatorOpt: Vec<MacroToken> = {
+    => Vec::new(),
+    <token:MacroSeparatorToken> => vec![token],
+};
+
+MacroSeparatorToken: MacroToken = {
+    <l:@L> "," <r:@R> => MacroToken { token: Token::Comma, span: l..r },
+    <l:@L> "newline" <r:@R> => MacroToken { token: Token::Semi, span: l..r },
+};
+
+MacroCall: MacroCall = {
+    <l:@L> <name:IdentName> "!" "(" <args:MacroParenArgs> <r:@R> => MacroCall {
+        name,
+        args,
+        delimiter: MacroDelimiter::Paren,
+        span: l..r,
+    },
+    <l:@L> <name:IdentName> "!" "[" <args:MacroBracketArgs> <r:@R> => MacroCall {
+        name,
+        args,
+        delimiter: MacroDelimiter::Bracket,
+        span: l..r,
+    },
+    <l:@L> <name:IdentName> "!" "{" <args:MacroBraceArgs> <r:@R> => MacroCall {
+        name,
+        args,
+        delimiter: MacroDelimiter::Brace,
+        span: l..r,
+    },
+};
+
+MacroParenArgs: Vec<MacroToken> = {
+    ")" => Vec::new(),
+    <item:MacroArgToken> <mut rest:MacroParenArgs> => {
+        let mut out = item;
+        out.append(&mut rest);
+        out
+    },
+};
+
+MacroBracketArgs: Vec<MacroToken> = {
+    "]" => Vec::new(),
+    <item:MacroArgToken> <mut rest:MacroBracketArgs> => {
+        let mut out = item;
+        out.append(&mut rest);
+        out
+    },
+};
+
+MacroBraceArgs: Vec<MacroToken> = {
+    "}" => Vec::new(),
+    <item:MacroArgToken> <mut rest:MacroBraceArgs> => {
+        let mut out = item;
+        out.append(&mut rest);
+        out
+    },
+};
+
+MacroArgToken: Vec<MacroToken> = {
+    <token:MacroPlainToken> => vec![token],
+    <l:@L> "(" <inner:MacroParenArgs> <r:@R> => {
+        let mut out = vec![MacroToken { token: Token::LParen, span: l..l + 1 }];
+        out.extend(inner);
+        out.push(MacroToken { token: Token::RParen, span: r.saturating_sub(1)..r });
+        out
+    },
+    <l:@L> "[" <inner:MacroBracketArgs> <r:@R> => {
+        let mut out = vec![MacroToken { token: Token::LBracket, span: l..l + 1 }];
+        out.extend(inner);
+        out.push(MacroToken { token: Token::RBracket, span: r.saturating_sub(1)..r });
+        out
+    },
+    <l:@L> "{" <inner:MacroBraceArgs> <r:@R> => {
+        let mut out = vec![MacroToken { token: Token::LBrace, span: l..l + 1 }];
+        out.extend(inner);
+        out.push(MacroToken { token: Token::RBrace, span: r.saturating_sub(1)..r });
+        out
+    },
+};
+
+EmptyBlock: () = {
+    "{" "}" => (),
+};
+
+#[inline]
+LibraryParamListOpt: Vec<LibraryParam> = {
+    => Vec::new(),
+    <params:LibraryParamList> => params,
+};
+
+LibraryParamList: Vec<LibraryParam> = {
+    <param:LibraryParam> => vec![param],
+    <mut params:LibraryParamList> "," <param:LibraryParam> => {
+        params.push(param);
+        params
+    },
+};
+
+LibraryParam: LibraryParam = {
+    <l:@L> <name:IdentName> ":" <type_name:TypeName> <r:@R> => LibraryParam {
+        name,
+        type_name,
+        span: l..r,
+    },
+};
+
+Stmt: Stmt = {
+    <l:@L> "const" <name:IdentName> <type_hint:TypeHintOpt> "=" <value:Expr> <r:@R> => Spanned::new(StmtKind::Assign {
+        name,
+        is_const: true,
+        type_hint,
+        value,
+    }, l, r),
+    <l:@L> <name:IdentName> <type_hint:TypeHintSome> "type=" <value:Expr> <r:@R> => Spanned::new(StmtKind::Assign {
+        name,
+        is_const: false,
+        type_hint: Some(type_hint),
+        value,
+    }, l, r),
+    <l:@L> <target:Expr> <tail:StmtExprTail> <r:@R> => match tail {
+        StmtExprTail::None => Spanned::new(StmtKind::Expr(target), l, r),
+        StmtExprTail::Assign(value) => {
+            if let ExprKind::Identifier(name) = target.node.clone() {
+                Spanned::new(StmtKind::Assign { name, is_const: false, type_hint: None, value }, l, r)
+            } else {
+                Spanned::new(StmtKind::AssignTarget { target, value }, l, r)
+            }
+        }
+        StmtExprTail::Compound(op, value) => Spanned::new(StmtKind::CompoundAssign { target, op, value }, l, r),
+    },
+    <l:@L> "if" "(" <condition:Expr> ")" <then_body:Block> "else" <else_body:ElseBodyRequired> <r:@R> => Spanned::new(StmtKind::If {
+        condition,
+        then_body,
+        else_body: Some(else_body),
+    }, l, r),
+    <l:@L> "if" "(" <condition:Expr> ")" <then_body:Block> <r:@R> => Spanned::new(StmtKind::If {
+        condition,
+        then_body,
+        else_body: None,
+    }, l, r),
+    <l:@L> "while" "(" <condition:Expr> ")" <body:Block> <r:@R> => Spanned::new(StmtKind::While { condition, body }, l, r),
+    <l:@L> "for" "(" <variable:IdentName> "=" <init:Expr> "," <condition:Expr> "," <update:ForUpdate> ")" <body:Block> <r:@R> => Spanned::new(StmtKind::For {
+        variable,
+        init,
+        condition,
+        update: Box::new(update),
+        body,
+    }, l, r),
+    <l:@L> "for" <variable:IdentName> "from" <iterable:Expr> <body:Block> <r:@R> => Spanned::new(StmtKind::ForEach {
+        variable,
+        iterable,
+        body,
+    }, l, r),
+    <l:@L> "thread" <body:Block> <r:@R> => Spanned::new(StmtKind::Thread { body }, l, r),
+    <l:@L> "try" <body:Block> <handlers:Catches> <r:@R> => Spanned::new(StmtKind::Try { body, handlers }, l, r),
+    <l:@L> "raise" <error_type:IdentName> <message:RaiseMessageOpt> <r:@R> => Spanned::new(StmtKind::Raise { error_type, message }, l, r),
+    <l:@L> "return" <expr:ReturnExprOpt> <r:@R> => Spanned::new(StmtKind::Return(expr), l, r),
+};
+
+StmtExprTail: StmtExprTail = {
+    => StmtExprTail::None,
+    "=" <value:Expr> => StmtExprTail::Assign(value),
+    <op:CompoundOp> <value:Expr> => StmtExprTail::Compound(op, value),
+};
+
+TypeHintOpt: Option<String> = {
+    => None,
+    ":" <ty:TypeName> => Some(ty),
+};
+
+TypeHintSome: String = {
+    ":" <ty:TypeName> => ty,
+};
+
+ElseBodyRequired: ElseBody = {
+    <l:@L> <body:Block> <r:@R> => ElseBody::Block(body, l..r),
+    <stmt:StmtIfOnly> => ElseBody::If(Box::new(stmt)),
+};
+
+StmtIfOnly: Stmt = {
+    <l:@L> "if" "(" <condition:Expr> ")" <then_body:Block> "else" <else_body:ElseBodyRequired> <r:@R> => Spanned::new(StmtKind::If {
+        condition,
+        then_body,
+        else_body: Some(else_body),
+    }, l, r),
+    <l:@L> "if" "(" <condition:Expr> ")" <then_body:Block> <r:@R> => Spanned::new(StmtKind::If {
+        condition,
+        then_body,
+        else_body: None,
+    }, l, r),
+};
+
+Catches: Vec<Catch> = {
+    <catch:Catch> => vec![catch],
+    <mut catches:Catches> <catch:Catch> => {
+        catches.push(catch);
+        catches
+    },
+};
+
+Catch: Catch = {
+    <l:@L> "catch" <pattern:CatchPatternOpt> <body:Block> <r:@R> => Catch {
+        pattern,
+        body,
+        span: l..r,
+    },
+};
+
+#[inline]
+CatchPatternOpt: Option<CatchPattern> = {
+    => None,
+    "(" ")" => None,
+    "(" <pattern:CatchPattern> ")" => Some(pattern),
+};
+
+CatchPattern: CatchPattern = {
+    "as" <l:@L> <name:IdentName> <r:@R> => CatchPattern::Text(name, l..r),
+    <tl:@L> <type_name:IdentName> <tr:@R> "as" <nl:@L> <text_name:IdentName> <nr:@R> => CatchPattern::TypeAndText {
+        type_name,
+        type_span: tl..tr,
+        text_name,
+        text_span: nl..nr,
+    },
+    <l:@L> <name:IdentName> <r:@R> => CatchPattern::Type(name, l..r),
+};
+
+#[inline]
+RaiseMessageOpt: Option<Expr> = {
+    => None,
+    "(" ")" => None,
+    "(" <expr:Expr> ")" => Some(expr),
+};
+
+#[inline]
+ReturnExprOpt: Option<Expr> = {
+    => None,
+    <expr:Expr> => Some(expr),
+};
+
+ForUpdate: ForUpdate = {
+    <l:@L> <target:Postfix> "=" <value:Expr> <r:@R> => {
+        if let ExprKind::Identifier(name) = target.node.clone() {
+            ForUpdate::Assign { name, value, span: l..r }
+        } else {
+            ForUpdate::AssignTarget { target, value, span: l..r }
+        }
+    },
+    <l:@L> <target:Postfix> <op:CompoundOp> <value:Expr> <r:@R> => ForUpdate::Compound { target, op, value, span: l..r },
+    <expr:Expr> => ForUpdate::Expr(expr),
+};
+
+CompoundOp: CompoundOp = {
+    "+=" => CompoundOp::Add,
+    "-=" => CompoundOp::Sub,
+    "*=" => CompoundOp::Mul,
+    "/=" => CompoundOp::Div,
+    "%=" => CompoundOp::Mod,
+};
+
+#[inline]
+ParamListOpt: Vec<Param> = {
+    => Vec::new(),
+    <params:ParamList> => params,
+};
+
+ParamList: Vec<Param> = {
+    <param:Param> => vec![param],
+    <mut params:ParamList> "," <param:Param> => {
+        params.push(param);
+        params
+    },
+};
+
+Param: Param = {
+    <l:@L> <name:IdentName> ":" <type_name:TypeName> "type=" <default_value:Expr> <r:@R> => Param {
+        name,
+        type_name: Some(type_name),
+        default_value: Some(default_value),
+        span: l..r,
+    },
+    <l:@L> <name:IdentName> ":" <type_name:TypeName> <r:@R> => Param {
+        name,
+        type_name: Some(type_name),
+        default_value: None,
+        span: l..r,
+    },
+    <l:@L> <name:IdentName> "=" <default_value:Expr> <r:@R> => Param {
+        name,
+        type_name: None,
+        default_value: Some(default_value),
+        span: l..r,
+    },
+    <l:@L> <name:IdentName> <r:@R> => Param {
+        name,
+        type_name: None,
+        default_value: None,
+        span: l..r,
+    },
+};
+
+#[inline]
+ArgListOpt: Vec<CallArg> = {
+    => Vec::new(),
+    <args:ArgList> => args,
+};
+
+ArgList: Vec<CallArg> = {
+    <arg:Arg> => vec![arg],
+    <mut args:ArgList> "," <arg:Arg> => {
+        args.push(arg);
+        args
+    },
+};
+
+Arg: CallArg = {
+    <name:IdentName> "=" <value:Expr> => CallArg { name: Some(name), value },
+    <value:Expr> => CallArg { name: None, value },
+};
+
+TypeName: String = {
+    <name:QualifiedName> => name,
+    "void" => "void".to_string(),
+};
+
+QualifiedName: String = {
+    <head:IdentName> => head,
+    <head:QualifiedName> "." <tail:IdentName> => format!("{head}.{tail}"),
+};
+
+Expr: Expr = {
+    <e:LambdaExpr> => e,
+    <e:LogicalOr> => e,
+};
+
+LambdaExpr: Expr = {
+    <l:@L> "lambda(" <params:ParamListOpt> ")" "=>" <body:LambdaBody> <r:@R> => Spanned::new(ExprKind::Lambda { params, body }, l, r),
+};
+
+LogicalOr: Expr = {
+    <left:LogicalOr> <l:@L> "or" <right:LogicalAnd> <r:@R> => {
+        let start = left.span.start;
+        Spanned::new(ExprKind::Binary {
+            op: BinaryOp::Or,
+            left: Box::new(left),
+            right: Box::new(right),
+        }, start, r.max(l))
+    },
+    <e:LogicalAnd> => e,
+};
+
+LogicalAnd: Expr = {
+    <left:LogicalAnd> <l:@L> "and" <right:Comparison> <r:@R> => {
+        let start = left.span.start;
+        Spanned::new(ExprKind::Binary {
+            op: BinaryOp::And,
+            left: Box::new(left),
+            right: Box::new(right),
+        }, start, r.max(l))
+    },
+    <e:Comparison> => e,
+};
+
+Comparison: Expr = {
+    <left:Comparison> <op:CompOp> <right:Addition> => {
+        let start = left.span.start;
+        let end = right.span.end;
+        Spanned::new(ExprKind::Binary {
+            op,
+            left: Box::new(left),
+            right: Box::new(right),
+        }, start, end)
+    },
+    <e:Addition> => e,
+};
+
+CompOp: BinaryOp = {
+    "==" => BinaryOp::Eq,
+    "!=" => BinaryOp::Ne,
+    "<=" => BinaryOp::Le,
+    ">=" => BinaryOp::Ge,
+    "<" => BinaryOp::Lt,
+    ">" => BinaryOp::Gt,
+};
+
+Addition: Expr = {
+    <left:Addition> "+" <right:Multiplication> => {
+        let start = left.span.start;
+        let end = right.span.end;
+        Spanned::new(ExprKind::Binary {
+            op: BinaryOp::Add,
+            left: Box::new(left),
+            right: Box::new(right),
+        }, start, end)
+    },
+    <left:Addition> "-" <right:Multiplication> => {
+        let start = left.span.start;
+        let end = right.span.end;
+        Spanned::new(ExprKind::Binary {
+            op: BinaryOp::Sub,
+            left: Box::new(left),
+            right: Box::new(right),
+        }, start, end)
+    },
+    <e:Multiplication> => e,
+};
+
+Multiplication: Expr = {
+    <left:Multiplication> "*" <right:Unary> => {
+        let start = left.span.start;
+        let end = right.span.end;
+        Spanned::new(ExprKind::Binary {
+            op: BinaryOp::Mul,
+            left: Box::new(left),
+            right: Box::new(right),
+        }, start, end)
+    },
+    <left:Multiplication> "/" <right:Unary> => {
+        let start = left.span.start;
+        let end = right.span.end;
+        Spanned::new(ExprKind::Binary {
+            op: BinaryOp::Div,
+            left: Box::new(left),
+            right: Box::new(right),
+        }, start, end)
+    },
+    <left:Multiplication> "%" <right:Unary> => {
+        let start = left.span.start;
+        let end = right.span.end;
+        Spanned::new(ExprKind::Binary {
+            op: BinaryOp::Mod,
+            left: Box::new(left),
+            right: Box::new(right),
+        }, start, end)
+    },
+    <e:Unary> => e,
+};
+
+Unary: Expr = {
+    <l:@L> "-" <operand:Unary> => {
+        let end = operand.span.end;
+        Spanned::new(ExprKind::Unary {
+            op: UnaryOp::Negative,
+            operand: Box::new(operand),
+        }, l, end)
+    },
+    <l:@L> "!" <operand:Unary> => {
+        let end = operand.span.end;
+        Spanned::new(ExprKind::Unary {
+            op: UnaryOp::Not,
+            operand: Box::new(operand),
+        }, l, end)
+    },
+    <e:Postfix> => e,
+};
+
+Postfix: Expr = {
+    <primary:Primary> <ops:PostfixOps> => apply_postfix(primary, ops),
+};
+
+PostfixOps: Vec<PostfixOp> = {
+    => Vec::new(),
+    <mut ops:PostfixOps> <op:PostfixOp> => {
+        ops.push(op);
+        ops
+    },
+};
+
+PostfixOp: PostfixOp = {
+    <l:@L> "(" <args:ArgListOpt> ")" <r:@R> => PostfixOp::FunctionCall(args, l..r),
+    <l:@L> "method." <method:IdentName> "(" <args:ArgListOpt> ")" <r:@R> => PostfixOp::MethodCall(method, args, l..r),
+    <l:@L> "." <property:IdentName> <r:@R> => PostfixOp::PropertyAccess(property, l..r),
+    <l:@L> "[" <index:Expr> "]" <r:@R> => PostfixOp::Index(index, l..r),
+};
+
+Primary: Expr = {
+    "(" <expr:Expr> ")" => expr,
+    <l:@L> <call:MacroCall> <r:@R> => Spanned::new(ExprKind::MacroCall(call), l, r),
+    <l:@L> "new" <class_name:QualifiedName> "(" <args:ArgListOpt> ")" <r:@R> => Spanned::new(ExprKind::ObjectCreation { class_name, args }, l, r),
+    <l:@L> <value:"number"> <r:@R> => Spanned::new(ExprKind::Number(value), l, r),
+    <l:@L> <value:"float"> <r:@R> => Spanned::new(ExprKind::Float(value), l, r),
+    <l:@L> <value:"string"> <r:@R> => Spanned::new(ExprKind::Text(value), l, r),
+    <l:@L> "true" <r:@R> => Spanned::new(ExprKind::Boolean(true), l, r),
+    <l:@L> "false" <r:@R> => Spanned::new(ExprKind::Boolean(false), l, r),
+    <l:@L> "void" <r:@R> => Spanned::new(ExprKind::Empty, l, r),
+    <l:@L> <name:IdentName> <r:@R> => Spanned::new(ExprKind::Identifier(name), l, r),
+};
+
+LambdaBody: LambdaBody = {
+    <l:@L> <body:Block> <r:@R> => LambdaBody::Block(body, l..r),
+    <expr:Expr> => LambdaBody::Expr(Box::new(expr)),
+};
+
+MacroPlainToken: MacroToken = {
+    <l:@L> "import" <r:@R> => MacroToken { token: Token::KwImport, span: l..r },
+    <l:@L> "from" <r:@R> => MacroToken { token: Token::KwFrom, span: l..r },
+    <l:@L> "function" <r:@R> => MacroToken { token: Token::KwFunction, span: l..r },
+    <l:@L> "library" <r:@R> => MacroToken { token: Token::KwLibrary, span: l..r },
+    <l:@L> "variable" <r:@R> => MacroToken { token: Token::KwVariable, span: l..r },
+    <l:@L> "class" <r:@R> => MacroToken { token: Token::KwClass, span: l..r },
+    <l:@L> "constructor" <r:@R> => MacroToken { token: Token::KwConstructor, span: l..r },
+    <l:@L> "public" <r:@R> => MacroToken { token: Token::KwPublic, span: l..r },
+    <l:@L> "private" <r:@R> => MacroToken { token: Token::KwPrivate, span: l..r },
+    <l:@L> "static" <r:@R> => MacroToken { token: Token::KwStatic, span: l..r },
+    <l:@L> "const" <r:@R> => MacroToken { token: Token::KwConst, span: l..r },
+    <l:@L> "if" <r:@R> => MacroToken { token: Token::KwIf, span: l..r },
+    <l:@L> "else" <r:@R> => MacroToken { token: Token::KwElse, span: l..r },
+    <l:@L> "while" <r:@R> => MacroToken { token: Token::KwWhile, span: l..r },
+    <l:@L> "for" <r:@R> => MacroToken { token: Token::KwFor, span: l..r },
+    <l:@L> "thread" <r:@R> => MacroToken { token: Token::KwThread, span: l..r },
+    <l:@L> "try" <r:@R> => MacroToken { token: Token::KwTry, span: l..r },
+    <l:@L> "catch" <r:@R> => MacroToken { token: Token::KwCatch, span: l..r },
+    <l:@L> "raise" <r:@R> => MacroToken { token: Token::KwRaise, span: l..r },
+    <l:@L> "as" <r:@R> => MacroToken { token: Token::KwAs, span: l..r },
+    <l:@L> "new" <r:@R> => MacroToken { token: Token::KwNew, span: l..r },
+    <l:@L> "return" <r:@R> => MacroToken { token: Token::KwReturn, span: l..r },
+    <l:@L> "and" <r:@R> => MacroToken { token: Token::KwAnd, span: l..r },
+    <l:@L> "or" <r:@R> => MacroToken { token: Token::KwOr, span: l..r },
+    <l:@L> "true" <r:@R> => MacroToken { token: Token::True, span: l..r },
+    <l:@L> "false" <r:@R> => MacroToken { token: Token::False, span: l..r },
+    <l:@L> "void" <r:@R> => MacroToken { token: Token::Empty, span: l..r },
+    <l:@L> "macro" <r:@R> => MacroToken { token: Token::KwMacro, span: l..r },
+    <l:@L> "=>" <r:@R> => MacroToken { token: Token::FatArrow, span: l..r },
+    <l:@L> "->" <r:@R> => MacroToken { token: Token::Arrow, span: l..r },
+    <l:@L> "==" <r:@R> => MacroToken { token: Token::EqEq, span: l..r },
+    <l:@L> "!=" <r:@R> => MacroToken { token: Token::NotEq, span: l..r },
+    <l:@L> "<=" <r:@R> => MacroToken { token: Token::Le, span: l..r },
+    <l:@L> ">=" <r:@R> => MacroToken { token: Token::Ge, span: l..r },
+    <l:@L> "+=" <r:@R> => MacroToken { token: Token::PlusEq, span: l..r },
+    <l:@L> "-=" <r:@R> => MacroToken { token: Token::MinusEq, span: l..r },
+    <l:@L> "*=" <r:@R> => MacroToken { token: Token::StarEq, span: l..r },
+    <l:@L> "/=" <r:@R> => MacroToken { token: Token::SlashEq, span: l..r },
+    <l:@L> "%=" <r:@R> => MacroToken { token: Token::PercentEq, span: l..r },
+    <l:@L> "=" <r:@R> => MacroToken { token: Token::Eq, span: l..r },
+    <l:@L> "type=" <r:@R> => MacroToken { token: Token::TypeEq, span: l..r },
+    <l:@L> "<" <r:@R> => MacroToken { token: Token::Lt, span: l..r },
+    <l:@L> ">" <r:@R> => MacroToken { token: Token::Gt, span: l..r },
+    <l:@L> "+" <r:@R> => MacroToken { token: Token::Plus, span: l..r },
+    <l:@L> "-" <r:@R> => MacroToken { token: Token::Minus, span: l..r },
+    <l:@L> "*" <r:@R> => MacroToken { token: Token::Star, span: l..r },
+    <l:@L> "/" <r:@R> => MacroToken { token: Token::Slash, span: l..r },
+    <l:@L> "%" <r:@R> => MacroToken { token: Token::Percent, span: l..r },
+    <l:@L> "!" <r:@R> => MacroToken { token: Token::Bang, span: l..r },
+    <l:@L> "." <r:@R> => MacroToken { token: Token::Dot, span: l..r },
+    <l:@L> "method." <r:@R> => MacroToken { token: Token::MethodDot, span: l..r },
+    <l:@L> "," <r:@R> => MacroToken { token: Token::Comma, span: l..r },
+    <l:@L> ":" <r:@R> => MacroToken { token: Token::Colon, span: l..r },
+    <l:@L> "newline" <r:@R> => MacroToken { token: Token::Semi, span: l..r },
+    <l:@L> <value:"identifier"> <r:@R> => MacroToken { token: Token::Ident(value), span: l..r },
+    <l:@L> <value:"string"> <r:@R> => MacroToken { token: Token::String(value), span: l..r },
+    <l:@L> <value:"number"> <r:@R> => MacroToken { token: Token::Number(value), span: l..r },
+    <l:@L> <value:"float"> <r:@R> => MacroToken { token: Token::Float(value), span: l..r },
+};
+
+extern {
+    type Location = usize;
+    type Error = LexicalError;
+
+    enum Token {
+        "eof" => Token::Eof,
+        "import" => Token::KwImport,
+        "from" => Token::KwFrom,
+        "function" => Token::KwFunction,
+        "library" => Token::KwLibrary,
+        "variable" => Token::KwVariable,
+        "class" => Token::KwClass,
+        "constructor" => Token::KwConstructor,
+        "public" => Token::KwPublic,
+        "private" => Token::KwPrivate,
+        "static" => Token::KwStatic,
+        "const" => Token::KwConst,
+        "if" => Token::KwIf,
+        "else" => Token::KwElse,
+        "while" => Token::KwWhile,
+        "for" => Token::KwFor,
+        "thread" => Token::KwThread,
+        "try" => Token::KwTry,
+        "catch" => Token::KwCatch,
+        "raise" => Token::KwRaise,
+        "as" => Token::KwAs,
+        "new" => Token::KwNew,
+        "return" => Token::KwReturn,
+        "and" => Token::KwAnd,
+        "or" => Token::KwOr,
+        "true" => Token::True,
+        "false" => Token::False,
+        "void" => Token::Empty,
+        "macro" => Token::KwMacro,
+        "=>" => Token::FatArrow,
+        "->" => Token::Arrow,
+        "==" => Token::EqEq,
+        "!=" => Token::NotEq,
+        "<=" => Token::Le,
+        ">=" => Token::Ge,
+        "+=" => Token::PlusEq,
+        "-=" => Token::MinusEq,
+        "*=" => Token::StarEq,
+        "/=" => Token::SlashEq,
+        "%=" => Token::PercentEq,
+        "=" => Token::Eq,
+        "type=" => Token::TypeEq,
+        "<" => Token::Lt,
+        ">" => Token::Gt,
+        "+" => Token::Plus,
+        "-" => Token::Minus,
+        "*" => Token::Star,
+        "/" => Token::Slash,
+        "%" => Token::Percent,
+        "!" => Token::Bang,
+        "$" => Token::Dollar,
+        "." => Token::Dot,
+        "method." => Token::MethodDot,
+        "," => Token::Comma,
+        ":" => Token::Colon,
+        "(" => Token::LParen,
+        "lambda(" => Token::LambdaLParen,
+        ")" => Token::RParen,
+        "{" => Token::LBrace,
+        "}" => Token::RBrace,
+        "[" => Token::LBracket,
+        "]" => Token::RBracket,
+        "newline" => Token::Semi,
+        "identifier" => Token::Ident(<String>),
+        "string" => Token::String(<String>),
+        "number" => Token::Number(<i64>),
+        "float" => Token::Float(<f64>),
+    }
+}

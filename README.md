@@ -16,11 +16,14 @@
 git clone <url>
 cd goida_lang
 
-cargo build --release -p cli -p lsp
-cargo run -p cli -- run examples/simple.goida
-cargo run -p cli -- repl
+cargo build --release -p goida-cli -p goida-lsp
+cargo run -p goida-cli -- run examples/simple.goida
+cargo run -p goida-cli -- repl
 cargo test
 ```
+
+`goida-cli` is the Cargo package name. The produced executable remains `goida`
+(`goida.exe` on Windows).
 
 ## Базовый синтаксис
 
@@ -37,7 +40,7 @@ cargo test
 }
 ```
 
-Основные типы: `число`, `дробь`, `строка`, `логический`, `пустота`, `список`, `массив`, `словарь`, `указатель`, `неизвестно`. Для встроенных функций, классов, методов и макросов поддерживаются русские и английские имена: например `печать` / `print`, `список` / `list`, `Список` / `List`, `длина` / `len`, `формат!` / `format!`. Единый реестр встроенных сущностей доступен как `goida_core::builtins::registry::BUILTINS`; актуальная документация находится в [`docs/builtins.md`](docs/builtins.md) и формируется командой `cargo run -p xtask -- builtin-docs`.
+Основные типы: `число`, `дробь`, `строка`, `логический`, `пустота`, `список`, `массив`, `словарь`, `указатель`, `неизвестно`. Для встроенных функций, классов, методов и макросов поддерживаются русские и английские имена: например `печать` / `print`, `список` / `list`, `Список` / `List`, `длина` / `len`, `формат!` / `format!`. Единый реестр встроенных сущностей доступен как `goida_runtime::builtins::registry::BUILTINS`; актуальная документация находится в [`docs/builtins.md`](docs/builtins.md) и формируется командой `cargo run -p xtask -- builtin-docs`.
 
 Логические операции пишутся словами: `и`, `или`. Остальные операторы привычные: `+`, `-`, `*`, `/`, `%`, `==`, `!=`, `>`, `<`, `>=`, `<=`, `!`, `=`.
 

@@ -1,7 +1,8 @@
 use crate::document::char_offset_to_position;
-use goida_core::ast::prelude::{ExpressionKind, Span, StatementKind, StmtId};
-use goida_core::ast::program::MethodType;
-use goida_core::interpreter::prelude::{Module, SharedInterner};
+use goida_model::SharedInterner;
+use goida_runtime::interpreter::prelude::Module;
+use goida_syntax::ast::prelude::{ExpressionKind, Span, StatementKind, StmtId};
+use goida_syntax::ast::program::MethodType;
 use std::cmp::min;
 use tower_lsp::lsp_types::{SemanticToken, SemanticTokenModifier, SemanticTokenType};
 
@@ -303,7 +304,9 @@ fn collect_statement_tokens(
                     }
                 }
             }
-            StatementKind::NativeLibraryDefinition(_) | StatementKind::Empty => {}
+            StatementKind::Import(_)
+            | StatementKind::NativeLibraryDefinition(_)
+            | StatementKind::Empty => {}
         }
     }
 }

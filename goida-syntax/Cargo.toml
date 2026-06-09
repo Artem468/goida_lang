@@ -1,0 +1,9 @@
+[package]
+name = "goida-syntax"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+goida-model = { path = "../goida-model" }
+string-interner = "0.19.0"
+ariadne = "0.6.0"

@@ -11,8 +11,8 @@ on:
       - "Cargo.lock"
       - "assets/**"
       - "cli/**"
-      - "core/**"
       - "docs/**"
+      - "goida-*/**"
       - "lsp/**"
       - "tests/**"
       - "xtask/**"
@@ -28,8 +28,8 @@ on:
       - "Cargo.lock"
       - "assets/**"
       - "cli/**"
-      - "core/**"
       - "docs/**"
+      - "goida-*/**"
       - "lsp/**"
       - "tests/**"
       - "xtask/**"
@@ -71,7 +71,7 @@ jobs:
         run: cargo test --workspace --all-targets
 
       - name: Build release binaries
-        run: cargo build --release -p cli -p lsp
+        run: cargo build --release -p goida-cli -p goida-lsp
 
       - name: Upload CLI artifact
         uses: actions/upload-artifact@v4
@@ -83,4 +83,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: linux-lsp
-          path: target/release/lsp
+          path: target/release/goida-lsp

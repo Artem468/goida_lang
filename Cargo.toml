@@ -7,7 +7,11 @@ edition = "2021"
 
 [workspace]
 members = [
-    "core",
+    "goida-model",
+    "goida-syntax",
+    "goida-hir",
+    "goida-bytecode",
+    "goida-runtime",
     "cli",
     "lsp",
     "tests/native_ffi_test_lib",

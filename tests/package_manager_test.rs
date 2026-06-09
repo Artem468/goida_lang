@@ -4,6 +4,8 @@ use std::{
     process::Command,
 };
 
+mod common;
+
 #[test]
 fn package_manager_creates_project_and_updates_git_dependencies() {
     let workspace = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
@@ -271,7 +273,7 @@ fn run_goida_with_env(
     ];
     command_args.extend_from_slice(args);
 
-    let mut command = Command::new("cargo");
+    let mut command = common::goida_command();
     command.current_dir(cwd).args(command_args);
     for (key, value) in envs {
         command.env(key, value);

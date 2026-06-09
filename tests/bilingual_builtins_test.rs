@@ -1,4 +1,4 @@
-use std::process::Command;
+mod common;
 
 fn run_source(name: &str, source: &str) -> (bool, String, String) {
     let dir = std::path::Path::new("target").join(name);
@@ -6,12 +6,12 @@ fn run_source(name: &str, source: &str) -> (bool, String, String) {
     let file = dir.join("main.goida");
     std::fs::write(&file, source).expect("failed to write source file");
 
-    let output = Command::new("cargo")
+    let output = common::goida_command()
         .args([
             "run",
             "-q",
             "-p",
-            "cli",
+            "goida-cli",
             "--",
             "run",
             file.to_str().unwrap(),

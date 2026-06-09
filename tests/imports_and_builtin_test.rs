@@ -1,8 +1,8 @@
-use std::process::Command;
+mod common;
 
 fn run(file: &str) -> (bool, String, String) {
-    let output = Command::new("cargo")
-        .args(["run", "-q", "-p", "cli", "--", "run", file])
+    let output = common::goida_command()
+        .args(["run", "-q", "-p", "goida-cli", "--", "run", file])
         .output()
         .expect("failed to run");
 
