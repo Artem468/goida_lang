@@ -1,3 +1,10 @@
+use std::sync::Arc;
+use std::thread;
+use goida_hir::MethodResolution;
+use goida_model::SharedMut;
+use goida_syntax::prelude::{LiteralValue, UnaryOperator};
+use crate::interpreter::prelude::{RuntimeClassDefinition, RuntimeThread};
+
 impl<'a> Vm<'a> {
     fn execute_chunk(&mut self, chunk: &Chunk) -> Result<Vec<Value>, RuntimeError> {
         let mut registers = vec![Value::Empty; chunk.register_count as usize];

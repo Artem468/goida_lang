@@ -1,20 +1,17 @@
 use crate::ast::prelude::{
-    BinaryOperator, ErrorData, LiteralValue, Span, UnaryOperator, Visibility,
+    BinaryOperator, ErrorData, Span, Visibility,
 };
 use crate::bytecode::{Chunk, Instruction, Register, RegisterArg};
-use crate::hir::{Binding, MethodResolution};
+use crate::hir::Binding;
 use crate::interpreter::prelude::{
-    CallArgValue, Interpreter, RuntimeClassDefinition, RuntimeError, RuntimeFieldData,
-    RuntimeThread, Value,
+    CallArgValue, Interpreter, RuntimeError, RuntimeFieldData
+    , Value,
 };
-use crate::shared::SharedMut;
 use crate::traits::prelude::{
     CoreOperations, InterpreterClasses, InterpreterFunctions, ValueOperations,
 };
 use crate::{bail_runtime, runtime_error};
 use std::collections::HashSet;
-use std::sync::Arc;
-use std::thread;
 use string_interner::DefaultSymbol as Symbol;
 
 pub struct Vm<'a> {

@@ -1,9 +1,9 @@
-use super::{BytecodeHandler, BytecodeModule, Chunk, Instruction, Register, RegisterArg};
+use super::{BytecodeModule, Chunk, Instruction, Register};
 use crate::ast::prelude::{
-    AstArena, BinaryOperator, CallArg, ExprId, ExpressionKind, FunctionDefinition, Span,
-    StatementKind, StmtId, TryHandler,
+    AstArena, ExprId, ExpressionKind, FunctionDefinition, Span,
+    StatementKind, StmtId,
 };
-use crate::hir::{Binding, HirModule, MethodResolution};
+use crate::hir::{Binding, HirModule};
 use std::sync::Arc;
 use string_interner::DefaultSymbol as Symbol;
 

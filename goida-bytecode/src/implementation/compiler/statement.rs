@@ -1,3 +1,6 @@
+use goida_syntax::prelude::TryHandler;
+use crate::BytecodeHandler;
+
 impl<'a> ChunkCompiler<'a> {
     fn statement(&mut self, id: StmtId) {
         let node = self

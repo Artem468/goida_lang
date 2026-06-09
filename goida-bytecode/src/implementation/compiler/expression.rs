@@ -1,3 +1,7 @@
+use crate::RegisterArg;
+use goida_hir::MethodResolution;
+use goida_syntax::prelude::{BinaryOperator, CallArg};
+
 impl<'a> ChunkCompiler<'a> {
     fn expression(&mut self, id: ExprId) -> Register {
         let node = self
