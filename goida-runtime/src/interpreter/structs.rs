@@ -26,6 +26,7 @@ pub type BuiltinCallback =
 pub enum Value {
     Number(i64),
     Float(f64),
+    Pointer(usize),
     Text(String),
     Boolean(bool),
     Object(SharedMut<ClassInstance>),

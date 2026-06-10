@@ -12,6 +12,7 @@ pub fn setup_type_func(interpreter: &mut Interpreter, interner: &SharedInterner)
         match val {
             Value::Number(_) => Ok(Value::Text("число".into())),
             Value::Float(_) => Ok(Value::Text("дробь".into())),
+            Value::Pointer(_) => Ok(Value::Text("указатель".into())),
             Value::Text(_) => Ok(Value::Text("строка".into())),
             Value::Boolean(_) => Ok(Value::Text("логический".into())),
             Value::Object(obj) => {

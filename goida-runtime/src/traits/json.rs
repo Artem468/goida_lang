@@ -43,6 +43,7 @@ impl JsonParsable for Value {
             Value::Float(value) => serde_json::Number::from_f64(*value)
                 .map(JsonValue::Number)
                 .ok_or_else(|| format!("Нельзя сериализовать число '{}' в JSON", value)),
+            Value::Pointer(_) => Err("Нельзя сериализовать нативный указатель в JSON".into()),
             Value::Text(value) => Ok(JsonValue::String(value.clone())),
             Value::List(items) => items.read(|items| {
                 items

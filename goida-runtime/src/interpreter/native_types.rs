@@ -63,9 +63,7 @@ impl Interpreter {
                 _ => bail_runtime!(TypeError, span, "Аргумент native-функции должен быть типа 'дробь'"),
             },
             NativeFfiKind::Pointer => match value {
-                Value::Number(number) => {
-                    Ok(NativeFfiArgValue::Pointer(number as isize as usize as *mut c_void))
-                }
+                Value::Pointer(address) => Ok(NativeFfiArgValue::Pointer(address as *mut c_void)),
                 Value::Empty => Ok(NativeFfiArgValue::Pointer(std::ptr::null_mut())),
                 Value::Text(s) => {
                     let mut s_with_zero = s.clone();
@@ -153,7 +151,7 @@ impl Interpreter {
                 PrimitiveType::Text => matches!(value, Value::Text(_)),
                 PrimitiveType::Boolean => matches!(value, Value::Boolean(_)),
                 PrimitiveType::Pointer => {
-                    matches!(value, Value::Number(_) | Value::Empty)
+                    matches!(value, Value::Pointer(_) | Value::Empty)
                         || Self::is_managed_pointer_value(value)
                 }
             },
@@ -220,6 +218,26 @@ mod tests {
                 Span::default()
             ),
             Ok(NativeFfiArgValue::Pointer(pointer)) if pointer.is_null()
+        ));
+    }
+
+    #[test]
+    fn accepts_opaque_pointer_and_rejects_numeric_address() {
+        assert!(matches!(
+            Interpreter::value_to_ffi_arg(
+                Value::Pointer(0x1234),
+                NativeFfiKind::Pointer,
+                Span::default()
+            ),
+            Ok(NativeFfiArgValue::Pointer(pointer)) if pointer as usize == 0x1234
+        ));
+        assert!(matches!(
+            Interpreter::value_to_ffi_arg(
+                Value::Number(0x1234),
+                NativeFfiKind::Pointer,
+                Span::default()
+            ),
+            Err(RuntimeError::TypeError(_))
         ));
     }
 

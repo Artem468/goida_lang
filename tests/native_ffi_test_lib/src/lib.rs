@@ -39,6 +39,9 @@ struct NativeText {
     bytes: Vec<u8>,
 }
 
+static UTF8_TEXT: &str = "привет из dll";
+static UTF8_C_TEXT: &str = "привет из c-строки\0";
+
 struct NativeList {
     items: Vec<i64>,
 }
@@ -70,6 +73,21 @@ pub extern "C" fn ffi_create_demo_text() -> *mut c_void {
         bytes: "привет из dll".as_bytes().to_vec(),
     };
     Box::into_raw(Box::new(data)) as *mut c_void
+}
+
+#[no_mangle]
+pub extern "C" fn ffi_utf8_text_ptr() -> *mut c_void {
+    UTF8_TEXT.as_ptr() as *mut c_void
+}
+
+#[no_mangle]
+pub extern "C" fn ffi_utf8_text_len() -> i64 {
+    UTF8_TEXT.len() as i64
+}
+
+#[no_mangle]
+pub extern "C" fn ffi_utf8_c_text_ptr() -> *mut c_void {
+    UTF8_C_TEXT.as_ptr() as *mut c_void
 }
 
 #[no_mangle]
