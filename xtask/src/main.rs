@@ -37,6 +37,8 @@ fn benchmark(path: &Path, iterations: usize) -> Result<(), Box<dyn std::error::E
     let source = std::fs::read_to_string(path)?;
     let mut parse_total = Duration::ZERO;
     let mut execute_total = Duration::ZERO;
+    let mut module_registers = 0;
+    let mut max_body_registers = 0;
 
     for _ in 0..iterations {
         let mut session = Session::new();
@@ -49,6 +51,15 @@ fn benchmark(path: &Path, iterations: usize) -> Result<(), Box<dyn std::error::E
         .parse(&source)
         .map_err(|error| format!("benchmark parse failed: {error:?}"))?;
         parse_total += started.elapsed();
+        module_registers = module.bytecode.module.register_count;
+        max_body_registers = module
+            .bytecode
+            .bodies
+            .values()
+            .chain(module.bytecode.expressions.values())
+            .map(|chunk| chunk.register_count)
+            .max()
+            .unwrap_or_default();
 
         let started = Instant::now();
         session
@@ -58,7 +69,8 @@ fn benchmark(path: &Path, iterations: usize) -> Result<(), Box<dyn std::error::E
     }
 
     println!(
-        "iterations={iterations} parse_avg_ms={:.3} execute_avg_ms={:.3}",
+        "iterations={iterations} parse_avg_ms={:.3} execute_avg_ms={:.3} \
+         module_registers={module_registers} max_body_registers={max_body_registers}",
         parse_total.as_secs_f64() * 1000.0 / iterations as f64,
         execute_total.as_secs_f64() * 1000.0 / iterations as f64,
     );

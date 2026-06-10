@@ -376,7 +376,6 @@ pub struct Module {
     pub modules: HashMap<Symbol, Module>,
     pub globals: HashMap<Symbol, Value>,
     pub(crate) global_slots: Vec<Option<SharedMut<Value>>>,
-    pub(crate) global_constants: HashSet<u32>,
 }
 
 impl Deref for Module {

@@ -8,14 +8,38 @@ use crate::traits::prelude::{
     CoreOperations, InterpreterClasses, InterpreterFunctions, ValueOperations,
 };
 use crate::{bail_runtime, runtime_error};
-use std::collections::HashSet;
 use string_interner::DefaultSymbol as Symbol;
+
+#[derive(Default)]
+struct DenseSlotSet {
+    words: Vec<usize>,
+}
+
+impl DenseSlotSet {
+    const BITS_PER_WORD: usize = usize::BITS as usize;
+
+    fn contains(&self, slot: u32) -> bool {
+        let slot = slot as usize;
+        self.words
+            .get(slot / Self::BITS_PER_WORD)
+            .is_some_and(|word| word & (1 << (slot % Self::BITS_PER_WORD)) != 0)
+    }
+
+    fn insert(&mut self, slot: u32) {
+        let slot = slot as usize;
+        let word = slot / Self::BITS_PER_WORD;
+        if self.words.len() <= word {
+            self.words.resize(word + 1, 0);
+        }
+        self.words[word] |= 1 << (slot % Self::BITS_PER_WORD);
+    }
+}
 
 pub struct Vm<'a> {
     interpreter: &'a mut Interpreter,
     module: Symbol,
     locals: Vec<Option<Value>>,
-    local_constants: HashSet<u32>,
+    local_constants: DenseSlotSet,
     prefer_environment_globals: bool,
 }
 
@@ -25,7 +49,7 @@ impl<'a> Vm<'a> {
             interpreter,
             module,
             locals: Vec::new(),
-            local_constants: HashSet::new(),
+            local_constants: DenseSlotSet::default(),
             prefer_environment_globals: false,
         }
     }
@@ -166,9 +190,6 @@ impl<'a> Vm<'a> {
         }
         if let Some(module) = self.interpreter.modules.get_mut(&self.module) {
             module.set_global_slot(slot, value);
-            if is_const {
-                module.global_constants.insert(slot);
-            }
         }
         Ok(())
     }
