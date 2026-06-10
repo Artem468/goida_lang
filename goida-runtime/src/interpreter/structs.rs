@@ -26,6 +26,7 @@ pub type BuiltinCallback =
 pub enum Value {
     Number(i64),
     Float(f64),
+    Pointer(usize),
     Text(String),
     Boolean(bool),
     Object(SharedMut<ClassInstance>),
@@ -375,7 +376,6 @@ pub struct Module {
     pub modules: HashMap<Symbol, Module>,
     pub globals: HashMap<Symbol, Value>,
     pub(crate) global_slots: Vec<Option<SharedMut<Value>>>,
-    pub(crate) global_constants: HashSet<u32>,
 }
 
 impl Deref for Module {

@@ -1,17 +1,13 @@
 use crate::RegisterArg;
-use goida_hir::MethodResolution;
-use goida_syntax::prelude::{BinaryOperator, CallArg};
+use goida_hir::HirCallArg;
+use goida_syntax::prelude::BinaryOperator;
 
 impl<'a> ChunkCompiler<'a> {
     fn expression(&mut self, id: ExprId) -> Register {
-        let node = self
-            .module
-            .arena()
-            .get_expression(id)
-            .expect("valid expression");
+        let node = self.hir.arena.expression(id).expect("valid expression");
         let span = node.span;
         match &node.kind {
-            ExpressionKind::Literal(value) => {
+            HirExpressionKind::Literal(value) => {
                 let dst = self.register();
                 self.chunk.emit(
                     Instruction::LoadLiteral {
@@ -22,29 +18,24 @@ impl<'a> ChunkCompiler<'a> {
                 );
                 dst
             }
-            ExpressionKind::Identifier(name) => {
+            HirExpressionKind::Identifier { name, binding, .. } => {
                 let dst = self.register();
                 self.chunk.emit(
                     Instruction::LoadName {
                         dst,
                         name: *name,
-                        binding: self
-                            .hir
-                            .names
-                            .get(&id)
-                            .copied()
-                            .unwrap_or(Binding::Dynamic(*name)),
+                        binding: *binding,
                     },
                     span,
                 );
                 dst
             }
-            ExpressionKind::Binary { op, left, right }
+            HirExpressionKind::Binary { op, left, right }
                 if matches!(op, BinaryOperator::And | BinaryOperator::Or) =>
             {
                 self.short_circuit(*op, *left, *right, span)
             }
-            ExpressionKind::Binary { op, left, right } => {
+            HirExpressionKind::Binary { op, left, right } => {
                 let left = self.expression(*left);
                 let right = self.expression(*right);
                 let dst = self.register();
@@ -57,9 +48,11 @@ impl<'a> ChunkCompiler<'a> {
                     },
                     span,
                 );
+                self.release(left);
+                self.release(right);
                 dst
             }
-            ExpressionKind::Unary { op, operand } => {
+            HirExpressionKind::Unary { op, operand } => {
                 let operand = self.expression(*operand);
                 let dst = self.register();
                 self.chunk.emit(
@@ -70,18 +63,17 @@ impl<'a> ChunkCompiler<'a> {
                     },
                     span,
                 );
+                self.release(operand);
                 dst
             }
-            ExpressionKind::FunctionCall { function, args } => {
+            HirExpressionKind::FunctionCall { function, args } => {
                 let args = self.args(args);
                 let dst = self.register();
-                match self.module.arena().get_expression(*function).map(|e| &e.kind) {
-                    Some(ExpressionKind::Identifier(name))
-                        if !matches!(
-                            self.hir.names.get(function),
-                            Some(Binding::LocalSlot(_) | Binding::UpvalueSlot(_))
-                        ) =>
+                match self.hir.arena.expression(*function).map(|e| &e.kind) {
+                    Some(HirExpressionKind::Identifier { name, binding, .. })
+                        if !matches!(binding, Binding::LocalSlot(_) | Binding::UpvalueSlot(_)) =>
                     {
+                        self.release_args(&args);
                         self.chunk.emit(
                             Instruction::CallDirect {
                                 dst,
@@ -93,6 +85,8 @@ impl<'a> ChunkCompiler<'a> {
                     }
                     _ => {
                         let callable = self.expression(*function);
+                        self.release(callable);
+                        self.release_args(&args);
                         self.chunk.emit(
                             Instruction::Call {
                                 dst,
@@ -105,19 +99,21 @@ impl<'a> ChunkCompiler<'a> {
                 }
                 dst
             }
-            ExpressionKind::Index { object, index } => {
+            HirExpressionKind::Index { object, index } => {
                 let object = self.expression(*object);
                 let index = self.expression(*index);
                 let dst = self.register();
                 self.chunk
                     .emit(Instruction::ReadIndex { dst, object, index }, span);
+                self.release(object);
+                self.release(index);
                 dst
             }
-            ExpressionKind::PropertyAccess { object, property } => {
-                let receiver = self.module.arena().get_expression(*object).map(|e| &e.kind);
-                let receiver_is_this = matches!(receiver, Some(ExpressionKind::This));
+            HirExpressionKind::PropertyAccess { object, property } => {
+                let receiver = self.hir.arena.expression(*object).map(|e| &e.kind);
+                let receiver_is_this = matches!(receiver, Some(HirExpressionKind::This));
                 let receiver_name = match receiver {
-                    Some(ExpressionKind::Identifier(name)) => Some(*name),
+                    Some(HirExpressionKind::Identifier { name, .. }) => Some(*name),
                     _ => None,
                 };
                 let object = self.expression(*object);
@@ -132,30 +128,28 @@ impl<'a> ChunkCompiler<'a> {
                     },
                     span,
                 );
+                self.release(object);
                 dst
             }
-            ExpressionKind::MethodCall {
+            HirExpressionKind::MethodCall {
                 object,
-                method,
+                resolution,
                 args,
             } => {
                 let receiver_is_this = matches!(
-                    self.module.arena().get_expression(*object).map(|e| &e.kind),
-                    Some(ExpressionKind::This)
+                    self.hir.arena.expression(*object).map(|e| &e.kind),
+                    Some(HirExpressionKind::This)
                 );
                 let object = self.expression(*object);
                 let args = self.args(args);
                 let dst = self.register();
+                self.release(object);
+                self.release_args(&args);
                 self.chunk.emit(
                     Instruction::CallMethod {
                         dst,
                         object,
-                        resolution: self
-                            .hir
-                            .methods
-                            .get(&id)
-                            .copied()
-                            .unwrap_or(MethodResolution::Dynamic(*method)),
+                        resolution: *resolution,
                         args,
                         receiver_is_this,
                     },
@@ -163,9 +157,10 @@ impl<'a> ChunkCompiler<'a> {
                 );
                 dst
             }
-            ExpressionKind::ObjectCreation { class_name, args } => {
+            HirExpressionKind::ObjectCreation { class_name, args } => {
                 let args = self.args(args);
                 let dst = self.register();
+                self.release_args(&args);
                 self.chunk.emit(
                     Instruction::NewObject {
                         dst,
@@ -176,7 +171,7 @@ impl<'a> ChunkCompiler<'a> {
                 );
                 dst
             }
-            ExpressionKind::Lambda { params, body } => {
+            HirExpressionKind::Lambda { params, body } => {
                 let dst = self.register();
                 self.chunk.emit(
                     Instruction::MakeLambda {
@@ -194,7 +189,7 @@ impl<'a> ChunkCompiler<'a> {
                 );
                 dst
             }
-            ExpressionKind::This => {
+            HirExpressionKind::This => {
                 let dst = self.register();
                 self.chunk.emit(Instruction::InvalidThis { dst }, span);
                 dst
@@ -213,6 +208,7 @@ impl<'a> ChunkCompiler<'a> {
         let dst = self.register();
         self.chunk
             .emit(Instruction::ToBoolean { dst, source: left }, span);
+        self.release(left);
         match op {
             BinaryOperator::And => {
                 let jump = self.chunk.emit(
@@ -225,6 +221,7 @@ impl<'a> ChunkCompiler<'a> {
                 let right = self.expression(right_id);
                 self.chunk
                     .emit(Instruction::ToBoolean { dst, source: right }, span);
+                self.release(right);
                 let end = self.chunk.code.len();
                 self.patch_jump_if_false(jump, end);
             }
@@ -242,6 +239,7 @@ impl<'a> ChunkCompiler<'a> {
                 let right = self.expression(right_id);
                 self.chunk
                     .emit(Instruction::ToBoolean { dst, source: right }, span);
+                self.release(right);
                 let end = self.chunk.code.len();
                 self.patch_jump(skip_right, end);
             }
@@ -250,7 +248,7 @@ impl<'a> ChunkCompiler<'a> {
         dst
     }
 
-    fn args(&mut self, args: &[CallArg]) -> Vec<RegisterArg> {
+    fn args(&mut self, args: &[HirCallArg]) -> Vec<RegisterArg> {
         args.iter()
             .map(|arg| RegisterArg {
                 name: arg.name,

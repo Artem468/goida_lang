@@ -1,5 +1,8 @@
 библиотека "../target/debug/native_ffi_test_lib" {
     функция ffi_create_demo_text() -> указатель {}
+    функция ffi_utf8_text_ptr() -> указатель {}
+    функция ffi_utf8_text_len() -> число {}
+    функция ffi_utf8_c_text_ptr() -> указатель {}
     функция ffi_text_len(ptr: указатель) -> число {}
     функция ffi_text_byte_at(ptr: указатель, index: число) -> число {}
     функция ffi_text_free(ptr: указатель) {}
@@ -22,6 +25,9 @@
 }
 
 печать("=== чистое чтение коллекций внутри DLL ===")
+
+печать(строка_из_указателя(ffi_utf8_text_ptr(), ffi_utf8_text_len()))
+печать(строка_из_указателя(ffi_utf8_c_text_ptr()))
 
 текст1 = ffi_create_demo_text()
 печать("text.len = " + ffi_text_len(текст1))

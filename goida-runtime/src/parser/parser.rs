@@ -39,7 +39,7 @@ impl ParserTrait {
         self.parse_into_module(code)?;
         self.validate_module_names()?;
         self.module.arena.optimize_all(&self.interner);
-        self.lower_module();
+        self.lower_module()?;
         Ok(self.module)
     }
 
@@ -102,12 +102,15 @@ impl ParserTrait {
         Ok(syntax)
     }
 
-    fn lower_module(&mut self) {
-        let hir = crate::hir::Resolver::resolve(&self.module);
+    fn lower_module(&mut self) -> Result<(), ParseError> {
+        let mut hir = crate::hir::Lowerer::lower(&self.module);
+        crate::hir::TypeChecker::check(&mut hir)
+            .map_err(|error| ParseError::TypeError(error.data))?;
         let bytecode = crate::bytecode::Compiler::compile(&self.module, &hir);
         self.module.hir = hir;
         self.module.bytecode = bytecode;
         self.module.initialize_global_slots();
+        Ok(())
     }
 
     fn convert_parse_error(

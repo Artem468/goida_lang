@@ -3,18 +3,16 @@ use crate::BytecodeHandler;
 
 impl<'a> ChunkCompiler<'a> {
     fn statement(&mut self, id: StmtId) {
-        let node = self
-            .module
-            .arena()
-            .get_statement(id)
-            .expect("valid statement");
+        let node = self.hir.arena.statement(id).expect("valid statement");
         let span = node.span;
         match &node.kind {
-            StatementKind::Expression(expr) => {
-                self.expression(*expr);
+            HirStatementKind::Expression(expr) => {
+                let result = self.expression(*expr);
+                self.release(result);
             }
-            StatementKind::Assign {
+            HirStatementKind::Assign {
                 name,
+                binding,
                 is_const,
                 value,
                 ..
@@ -23,19 +21,15 @@ impl<'a> ChunkCompiler<'a> {
                 self.chunk.emit(
                     Instruction::StoreName {
                         name: *name,
-                        binding: self
-                            .hir
-                            .stores
-                            .get(&id)
-                            .copied()
-                            .unwrap_or(Binding::Dynamic(*name)),
+                        binding: *binding,
                         is_const: *is_const,
                         source,
                     },
                     span,
                 );
+                self.release(source);
             }
-            StatementKind::CompoundAssign { target, op, value } => {
+            HirStatementKind::CompoundAssign { target, op, value } => {
                 let target = self.assign_target(*target);
                 let left = self.read_target(&target, span);
                 let right = self.expression(*value);
@@ -49,9 +43,12 @@ impl<'a> ChunkCompiler<'a> {
                     },
                     span,
                 );
+                self.release(left);
+                self.release(right);
                 self.store_target(target, result, span);
+                self.release(result);
             }
-            StatementKind::IndexAssign {
+            HirStatementKind::IndexAssign {
                 object,
                 index,
                 value,
@@ -67,39 +64,38 @@ impl<'a> ChunkCompiler<'a> {
                     },
                     span,
                 );
+                self.release(object);
+                self.release(index);
+                self.release(source);
             }
-            StatementKind::If {
+            HirStatementKind::If {
                 condition,
                 then_body,
                 else_body,
             } => self.if_statement(*condition, *then_body, *else_body, span),
-            StatementKind::While { condition, body } => {
+            HirStatementKind::While { condition, body } => {
                 self.while_statement(*condition, *body, span)
             }
-            StatementKind::For {
+            HirStatementKind::For {
                 variable,
+                binding,
                 init,
                 condition,
                 update,
                 body,
             } => {
-                let binding = self
-                    .hir
-                    .stores
-                    .get(&id)
-                    .copied()
-                    .unwrap_or(Binding::Dynamic(*variable));
                 if matches!(binding, Binding::LocalSlot(_)) {
                     let initial = self.expression(*init);
                     self.chunk.emit(
                         Instruction::StoreName {
                             name: *variable,
-                            binding,
+                            binding: *binding,
                             is_const: false,
                             source: initial,
                         },
                         span,
                     );
+                    self.release(initial);
                     self.while_with_update(*condition, *body, *update, span);
                     return;
                 }
@@ -108,20 +104,22 @@ impl<'a> ChunkCompiler<'a> {
                 nested.chunk.emit(
                     Instruction::StoreName {
                         name: *variable,
-                        binding,
+                        binding: *binding,
                         is_const: false,
                         source: initial,
                     },
                     span,
                 );
+                nested.release(initial);
                 nested.while_with_update(*condition, *body, *update, span);
                 self.chunk
                     .emit(Instruction::Scope(Arc::new(nested.finish(None))), span);
             }
-            StatementKind::ForEach {
+            HirStatementKind::ForEach {
                 variable,
                 iterable,
                 body,
+                ..
             } => {
                 let iterable = self.expression(*iterable);
                 let body = Arc::new(Compiler::statement_chunk(self.module, self.hir, *body));
@@ -133,12 +131,13 @@ impl<'a> ChunkCompiler<'a> {
                     },
                     span,
                 );
+                self.release(iterable);
             }
-            StatementKind::Thread { body } => {
+            HirStatementKind::Thread { body } => {
                 let body = Arc::new(Compiler::statement_chunk(self.module, self.hir, *body));
                 self.chunk.emit(Instruction::Thread(body), span);
             }
-            StatementKind::Try { body, handlers } => {
+            HirStatementKind::Try { body, handlers } => {
                 let body = Arc::new(Compiler::statement_chunk(self.module, self.hir, *body));
                 let handlers = handlers
                     .iter()
@@ -146,7 +145,7 @@ impl<'a> ChunkCompiler<'a> {
                     .collect();
                 self.chunk.emit(Instruction::Try { body, handlers }, span);
             }
-            StatementKind::Raise {
+            HirStatementKind::Raise {
                 error_type,
                 message,
             } => {
@@ -158,8 +157,11 @@ impl<'a> ChunkCompiler<'a> {
                     },
                     span,
                 );
+                if let Some(message) = message {
+                    self.release(message);
+                }
             }
-            StatementKind::Block(statements) => {
+            HirStatementKind::Block(statements) => {
                 if self.block_needs_scope(statements) {
                     let body = Arc::new(Compiler::statements_chunk(
                         self.module,
@@ -173,30 +175,30 @@ impl<'a> ChunkCompiler<'a> {
                     }
                 }
             }
-            StatementKind::Return(value) => {
+            HirStatementKind::Return(value) => {
                 let value = value.map(|value| self.expression(value));
                 self.chunk.emit(Instruction::Return(value), span);
             }
-            StatementKind::FunctionDefinition(function) => {
+            HirStatementKind::FunctionDefinition(function) => {
                 self.chunk
                     .emit(Instruction::DefineFunction(function.clone()), span);
             }
-            StatementKind::NativeLibraryDefinition(definition) => {
+            HirStatementKind::NativeLibraryDefinition(definition) => {
                 self.chunk
                     .emit(Instruction::LoadNativeLibrary(definition.clone()), span);
             }
-            StatementKind::ClassDefinition(class) => {
+            HirStatementKind::ClassDefinition(class) => {
                 self.chunk
                     .emit(Instruction::DefineClass(class.clone()), span);
             }
-            StatementKind::PropertyAssign {
+            HirStatementKind::PropertyAssign {
                 object,
                 property,
                 value,
             } => {
                 let receiver_is_this = matches!(
-                    self.module.arena().get_expression(*object).map(|e| &e.kind),
-                    Some(ExpressionKind::This)
+                    self.hir.arena.expression(*object).map(|e| &e.kind),
+                    Some(HirExpressionKind::This)
                 );
                 let object = self.expression(*object);
                 let source = self.expression(*value);
@@ -209,8 +211,10 @@ impl<'a> ChunkCompiler<'a> {
                     },
                     span,
                 );
+                self.release(object);
+                self.release(source);
             }
-            StatementKind::Import(_) | StatementKind::Empty => {}
+            HirStatementKind::Import(_) | HirStatementKind::Empty => {}
         }
     }
 
@@ -229,6 +233,7 @@ impl<'a> ChunkCompiler<'a> {
             },
             span,
         );
+        self.release(condition);
         self.statement(then_body);
         if let Some(else_body) = else_body {
             let end_jump = self.chunk.emit(Instruction::Jump(usize::MAX), span);
@@ -263,6 +268,7 @@ impl<'a> ChunkCompiler<'a> {
             },
             span,
         );
+        self.release(condition);
         self.statement(body);
         if let Some(update) = update.into() {
             self.statement(update);
@@ -273,26 +279,21 @@ impl<'a> ChunkCompiler<'a> {
     }
 
     fn assign_target(&mut self, id: ExprId) -> AssignTarget {
-        let node = self.module.arena().get_expression(id).expect("valid target");
+        let node = self.hir.arena.expression(id).expect("valid target");
         match &node.kind {
-            ExpressionKind::Identifier(name) => AssignTarget::Name {
+            HirExpressionKind::Identifier { name, binding, .. } => AssignTarget::Name {
                 name: *name,
-                binding: self
-                    .hir
-                    .names
-                    .get(&id)
-                    .copied()
-                    .unwrap_or(Binding::Dynamic(*name)),
+                binding: *binding,
             },
-            ExpressionKind::PropertyAccess { object, property } => AssignTarget::Property {
+            HirExpressionKind::PropertyAccess { object, property } => AssignTarget::Property {
                 object: self.expression(*object),
                 property: *property,
                 receiver_is_this: matches!(
-                    self.module.arena().get_expression(*object).map(|e| &e.kind),
-                    Some(ExpressionKind::This)
+                    self.hir.arena.expression(*object).map(|e| &e.kind),
+                    Some(HirExpressionKind::This)
                 ),
             },
-            ExpressionKind::Index { object, index } => AssignTarget::Index {
+            HirExpressionKind::Index { object, index } => AssignTarget::Index {
                 object: self.expression(*object),
                 index: self.expression(*index),
             },
@@ -380,6 +381,8 @@ impl<'a> ChunkCompiler<'a> {
                     },
                     span,
                 );
+                self.release(object);
+                self.release(index);
             }
         }
     }
@@ -415,16 +418,16 @@ impl<'a> ChunkCompiler<'a> {
 
     fn block_needs_scope(&self, statements: &[StmtId]) -> bool {
         statements.iter().any(|statement| {
-            self.module
-                .arena()
-                .get_statement(*statement)
+            self.hir
+                .arena
+                .statement(*statement)
                 .is_some_and(|node| match node.kind {
-                    StatementKind::Assign { .. } => {
-                        !matches!(self.hir.stores.get(statement), Some(Binding::LocalSlot(_)))
+                    HirStatementKind::Assign { binding, .. } => {
+                        !matches!(binding, Binding::LocalSlot(_))
                     }
-                    StatementKind::FunctionDefinition(_)
-                    | StatementKind::ClassDefinition(_)
-                    | StatementKind::NativeLibraryDefinition(_) => true,
+                    HirStatementKind::FunctionDefinition(_)
+                    | HirStatementKind::ClassDefinition(_)
+                    | HirStatementKind::NativeLibraryDefinition(_) => true,
                     _ => false,
                 })
         })

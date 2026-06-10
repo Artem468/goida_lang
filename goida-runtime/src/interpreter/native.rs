@@ -194,7 +194,7 @@ impl Interpreter {
                     {
                         value
                     } else {
-                        Value::Number(ptr as isize as i64)
+                        Value::Pointer(ptr as usize)
                     }
                 }
             }
@@ -391,7 +391,7 @@ impl Interpreter {
                             global_name
                         );
                     }
-                    Ok(Value::Number((*ptr) as isize as i64))
+                    Ok(Value::Pointer((*ptr) as usize))
                 }
                 NativeFfiKind::Void => unreachable!(),
             }
@@ -517,8 +517,8 @@ impl Interpreter {
                             global_name
                         );
                     }
-                    let number = match value {
-                        Value::Number(number) => number,
+                    let address = match value {
+                        Value::Pointer(address) => address,
                         Value::Empty => 0,
                         _ => {
                             return bail_runtime!(
@@ -529,7 +529,7 @@ impl Interpreter {
                             )
                         }
                     };
-                    *ptr = number as isize as usize as *mut c_void;
+                    *ptr = address as *mut c_void;
                     Ok(())
                 }
                 NativeFfiKind::Void => unreachable!(),

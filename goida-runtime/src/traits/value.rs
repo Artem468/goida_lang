@@ -39,6 +39,7 @@ impl Value {
             Value::Boolean(b) => *b,
             Value::Number(n) => *n != 0,
             Value::Float(n) => *n != 0.0,
+            Value::Pointer(address) => *address != 0,
             Value::Text(s) => !s.is_empty(),
             Value::Object(_) => true,
             Value::Class(_) => true,
@@ -205,6 +206,7 @@ impl fmt::Display for Value {
         match self {
             Value::Number(n) => write!(f, "{}", n),
             Value::Float(n) => write!(f, "{}", n),
+            Value::Pointer(_) => write!(f, "<Указатель>"),
             Value::Text(s) => write!(f, "{}", s),
             Value::Boolean(b) => write!(f, "{}", if *b { "истина" } else { "ложь" }),
             Value::Object(obj) => write!(
@@ -317,6 +319,7 @@ impl TryFrom<Value> for bool {
             Value::Empty => Ok(false),
             Value::Number(n) => Ok(n != 0),
             Value::Float(f) => Ok(f != 0.0 && !f.is_nan()),
+            Value::Pointer(address) => Ok(address != 0),
             Value::Text(s) => Ok(!s.is_empty()),
             Value::List(list) => Ok(!list.read(|l| l.is_empty())),
             Value::Array(array) => Ok(!array.is_empty()),
@@ -339,6 +342,7 @@ impl PartialEq for Value {
         match (self, other) {
             (Value::Number(a), Value::Number(b)) => a == b,
             (Value::Float(a), Value::Float(b)) => a == b,
+            (Value::Pointer(a), Value::Pointer(b)) => a == b,
             (Value::Number(a), Value::Float(b)) => (*a as f64) == *b,
             (Value::Float(a), Value::Number(b)) => *a == (*b as f64),
             (Value::Text(a), Value::Text(b)) => a == b,

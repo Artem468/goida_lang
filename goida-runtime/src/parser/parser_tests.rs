@@ -1,10 +1,32 @@
+use crate::ast::prelude::DataType;
 use crate::bytecode::Instruction;
-use crate::hir::Binding;
+use crate::hir::{Binding, HirExpressionKind};
 use crate::interpreter::prelude::SharedInterner;
 use crate::parser::prelude::Parser;
 use crate::shared::SharedMut;
 use std::path::PathBuf;
 use string_interner::StringInterner;
+
+fn parse_error(source: &str) -> crate::parser::prelude::ParseError {
+    Parser::new(
+        goida_model::new_interner(),
+        "type_check",
+        PathBuf::from("type_check.goida"),
+    )
+    .parse(source)
+    .expect_err("source should fail type checking")
+}
+
+fn assert_type_error(source: &str, message_fragment: &str) {
+    let crate::parser::prelude::ParseError::TypeError(data) = parse_error(source) else {
+        panic!("expected type error");
+    };
+    assert!(
+        data.message.contains(message_fragment),
+        "unexpected error: {}",
+        data.message
+    );
+}
 
 #[test]
 fn macro_expansion_preview_contains_expanded_source_without_macro_definition() {
@@ -44,9 +66,23 @@ answer = identity(42)
 
     assert!(module
         .hir
-        .names
-        .values()
-        .any(|binding| matches!(binding, Binding::LocalSlot(_) | Binding::UpvalueSlot(_))));
+        .arena
+        .expressions()
+        .any(|(_, expression)| matches!(
+            expression.kind,
+            HirExpressionKind::Identifier {
+                binding: Binding::LocalSlot(_) | Binding::UpvalueSlot(_),
+                ..
+            }
+        )));
+    assert_eq!(
+        module.hir.arena.expressions().count(),
+        module.arena.expressions.len()
+    );
+    assert_eq!(
+        module.hir.arena.statements().count(),
+        module.arena.statements.len()
+    );
     assert!(module
         .bytecode
         .module
@@ -54,6 +90,75 @@ answer = identity(42)
         .iter()
         .any(|instruction| matches!(instruction, Instruction::StoreName { .. })));
     assert_eq!(module.bytecode.bodies.len(), 1);
+}
+
+#[test]
+fn type_checker_rejects_invalid_assignments() {
+    assert_type_error(
+        "value: number = \"text\"\n",
+        "Несовместимый тип присваивания",
+    );
+    assert_type_error(
+        "value: number = 1\nvalue = \"text\"\n",
+        "Несовместимый тип присваивания",
+    );
+}
+
+#[test]
+fn type_checker_rejects_invalid_function_arguments_defaults_and_returns() {
+    assert_type_error(
+        "function accept(value: number) {}\naccept(\"text\")\n",
+        "Несовместимый тип аргумента функции",
+    );
+    assert_type_error(
+        "function value() -> number { return \"text\" }\n",
+        "Несовместимый тип возвращаемого значения",
+    );
+    assert_type_error(
+        "function value(input: number = \"text\") {}\n",
+        "Несовместимый тип значения параметра по умолчанию",
+    );
+}
+
+#[test]
+fn type_checker_rejects_invalid_native_function_arguments_before_execution() {
+    assert_type_error(
+        r#"
+library "native" {
+    function add(a: number, b: number) -> number {}
+}
+add("text", 1)
+"#,
+        "Несовместимый тип аргумента функции",
+    );
+}
+
+#[test]
+fn type_checker_records_inferred_expression_types_and_keeps_dynamic_values_dynamic() {
+    let module = Parser::new(
+        goida_model::new_interner(),
+        "type_check",
+        PathBuf::from("type_check.goida"),
+    )
+    .parse(
+        r#"
+function identity(value) {
+    return value
+}
+dynamic = 1
+dynamic = "text"
+number_value: number = 42
+identity(dynamic)
+"#,
+    )
+    .expect("dynamic values should remain valid");
+
+    assert!(!module.hir.inferred_types.is_empty());
+    assert!(module
+        .hir
+        .arena
+        .expressions()
+        .any(|(_, expression)| expression.inferred_type != DataType::Any));
 }
 
 #[test]
@@ -90,8 +195,8 @@ fn syntax_only_parse_does_not_build_hir_or_bytecode() {
         .parse_syntax("value = 1\n")
         .expect("source should parse");
 
-    assert!(module.hir.names.is_empty());
-    assert!(module.hir.stores.is_empty());
+    assert_eq!(module.hir.arena.expressions().count(), 0);
+    assert_eq!(module.hir.arena.statements().count(), 0);
     assert!(module.bytecode.module.code.is_empty());
     assert!(module.bytecode.bodies.is_empty());
     assert!(module.bytecode.expressions.is_empty());

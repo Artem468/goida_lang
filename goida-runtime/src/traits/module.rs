@@ -1,6 +1,6 @@
 use crate::ast::prelude::{AstArena, FunctionDefinition, StmtId};
 use crate::bytecode::{BytecodeModule, BytecodeSource};
-use crate::hir::{HirModule, HirSource};
+use crate::hir::{CallableSignature, HirModule, HirSource};
 use crate::interpreter::prelude::{CompiledModule, Module, SharedInterner, Value};
 use crate::shared::SharedMut;
 use std::collections::HashMap;
@@ -27,7 +27,6 @@ impl Module {
             modules: HashMap::new(),
             globals: HashMap::new(),
             global_slots: Vec::new(),
-            global_constants: std::collections::HashSet::new(),
         }
     }
 
@@ -38,7 +37,6 @@ impl Module {
             .iter()
             .map(|name| self.globals.get(name).cloned().map(SharedMut::new))
             .collect();
-        self.global_constants.clear();
     }
 
     pub(crate) fn global_slot(&self, slot: u32) -> Option<Value> {
@@ -100,30 +98,8 @@ impl HirSource for Module {
         self.functions.values().cloned().collect()
     }
 
-    fn class_names(&self) -> Vec<Symbol> {
-        self.classes.keys().copied().collect()
-    }
-
-    fn module_names(&self) -> Vec<Symbol> {
-        self.modules.keys().copied().collect()
-    }
-}
-
-impl BytecodeSource for Module {
-    fn name(&self) -> Symbol {
-        self.name
-    }
-
-    fn arena(&self) -> &AstArena {
-        &self.arena
-    }
-
-    fn body(&self) -> &[StmtId] {
-        &self.body
-    }
-
-    fn functions_to_compile(&self) -> Vec<Arc<FunctionDefinition>> {
-        let mut functions: Vec<_> = self.functions.values().cloned().collect();
+    fn functions_to_type_check(&self) -> Vec<Arc<FunctionDefinition>> {
+        let mut functions = self.functions.values().cloned().collect::<Vec<_>>();
         for class in self.classes.values() {
             class.read(|class| {
                 functions.extend(class.methods.values().filter_map(
@@ -142,5 +118,55 @@ impl BytecodeSource for Module {
             });
         }
         functions
+    }
+
+    fn class_names(&self) -> Vec<Symbol> {
+        self.classes.keys().copied().collect()
+    }
+
+    fn is_module_name(&self, name: Symbol) -> bool {
+        self.modules.contains_key(&name)
+    }
+
+    fn callable_signatures(&self) -> Vec<CallableSignature> {
+        let mut signatures = self
+            .functions
+            .values()
+            .map(|function| CallableSignature {
+                name: function.name,
+                params: function.params.clone(),
+                return_type: function.return_type,
+                span: function.span,
+            })
+            .collect::<Vec<_>>();
+
+        for statement in &self.arena.statements {
+            match &statement.kind {
+                crate::ast::prelude::StatementKind::FunctionDefinition(function) => {
+                    signatures.push(CallableSignature {
+                        name: function.name,
+                        params: function.params.clone(),
+                        return_type: function.return_type,
+                        span: function.span,
+                    });
+                }
+                crate::ast::prelude::StatementKind::NativeLibraryDefinition(library) => {
+                    signatures.extend(library.functions.iter().map(|function| CallableSignature {
+                        name: function.name,
+                        params: function.params.clone(),
+                        return_type: function.return_type,
+                        span: function.span,
+                    }));
+                }
+                _ => {}
+            }
+        }
+        signatures
+    }
+}
+
+impl BytecodeSource for Module {
+    fn name(&self) -> Symbol {
+        self.name
     }
 }

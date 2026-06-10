@@ -182,7 +182,7 @@ impl<'a> Vm<'a> {
                 } => {
                     let value = Self::get(&registers, *source);
                     if let Binding::LocalSlot(slot) = binding {
-                        if self.local_constants.contains(slot) {
+                        if self.local_constants.contains(*slot) {
                             return bail_runtime!(
                                 InvalidOperation,
                                 span,

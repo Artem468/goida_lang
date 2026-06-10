@@ -182,3 +182,51 @@ result = answer + 2
         Some(&Value::Number(42))
     );
 }
+
+#[test]
+fn compiler_reuses_temporary_registers_between_statements() {
+    let mut session = Session::new();
+    let module = Parser::new(
+        session.interner(),
+        "register_reuse",
+        PathBuf::from("register_reuse.goida"),
+    )
+    .parse(
+        r#"
+first = 1 + 2
+second = 3 + 4
+third = 5 + 6
+result = first + second + third
+"#,
+    )
+    .expect("program should compile");
+
+    assert!(
+        module.bytecode.module.register_count <= 3,
+        "independent expressions should reuse their temporary registers"
+    );
+
+    let module_id = module.name;
+    session.execute(module).expect("program should execute");
+    let result = session.runtime().intern_string("result");
+    assert_eq!(
+        session.runtime().modules[&module_id].globals.get(&result),
+        Some(&Value::Number(21))
+    );
+}
+
+#[test]
+fn dense_slot_set_handles_sparse_word_boundaries() {
+    let mut slots = DenseSlotSet::default();
+    let boundary = DenseSlotSet::BITS_PER_WORD as u32;
+
+    slots.insert(0);
+    slots.insert(boundary);
+    slots.insert(boundary * 3 + 1);
+
+    assert!(slots.contains(0));
+    assert!(slots.contains(boundary));
+    assert!(slots.contains(boundary * 3 + 1));
+    assert!(!slots.contains(boundary - 1));
+    assert!(!slots.contains(boundary * 2));
+}
