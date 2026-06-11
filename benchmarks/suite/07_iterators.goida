@@ -1,0 +1,21 @@
+function double(value) {
+    return value * 2
+}
+
+function divisible_by_three(value) {
+    return value % 3 == 0
+}
+
+function add(left, right) {
+    return left + right
+}
+
+function iterators(limit) {
+    values = list()
+    for (i = 0, i < limit, i += 1) {
+        values.push(i)
+    }
+    return values.iterator().map(double).filter(divisible_by_three).reduce(add, 0)
+}
+
+iterators(5000)

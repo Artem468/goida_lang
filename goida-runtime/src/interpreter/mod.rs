@@ -2,6 +2,7 @@ pub mod classes;
 pub mod engine;
 pub mod environment;
 pub mod functions;
+pub mod heap;
 pub mod native;
 mod native_support;
 mod native_types;

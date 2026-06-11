@@ -352,6 +352,7 @@ pub struct Interpreter {
     pub(crate) environment: SharedMut<Environment>,
     pub(crate) background_threads: Vec<RuntimeThread>,
     pub(crate) method_depth: usize,
+    pub(crate) heap: Arc<crate::interpreter::heap::ObjectHeap>,
     pub source_manager: SourceManager,
 }
 

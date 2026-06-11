@@ -1,0 +1,13 @@
+function allocate(rounds, width) {
+    checksum = 0
+    for (round = 0, round < rounds, round += 1) {
+        values = list()
+        for (i = 0, i < width, i += 1) {
+            values.push(list(i, i + 1, i + 2))
+        }
+        checksum += values.length()
+    }
+    return checksum
+}
+
+allocate(40, 250)

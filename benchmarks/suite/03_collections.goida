@@ -1,0 +1,17 @@
+function collections(limit) {
+    values = list()
+    index = dict()
+    for (i = 0, i < limit, i += 1) {
+        values.push(i)
+        index.set("key-" + i, i)
+    }
+
+    total = 0
+    for (i = 0, i < limit, i += 1) {
+        total += values.get(i)
+        total += index.get("key-" + i)
+    }
+    return total
+}
+
+collections(5000)

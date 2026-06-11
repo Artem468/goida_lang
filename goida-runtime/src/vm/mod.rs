@@ -114,6 +114,7 @@ impl<'a> Vm<'a> {
     }
 
     fn set_local(&mut self, slot: usize, value: Value) {
+        self.interpreter.adopt_value(&value);
         if self.locals.len() <= slot {
             self.locals.resize(slot + 1, None);
         }
@@ -252,6 +253,8 @@ impl<'a> Vm<'a> {
         value: Value,
         span: Span,
     ) -> Result<(), RuntimeError> {
+        self.interpreter.adopt_value(&object);
+        self.interpreter.adopt_value(&value);
         match object {
             Value::List(values) => values.write(|values| {
                 let index = index.resolve_index(values.len(), span)?;
@@ -330,6 +333,8 @@ impl<'a> Vm<'a> {
         receiver_is_this: bool,
         span: Span,
     ) -> Result<(), RuntimeError> {
+        self.interpreter.adopt_value(&object);
+        self.interpreter.adopt_value(&value);
         let Value::Object(instance) = object else {
             return bail_runtime!(TypeMismatch, span, "Expected object");
         };

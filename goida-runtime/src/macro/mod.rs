@@ -20,9 +20,21 @@ macro_rules! define_method {
                 s
             };
 
-            let method = $crate::interpreter::prelude::BuiltinFn(std::sync::Arc::new(move |$interp, $args, $span| {
-                    $body
-                }));
+            let method = $crate::interpreter::prelude::BuiltinFn(std::sync::Arc::new(
+                move |__interpreter, __arguments, __span| {
+                    for argument in &__arguments {
+                        __interpreter.adopt_value(&argument.value);
+                    }
+                    #[allow(clippy::redundant_closure_call)]
+                    let result = (|| {
+                        let $interp = __interpreter;
+                        let $args = __arguments;
+                        let $span = __span;
+                        $body
+                    })();
+                    __interpreter.manage_result(result)
+                },
+            ));
             let aliases = $crate::builtins::registry::BUILTINS.method_names($name);
             if aliases.is_empty() {
                 $class.add_method($interner.write(|i| i.get_or_intern($name)), vis, is_static, method);
@@ -44,7 +56,19 @@ macro_rules! define_method {
 macro_rules! define_constructor {
     ($class:expr, ($interp:pat, $args:pat, $span:pat) $body:block) => {
         $class.set_constructor($crate::interpreter::prelude::BuiltinFn(
-            std::sync::Arc::new(move |$interp, $args, $span| $body),
+            std::sync::Arc::new(move |__interpreter, __arguments, __span| {
+                for argument in &__arguments {
+                    __interpreter.adopt_value(&argument.value);
+                }
+                #[allow(clippy::redundant_closure_call)]
+                let result = (|| {
+                    let $interp = __interpreter;
+                    let $args = __arguments;
+                    let $span = __span;
+                    $body
+                })();
+                __interpreter.manage_result(result)
+            }),
         ));
     };
 }
@@ -53,7 +77,19 @@ macro_rules! define_constructor {
 macro_rules! define_builtin {
     ($interpreter:expr, $interner:expr, $name:expr => ($interp:pat, $args:pat, $span:pat) $body:block) => {{
         let builtin = $crate::interpreter::prelude::BuiltinFn(std::sync::Arc::new(
-            move |$interp, $args, $span| $body,
+            move |__interpreter, __arguments, __span| {
+                for argument in &__arguments {
+                    __interpreter.adopt_value(&argument.value);
+                }
+                #[allow(clippy::redundant_closure_call)]
+                let result = (|| {
+                    let $interp = __interpreter;
+                    let $args = __arguments;
+                    let $span = __span;
+                    $body
+                })();
+                __interpreter.manage_result(result)
+            },
         ));
         let aliases = $crate::builtins::registry::BUILTINS.function_names($name);
         if aliases.is_empty() {
