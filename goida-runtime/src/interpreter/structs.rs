@@ -46,6 +46,22 @@ pub enum Value {
     Empty,
 }
 
+impl Value {
+    #[must_use]
+    pub(crate) fn may_contain_managed_references(&self) -> bool {
+        matches!(
+            self,
+            Self::Object(_)
+                | Self::List(_)
+                | Self::Array(_)
+                | Self::Dict(_)
+                | Self::Iterator(_)
+                | Self::Mutex(_)
+                | Self::RwLock(_)
+        )
+    }
+}
+
 #[derive(Clone, Debug)]
 /// Lazy iterator pipeline over runtime values.
 pub struct RuntimeIterator {

@@ -52,13 +52,24 @@ pub struct CollectionStats {
 }
 
 impl ObjectHeap {
-    pub fn adopt(&self, value: &Value) {
+    pub fn adopt(&self, value: &Value) -> bool {
+        if !value.may_contain_managed_references() {
+            return false;
+        }
         let mut state = self
             .state
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if managed_identity(value).is_some_and(|identity| {
+            state
+                .objects
+                .get(&identity)
+                .is_some_and(|entry| entry.object.upgrade().is_some())
+        }) {
+            return false;
+        }
         let mut visited = HashSet::new();
-        adopt_value(&mut state, value, &mut visited);
+        adopt_value(&mut state, value, &mut visited)
     }
 
     pub fn collect_if_needed(&self) -> Option<CollectionStats> {
@@ -257,26 +268,32 @@ impl LiveObject {
     }
 }
 
-fn adopt_value(state: &mut HeapState, value: &Value, visited: &mut HashSet<usize>) {
+fn adopt_value(state: &mut HeapState, value: &Value, visited: &mut HashSet<usize>) -> bool {
+    let mut adopted = false;
     if let Some((identity, object)) = weak_object(value) {
         if !visited.insert(identity) {
-            return;
+            return false;
         }
-        let needs_registration = state
+        let already_registered = state
             .objects
             .get(&identity)
-            .is_none_or(|entry| entry.object.upgrade().is_none());
-        if needs_registration {
-            let id = state.next_id;
-            state.next_id = state
-                .next_id
-                .checked_add(1)
-                .expect("managed object ID space exhausted");
-            state.objects.insert(identity, HeapEntry { id, object });
+            .is_some_and(|entry| entry.object.upgrade().is_some());
+        if already_registered {
+            return false;
         }
+        let id = state.next_id;
+        state.next_id = state
+            .next_id
+            .checked_add(1)
+            .expect("managed object ID space exhausted");
+        state.objects.insert(identity, HeapEntry { id, object });
+        adopted = true;
     }
 
-    trace_nested_values(value, |child| adopt_value(state, child, visited));
+    trace_nested_values(value, |child| {
+        adopted |= adopt_value(state, child, visited);
+    });
+    adopted
 }
 
 fn trace_nested_values(value: &Value, mut visit: impl FnMut(&Value)) {
@@ -499,5 +516,40 @@ mod tests {
         drop(interpreter);
 
         assert!(weak.upgrade().is_none());
+    }
+
+    #[test]
+    fn primitive_values_do_not_enter_managed_heap() {
+        let heap = ObjectHeap::default();
+        heap.adopt(&Value::Number(1));
+        heap.adopt(&Value::Text("text".into()));
+        heap.adopt(&Value::Boolean(true));
+
+        assert_eq!(heap.tracked_count(), 0);
+    }
+
+    #[test]
+    fn write_barrier_registers_new_child_of_tracked_container() {
+        let interpreter = Interpreter::new(goida_model::new_interner());
+        let parent = Value::List(SharedMut::new(Vec::new()));
+        let child = Value::List(SharedMut::new(Vec::new()));
+        let Value::List(parent_list) = &parent else {
+            unreachable!()
+        };
+        let Value::List(child_list) = &child else {
+            unreachable!()
+        };
+        let weak_parent = parent_list.downgrade();
+        let weak_child = child_list.downgrade();
+        interpreter.adopt_value(&parent);
+        interpreter.adopt_value(&child);
+        child_list.write(|items| items.push(child.clone()));
+        parent_list.write(|items| items.push(child.clone()));
+        drop(parent);
+        drop(child);
+
+        assert_eq!(interpreter.collect_cycles().collected, 1);
+        assert!(weak_parent.upgrade().is_none());
+        assert!(weak_child.upgrade().is_none());
     }
 }

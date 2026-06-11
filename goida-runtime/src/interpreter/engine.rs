@@ -335,8 +335,11 @@ impl Interpreter {
     }
 
     pub fn adopt_value(&self, value: &Value) {
-        self.heap.adopt(value);
-        if Arc::strong_count(&self.heap) == 1 {
+        if !value.may_contain_managed_references() {
+            return;
+        }
+        let adopted = self.heap.adopt(value);
+        if adopted && Arc::strong_count(&self.heap) == 1 {
             self.heap.collect_if_needed();
         }
     }
