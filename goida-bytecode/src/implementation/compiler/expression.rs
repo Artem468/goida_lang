@@ -1,6 +1,5 @@
 use crate::RegisterArg;
 use goida_hir::HirCallArg;
-use goida_syntax::prelude::BinaryOperator;
 
 impl<'a> ChunkCompiler<'a> {
     fn expression(&mut self, id: ExprId) -> Register {
@@ -39,15 +38,8 @@ impl<'a> ChunkCompiler<'a> {
                 let left = self.expression(*left);
                 let right = self.expression(*right);
                 let dst = self.register();
-                self.chunk.emit(
-                    Instruction::Binary {
-                        dst,
-                        op: *op,
-                        left,
-                        right,
-                    },
-                    span,
-                );
+                let instruction = Self::binary_instruction(dst, *op, left, right);
+                self.chunk.emit(instruction, span);
                 self.release(left);
                 self.release(right);
                 dst

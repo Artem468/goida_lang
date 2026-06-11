@@ -115,14 +115,14 @@ impl InterpreterFunctions for Interpreter {
         if let Some(Value::Function(func)) = current_module.globals.get(&name) {
             return self.call_function(func.clone(), arguments, current_module_id, span);
         }
-        if let Some(Value::Builtin(builtin)) = current_module.globals.get(&name) {
+        if let Some(Value::Builtin(builtin)) = current_module.globals.get(&name).cloned() {
             return builtin(self, arguments, span).map_err(|mut err| {
                 err.add_stack_frame(format!("функция {}", name_str), span);
                 err
             });
         }
 
-        if let Some(builtin_fn) = self.builtins.get(&name) {
+        if let Some(builtin_fn) = self.builtins.get(&name).cloned() {
             return builtin_fn(self, arguments, span).map_err(|mut err| {
                 err.add_stack_frame(format!("функция {}", name_str), span);
                 err

@@ -1,5 +1,5 @@
 use super::{BytecodeModule, Chunk, Instruction, Register};
-use crate::ast::prelude::{ExprId, FunctionDefinition, Span, StmtId};
+use crate::ast::prelude::{BinaryOperator, ExprId, FunctionDefinition, Span, StmtId};
 use crate::hir::{Binding, HirExpressionKind, HirModule, HirStatementKind};
 use std::collections::BTreeSet;
 use std::sync::Arc;
@@ -63,6 +63,28 @@ impl<'a> ChunkCompiler<'a> {
     fn release_args(&mut self, args: &[super::RegisterArg]) {
         for arg in args {
             self.release(arg.register);
+        }
+    }
+
+    fn binary_instruction(
+        dst: Register,
+        op: BinaryOperator,
+        left: Register,
+        right: Register,
+    ) -> Instruction {
+        match op {
+            BinaryOperator::Eq | BinaryOperator::Ne => Instruction::Binary {
+                dst,
+                op,
+                left,
+                right,
+            },
+            _ => Instruction::GuardedBinary {
+                dst,
+                op,
+                left,
+                right,
+            },
         }
     }
 

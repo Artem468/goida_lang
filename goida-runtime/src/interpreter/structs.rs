@@ -19,7 +19,7 @@ use string_interner::DefaultSymbol as Symbol;
 
 pub type ThreadJoinState = Arc<Mutex<Option<JoinHandle<Result<(), RuntimeError>>>>>;
 pub type BuiltinCallback =
-    dyn Fn(&Interpreter, Vec<CallArgValue>, Span) -> Result<Value, RuntimeError> + Send + Sync;
+    dyn Fn(&mut Interpreter, Vec<CallArgValue>, Span) -> Result<Value, RuntimeError> + Send + Sync;
 
 #[derive(Clone, Debug)]
 /// Runtime value representation used by the interpreter and built-ins.

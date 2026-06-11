@@ -470,7 +470,12 @@ mod tests {
         BUILTINS.install(&mut interpreter).unwrap();
         let list_name = interner.write(|interner| interner.get_or_intern("list"));
         let builtin = interpreter.builtins.get(&list_name).unwrap().clone();
-        let value = builtin(&interpreter, Vec::<CallArgValue>::new(), Default::default()).unwrap();
+        let value = builtin(
+            &mut interpreter,
+            Vec::<CallArgValue>::new(),
+            Default::default(),
+        )
+        .unwrap();
         let Value::List(list) = &value else {
             unreachable!()
         };

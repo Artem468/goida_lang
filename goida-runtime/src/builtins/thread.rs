@@ -35,9 +35,9 @@ fn spawn_thread(
             Ok(RuntimeThread::new(handle))
         }
         Value::Builtin(builtin) => {
-            let thread_interpreter = interp.fork_for_thread();
+            let mut thread_interpreter = interp.fork_for_thread();
             let handle = std::thread::spawn(move || {
-                builtin(&thread_interpreter, arguments, span).map(|_| ())
+                builtin(&mut thread_interpreter, arguments, span).map(|_| ())
             });
             Ok(RuntimeThread::new(handle))
         }

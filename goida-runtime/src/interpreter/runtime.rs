@@ -88,7 +88,7 @@ impl Interpreter {
     }
 
     pub(crate) fn iterable_values(
-        &self,
+        &mut self,
         value: Value,
         span: Span,
     ) -> Result<Vec<Value>, RuntimeError> {

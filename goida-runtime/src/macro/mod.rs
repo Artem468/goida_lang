@@ -27,7 +27,7 @@ macro_rules! define_method {
                     }
                     #[allow(clippy::redundant_closure_call)]
                     let result = (|| {
-                        let $interp = __interpreter;
+                        let $interp = &mut *__interpreter;
                         let $args = __arguments;
                         let $span = __span;
                         $body
@@ -62,7 +62,7 @@ macro_rules! define_constructor {
                 }
                 #[allow(clippy::redundant_closure_call)]
                 let result = (|| {
-                    let $interp = __interpreter;
+                    let $interp = &mut *__interpreter;
                     let $args = __arguments;
                     let $span = __span;
                     $body
@@ -83,7 +83,7 @@ macro_rules! define_builtin {
                 }
                 #[allow(clippy::redundant_closure_call)]
                 let result = (|| {
-                    let $interp = __interpreter;
+                    let $interp = &mut *__interpreter;
                     let $args = __arguments;
                     let $span = __span;
                     $body

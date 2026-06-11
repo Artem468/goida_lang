@@ -44,8 +44,7 @@ impl<'a> Vm<'a> {
                     Self::set(&mut registers, *dst, value);
                 }
                 Instruction::Unary { dst, op, operand } => {
-                    let value = Self::get(&registers, *operand);
-                    let value = match (op, value) {
+                    let value = match (op, Self::get_ref(&registers, *operand)) {
                         (UnaryOperator::Negative, Value::Number(value)) => Value::Number(-value),
                         (UnaryOperator::Not, value) => Value::Boolean(!value.is_truthy()),
                         _ => {
@@ -58,22 +57,54 @@ impl<'a> Vm<'a> {
                     };
                     Self::set(&mut registers, *dst, value);
                 }
+                Instruction::GuardedBinary {
+                    dst,
+                    op,
+                    left,
+                    right,
+                } => {
+                    let value = match Self::fast_binary(
+                        *op,
+                        Self::get_ref(&registers, *left),
+                        Self::get_ref(&registers, *right),
+                        span,
+                    ) {
+                        Some(value) => value?,
+                        None => self.binary(
+                            *op,
+                            Self::get(&registers, *left),
+                            Self::get(&registers, *right),
+                            span,
+                        )?,
+                    };
+                    Self::set(&mut registers, *dst, value);
+                }
                 Instruction::Binary {
                     dst,
                     op,
                     left,
                     right,
                 } => {
-                    let value = self.binary(
-                        *op,
-                        Self::get(&registers, *left),
-                        Self::get(&registers, *right),
-                        span,
-                    )?;
+                    let value = match op {
+                        BinaryOperator::Eq => Value::Boolean(
+                            Self::get_ref(&registers, *left)
+                                == Self::get_ref(&registers, *right),
+                        ),
+                        BinaryOperator::Ne => Value::Boolean(
+                            Self::get_ref(&registers, *left)
+                                != Self::get_ref(&registers, *right),
+                        ),
+                        _ => self.binary(
+                            *op,
+                            Self::get(&registers, *left),
+                            Self::get(&registers, *right),
+                            span,
+                        )?,
+                    };
                     Self::set(&mut registers, *dst, value);
                 }
                 Instruction::ToBoolean { dst, source } => {
-                    let value = Value::Boolean(Self::get(&registers, *source).is_truthy());
+                    let value = Value::Boolean(Self::get_ref(&registers, *source).is_truthy());
                     Self::set(&mut registers, *dst, value);
                 }
                 Instruction::CallDirect { dst, name, args } => {
@@ -227,7 +258,7 @@ impl<'a> Vm<'a> {
                 )?,
                 Instruction::Jump(target) => ip = *target,
                 Instruction::JumpIfFalse { condition, target } => {
-                    if !Self::get(&registers, *condition).is_truthy() {
+                    if !Self::get_ref(&registers, *condition).is_truthy() {
                         ip = *target;
                     }
                 }
@@ -319,7 +350,7 @@ impl<'a> Vm<'a> {
                         .resolve_symbol(*error_type)
                         .unwrap_or_default();
                     let message = message
-                        .map(|message| Self::get(&registers, message).to_string())
+                        .map(|message| Self::get_ref(&registers, message).to_string())
                         .unwrap_or_else(|| class_name.clone());
                     return Err(RuntimeError::Raised(
                         ErrorData::new(span, message),

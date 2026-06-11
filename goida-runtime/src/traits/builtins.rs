@@ -13,8 +13,9 @@ impl Debug for BuiltinFn {
 }
 
 impl std::ops::Deref for BuiltinFn {
-    type Target =
-        dyn Fn(&Interpreter, Vec<CallArgValue>, Span) -> Result<Value, RuntimeError> + Send + Sync;
+    type Target = dyn Fn(&mut Interpreter, Vec<CallArgValue>, Span) -> Result<Value, RuntimeError>
+        + Send
+        + Sync;
     fn deref(&self) -> &Self::Target {
         &*self.0
     }

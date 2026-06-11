@@ -1,0 +1,15 @@
+function float_arithmetic(rounds, limit) {
+    checksum = 0.0
+    for (round = 0, round < rounds, round += 1) {
+        total = 0.0
+        for (i = 0, i < limit, i += 1) {
+            total += i * 1.5 + 0.25
+        }
+        if (total > checksum) {
+            checksum = total
+        }
+    }
+    return checksum
+}
+
+float_arithmetic(8, 50000)

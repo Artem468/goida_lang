@@ -43,6 +43,12 @@ pub enum Instruction {
         left: Register,
         right: Register,
     },
+    GuardedBinary {
+        dst: Register,
+        op: BinaryOperator,
+        left: Register,
+        right: Register,
+    },
     ToBoolean {
         dst: Register,
         source: Register,

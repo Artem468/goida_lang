@@ -216,6 +216,89 @@ result = first + second + third
 }
 
 #[test]
+fn compiler_emits_guarded_binary_operations_with_dynamic_fallback() {
+    let mut session = Session::new();
+    let module = Parser::new(
+        session.interner(),
+        "number_binary",
+        PathBuf::from("number_binary.goida"),
+    )
+    .parse(
+        r#"
+number = 40
+result = number + 2
+text = "a"
+combined = text + "b"
+same = combined == "ab"
+float_sum = 1.5 + 2.25
+mixed_product = 2 * 1.5
+mixed_less = 1 < 1.5
+formatted = "value=" + 2
+"#,
+    )
+    .expect("program should compile");
+
+    assert!(module
+        .bytecode
+        .module
+        .code
+        .iter()
+        .any(|instruction| matches!(instruction, Instruction::GuardedBinary { .. })));
+    assert!(module
+        .bytecode
+        .module
+        .code
+        .iter()
+        .any(|instruction| matches!(instruction, Instruction::Binary { .. })));
+
+    let module_id = module.name;
+    session.execute(module).expect("program should execute");
+    let result = session.runtime().intern_string("result");
+    let combined = session.runtime().intern_string("combined");
+    let same = session.runtime().intern_string("same");
+    let float_sum = session.runtime().intern_string("float_sum");
+    let mixed_product = session.runtime().intern_string("mixed_product");
+    let mixed_less = session.runtime().intern_string("mixed_less");
+    let formatted = session.runtime().intern_string("formatted");
+    assert_eq!(
+        session.runtime().modules[&module_id].globals.get(&result),
+        Some(&Value::Number(42))
+    );
+    assert_eq!(
+        session.runtime().modules[&module_id].globals.get(&combined),
+        Some(&Value::Text("ab".to_string()))
+    );
+    assert_eq!(
+        session.runtime().modules[&module_id].globals.get(&same),
+        Some(&Value::Boolean(true))
+    );
+    assert_eq!(
+        session.runtime().modules[&module_id]
+            .globals
+            .get(&float_sum),
+        Some(&Value::Float(3.75))
+    );
+    assert_eq!(
+        session.runtime().modules[&module_id]
+            .globals
+            .get(&mixed_product),
+        Some(&Value::Float(3.0))
+    );
+    assert_eq!(
+        session.runtime().modules[&module_id]
+            .globals
+            .get(&mixed_less),
+        Some(&Value::Boolean(true))
+    );
+    assert_eq!(
+        session.runtime().modules[&module_id]
+            .globals
+            .get(&formatted),
+        Some(&Value::Text("value=2".to_string()))
+    );
+}
+
+#[test]
 fn dense_slot_set_handles_sparse_word_boundaries() {
     let mut slots = DenseSlotSet::default();
     let boundary = DenseSlotSet::BITS_PER_WORD as u32;

@@ -1,0 +1,13 @@
+function text_concat(rounds, limit) {
+    left = "go"
+    right = "ida"
+    result = ""
+    for (round = 0, round < rounds, round += 1) {
+        for (i = 0, i < limit, i += 1) {
+            result = left + right
+        }
+    }
+    return result
+}
+
+text_concat(8, 50000)

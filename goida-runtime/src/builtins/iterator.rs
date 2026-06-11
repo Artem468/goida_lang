@@ -32,7 +32,7 @@ pub(crate) fn values_from_iterable(
 }
 
 fn call_callable(
-    interp: &Interpreter,
+    interp: &mut Interpreter,
     callable: Value,
     arguments: Vec<Value>,
     span: Span,
@@ -45,8 +45,7 @@ fn call_callable(
     match callable {
         Value::Function(function) => {
             let module_id = function.module.unwrap_or(function.span.file_id);
-            let mut local = interp.fork_for_thread();
-            local.call_function(function, args, module_id, span)
+            interp.call_function(function, args, module_id, span)
         }
         Value::Builtin(builtin) => builtin(interp, args, span),
         _ => bail_runtime!(TypeError, span, "Ожидалась функция"),
@@ -54,7 +53,7 @@ fn call_callable(
 }
 
 pub(crate) fn collect_iterator(
-    interp: &Interpreter,
+    interp: &mut Interpreter,
     iterator: &RuntimeIterator,
     span: Span,
 ) -> Result<Vec<Value>, RuntimeError> {

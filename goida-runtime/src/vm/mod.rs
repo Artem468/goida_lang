@@ -43,6 +43,11 @@ pub struct Vm<'a> {
     prefer_environment_globals: bool,
 }
 
+enum NumericPair {
+    Integers(i64, i64),
+    Floats(f64, f64),
+}
+
 impl<'a> Vm<'a> {
     pub fn new(interpreter: &'a mut Interpreter, module: Symbol) -> Self {
         Self {
@@ -85,11 +90,11 @@ impl<'a> Vm<'a> {
     }
 
     fn run_value(&mut self, chunk: &Chunk) -> Result<Value, RuntimeError> {
-        let registers = self.execute_chunk(chunk)?;
+        let mut registers = self.execute_chunk(chunk)?;
         Ok(chunk
             .result
-            .and_then(|result| registers.get(result as usize).cloned())
-            .unwrap_or(Value::Empty))
+            .and_then(|result| registers.get_mut(result as usize))
+            .map_or(Value::Empty, |value| std::mem::replace(value, Value::Empty)))
     }
 }
 
@@ -98,6 +103,10 @@ include!("implementation/execute.rs");
 impl<'a> Vm<'a> {
     fn get(registers: &[Value], register: Register) -> Value {
         registers[register as usize].clone()
+    }
+
+    fn get_ref(registers: &[Value], register: Register) -> &Value {
+        &registers[register as usize]
     }
 
     fn set(registers: &mut [Value], register: Register, value: Value) {
@@ -208,14 +217,95 @@ impl<'a> Vm<'a> {
             BinaryOperator::Mul => self.interpreter.multiply_values(left, right, span),
             BinaryOperator::Div => self.interpreter.divide_values(left, right, span),
             BinaryOperator::Mod => self.interpreter.modulo_values(left, right, span),
-            BinaryOperator::Eq => Ok(Value::Boolean(left == right)),
-            BinaryOperator::Ne => Ok(Value::Boolean(left != right)),
+            BinaryOperator::Eq | BinaryOperator::Ne => unreachable!(),
             BinaryOperator::Gt => self.interpreter.compare_greater(left, right, span),
             BinaryOperator::Lt => self.interpreter.compare_less(left, right, span),
             BinaryOperator::Ge => self.interpreter.compare_greater_equal(left, right, span),
             BinaryOperator::Le => self.interpreter.compare_less_equal(left, right, span),
             BinaryOperator::And | BinaryOperator::Or => unreachable!(),
         }
+    }
+
+    fn numeric_pair(left: &Value, right: &Value) -> Option<NumericPair> {
+        match (left, right) {
+            (Value::Number(left), Value::Number(right)) => {
+                Some(NumericPair::Integers(*left, *right))
+            }
+            (Value::Float(left), Value::Float(right)) => Some(NumericPair::Floats(*left, *right)),
+            (Value::Number(left), Value::Float(right)) => {
+                Some(NumericPair::Floats(*left as f64, *right))
+            }
+            (Value::Float(left), Value::Number(right)) => {
+                Some(NumericPair::Floats(*left, *right as f64))
+            }
+            _ => None,
+        }
+    }
+
+    fn fast_binary(
+        op: BinaryOperator,
+        left: &Value,
+        right: &Value,
+        span: Span,
+    ) -> Option<Result<Value, RuntimeError>> {
+        let Some(numeric) = Self::numeric_pair(left, right) else {
+            if let (BinaryOperator::Add, Value::Text(left), Value::Text(right)) = (op, left, right)
+            {
+                let mut result = String::with_capacity(left.len() + right.len());
+                result.push_str(left);
+                result.push_str(right);
+                return Some(Ok(Value::Text(result)));
+            }
+            return None;
+        };
+        Some(match numeric {
+            NumericPair::Integers(left, right) => match op {
+                BinaryOperator::Add => Ok(Value::Number(left + right)),
+                BinaryOperator::Sub => Ok(Value::Number(left - right)),
+                BinaryOperator::Mul => Ok(Value::Number(left * right)),
+                BinaryOperator::Div if right == 0 => {
+                    bail_runtime!(DivisionByZero, span, "Division by zero")
+                }
+                BinaryOperator::Div => Ok(Value::Number(left / right)),
+                BinaryOperator::Mod if right == 0 => {
+                    bail_runtime!(DivisionByZero, span, "Division by zero")
+                }
+                BinaryOperator::Mod => Ok(Value::Number(left % right)),
+                BinaryOperator::Gt => Ok(Value::Boolean(left > right)),
+                BinaryOperator::Lt => Ok(Value::Boolean(left < right)),
+                BinaryOperator::Ge => Ok(Value::Boolean(left >= right)),
+                BinaryOperator::Le => Ok(Value::Boolean(left <= right)),
+                BinaryOperator::Eq
+                | BinaryOperator::Ne
+                | BinaryOperator::And
+                | BinaryOperator::Or => {
+                    unreachable!()
+                }
+            },
+            NumericPair::Floats(left, right) => match op {
+                BinaryOperator::Add => Ok(Value::Float(left + right)),
+                BinaryOperator::Sub => Ok(Value::Float(left - right)),
+                BinaryOperator::Mul => Ok(Value::Float(left * right)),
+                BinaryOperator::Div if right == 0.0 => {
+                    bail_runtime!(DivisionByZero, span, "Division by zero")
+                }
+                BinaryOperator::Div => Ok(Value::Float(left / right)),
+                BinaryOperator::Mod if right == 0.0 => {
+                    bail_runtime!(DivisionByZero, span, "Division by zero")
+                }
+                BinaryOperator::Mod => Ok(Value::Float(left % right)),
+                BinaryOperator::Gt => Ok(Value::Boolean(left > right)),
+                BinaryOperator::Lt => Ok(Value::Boolean(left < right)),
+                BinaryOperator::Ge => Ok(Value::Boolean(left >= right)),
+                BinaryOperator::Le => Ok(Value::Boolean(left <= right)),
+                BinaryOperator::Eq
+                | BinaryOperator::Ne
+                | BinaryOperator::And
+                | BinaryOperator::Or => {
+                    unreachable!()
+                }
+            },
+        })
     }
 
     fn read_index(&self, object: Value, index: Value, span: Span) -> Result<Value, RuntimeError> {

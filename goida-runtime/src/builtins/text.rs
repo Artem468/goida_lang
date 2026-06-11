@@ -294,10 +294,11 @@ mod tests {
         let builtin = interpreter
             .builtins
             .get(&symbol)
-            .expect("installed builtin");
+            .expect("installed builtin")
+            .clone();
 
         let result = (builtin.0)(
-            &interpreter,
+            &mut interpreter,
             vec![
                 CallArgValue {
                     name: None,

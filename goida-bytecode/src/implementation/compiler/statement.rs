@@ -34,15 +34,8 @@ impl<'a> ChunkCompiler<'a> {
                 let left = self.read_target(&target, span);
                 let right = self.expression(*value);
                 let result = self.register();
-                self.chunk.emit(
-                    Instruction::Binary {
-                        dst: result,
-                        op: *op,
-                        left,
-                        right,
-                    },
-                    span,
-                );
+                let instruction = Self::binary_instruction(result, *op, left, right);
+                self.chunk.emit(instruction, span);
                 self.release(left);
                 self.release(right);
                 self.store_target(target, result, span);
