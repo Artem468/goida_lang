@@ -67,6 +67,10 @@ enum Commands {
         #[arg(help = "Имя зависимости")]
         name: String,
     },
+    #[command(about = "Install all dependencies from goida.toml and update goida.lock")]
+    Sync,
+    #[command(about = "Synchronize dependencies and build the current package")]
+    Build,
     #[command(about = "Создать виртуальное окружение Гойда")]
     Venv {
         #[arg(default_value = ".goida", help = "Путь к каталогу окружения")]
@@ -136,6 +140,8 @@ fn main() {
             tag.clone(),
         )),
         Some(Commands::Remove { name }) => exit_on_package_error(package::remove_dependency(name)),
+        Some(Commands::Sync) => exit_on_package_error(package::sync_dependencies()),
+        Some(Commands::Build) => exit_on_package_error(package::build_project()),
         Some(Commands::Venv { path }) => exit_on_package_error(package::create_venv(path)),
         Some(Commands::Repl) => run_repl(&mut session),
         Some(Commands::Fmt {

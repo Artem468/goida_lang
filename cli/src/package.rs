@@ -1,8 +1,8 @@
 use serde::{Deserialize, Serialize};
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, BTreeSet},
     fs,
-    path::{Path, PathBuf},
+    path::{Component, Path, PathBuf},
     process::Command,
 };
 
@@ -18,13 +18,36 @@ struct Manifest {
     package: PackageInfo,
     #[serde(default)]
     dependencies: BTreeMap<String, Dependency>,
+    #[serde(default)]
+    build: BuildConfig,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 struct PackageInfo {
     name: String,
+    #[serde(default)]
     description: String,
     version: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    entry: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Default)]
+struct BuildConfig {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    command: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    workdir: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    artifacts: Vec<BuildArtifact>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct BuildArtifact {
+    source: String,
+    destination: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    platforms: Vec<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -41,10 +64,25 @@ struct Dependency {
     tag: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Default)]
+#[derive(Debug, Serialize, Deserialize)]
 struct LockFile {
+    #[serde(default = "lock_version")]
+    version: u32,
     #[serde(default)]
     package: Vec<LockedPackage>,
+}
+
+impl Default for LockFile {
+    fn default() -> Self {
+        Self {
+            version: lock_version(),
+            package: Vec::new(),
+        }
+    }
+}
+
+const fn lock_version() -> u32 {
+    1
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -53,6 +91,8 @@ struct LockedPackage {
     source: String,
     revision: String,
     path: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    artifacts: Vec<String>,
 }
 
 struct ResolvedDependency {
@@ -76,8 +116,10 @@ pub(crate) fn new_project(name: &str, description: &str, version: &str) -> Resul
             name: name.to_string(),
             description: description.to_string(),
             version: version.to_string(),
+            entry: Some("РіР»Р°РІРЅС‹Р№.goida".to_string()),
         },
         dependencies: BTreeMap::new(),
+        build: BuildConfig::default(),
     };
     write_manifest(&root, &manifest)?;
     write_lock(&root, &LockFile::default())?;
@@ -112,6 +154,9 @@ pub(crate) fn add_dependency(
     }
 
     let root = std::env::current_dir().map_err(|err| format!("Не удалось получить cwd: {err}"))?;
+    let manifest_path = root.join(MANIFEST_FILE);
+    let previous_manifest = fs::read_to_string(&manifest_path)
+        .map_err(|err| format!("Failed to read '{}': {err}", manifest_path.display()))?;
     let mut manifest = read_manifest(&root)?;
     let dependency = Dependency {
         git,
@@ -120,24 +165,160 @@ pub(crate) fn add_dependency(
         branch,
         tag,
     };
-    let resolved = resolve_dependency(&root, name, &dependency)?;
-
     manifest.dependencies.insert(name.to_string(), dependency);
     write_manifest(&root, &manifest)?;
-
-    let mut lock = read_lock(&root)?;
-    lock.package.retain(|package| package.name != name);
-    lock.package.push(LockedPackage {
-        name: name.to_string(),
-        source: resolved.source,
-        revision: resolved.revision,
-        path: resolved.path,
-    });
-    lock.package
-        .sort_by(|left, right| left.name.cmp(&right.name));
-    write_lock(&root, &lock)?;
+    if let Err(error) = sync_dependencies() {
+        fs::write(&manifest_path, previous_manifest).map_err(|restore_error| {
+            format!(
+                "{error}; additionally failed to restore '{}': {restore_error}",
+                manifest_path.display()
+            )
+        })?;
+        return Err(error);
+    }
 
     println!("Добавлена зависимость '{name}'");
+    Ok(())
+}
+
+pub(crate) fn sync_dependencies() -> Result<(), String> {
+    let root = current_project_root()?;
+    let manifest = read_manifest(&root)?;
+    let previous_lock = read_lock(&root)?;
+    let mut lock = LockFile::default();
+    let mut sources = BTreeMap::new();
+    let mut resolving = BTreeSet::new();
+    sync_manifest_dependencies(
+        &root,
+        &root,
+        &manifest,
+        &mut lock,
+        &mut sources,
+        &mut resolving,
+    )?;
+    lock.package
+        .sort_by(|left, right| left.name.cmp(&right.name));
+    remove_stale_dependencies(&root, &previous_lock, &lock)?;
+    write_lock(&root, &lock)?;
+    println!("Dependencies synchronized");
+    Ok(())
+}
+
+fn remove_stale_dependencies(
+    project_root: &Path,
+    previous: &LockFile,
+    current: &LockFile,
+) -> Result<(), String> {
+    let current_names = current
+        .package
+        .iter()
+        .map(|package| package.name.as_str())
+        .collect::<BTreeSet<_>>();
+    for package in &previous.package {
+        if current_names.contains(package.name.as_str()) {
+            continue;
+        }
+        let Some(path) = resolve_locked_dep_path(project_root, &package.path) else {
+            continue;
+        };
+        if path.exists() {
+            let install_root = dependency_install_root(project_root)?;
+            ensure_inside(&install_root, &path)?;
+            fs::remove_dir_all(&path).map_err(|err| {
+                format!(
+                    "Failed to remove stale dependency '{}': {err}",
+                    path.display()
+                )
+            })?;
+        }
+    }
+    Ok(())
+}
+
+fn sync_manifest_dependencies(
+    project_root: &Path,
+    manifest_root: &Path,
+    manifest: &Manifest,
+    lock: &mut LockFile,
+    sources: &mut BTreeMap<String, String>,
+    resolving: &mut BTreeSet<String>,
+) -> Result<(), String> {
+    for (name, dependency) in &manifest.dependencies {
+        let identity = dependency_identity(manifest_root, dependency)?;
+        if let Some(existing) = sources.get(name) {
+            if existing != &identity {
+                return Err(format!(
+                    "Dependency name conflict for '{name}': '{existing}' and '{identity}'"
+                ));
+            }
+            continue;
+        }
+        if !resolving.insert(name.clone()) {
+            return Err(format!("Cyclic package dependency detected at '{name}'"));
+        }
+
+        let resolved = resolve_dependency(project_root, manifest_root, name, dependency)?;
+        let installed_root = resolve_locked_dep_path(project_root, &resolved.path)
+            .ok_or_else(|| format!("Failed to resolve installed dependency path for '{name}'"))?;
+        sources.insert(name.clone(), identity);
+        if installed_root.join(MANIFEST_FILE).is_file() {
+            let dependency_manifest = read_manifest(&installed_root)?;
+            sync_manifest_dependencies(
+                project_root,
+                &installed_root,
+                &dependency_manifest,
+                lock,
+                sources,
+                resolving,
+            )?;
+        }
+        let artifacts = build_installed_dependency(&installed_root)?;
+        lock.package.push(LockedPackage {
+            name: name.clone(),
+            source: resolved.source,
+            revision: resolved.revision,
+            path: resolved.path,
+            artifacts,
+        });
+        resolving.remove(name);
+    }
+    Ok(())
+}
+
+fn dependency_identity(root: &Path, dependency: &Dependency) -> Result<String, String> {
+    if let Some(git) = &dependency.git {
+        return Ok(format!(
+            "git+{}#{}",
+            git,
+            dependency
+                .rev
+                .as_deref()
+                .or(dependency.branch.as_deref())
+                .or(dependency.tag.as_deref())
+                .unwrap_or("HEAD")
+        ));
+    }
+    let path = dependency
+        .path
+        .as_deref()
+        .ok_or_else(|| "Dependency source is missing".to_string())?;
+    Ok(format!(
+        "path+{}",
+        resolve_local_source_path(root, path)?.display()
+    ))
+}
+
+pub(crate) fn build_project() -> Result<(), String> {
+    sync_dependencies()?;
+    let root = current_project_root()?;
+    let manifest = read_manifest(&root)?;
+    let artifacts = build_package(&root, &manifest)?;
+    println!(
+        "Built package '{}' for {} ({} artifacts)",
+        manifest.package.name,
+        current_platform(),
+        artifacts.len()
+    );
     Ok(())
 }
 
@@ -413,7 +594,16 @@ fn read_lock(root: &Path) -> Result<LockFile, String> {
     }
     let content = fs::read_to_string(&path)
         .map_err(|err| format!("Не удалось прочитать '{}': {err}", path.display()))?;
-    toml::from_str(&content).map_err(|err| format!("Некорректный {LOCK_FILE}: {err}"))
+    let lock: LockFile =
+        toml::from_str(&content).map_err(|err| format!("Некорректный {LOCK_FILE}: {err}"))?;
+    if lock.version != lock_version() {
+        return Err(format!(
+            "Unsupported {LOCK_FILE} version {}; expected {}",
+            lock.version,
+            lock_version()
+        ));
+    }
+    Ok(lock)
 }
 
 fn write_lock(root: &Path, lock: &LockFile) -> Result<(), String> {
@@ -424,30 +614,232 @@ fn write_lock(root: &Path, lock: &LockFile) -> Result<(), String> {
 }
 
 fn resolve_dependency(
-    root: &Path,
+    project_root: &Path,
+    source_root: &Path,
     name: &str,
     dependency: &Dependency,
 ) -> Result<ResolvedDependency, String> {
     if let Some(git) = &dependency.git {
         let revision = resolve_git_revision(git, dependency)?;
-        let dep_path = checkout_git_dependency(root, name, git, &revision)?;
+        let dep_path = checkout_git_dependency(project_root, name, git, &revision)?;
         return Ok(ResolvedDependency {
             source: format!("git+{git}"),
             revision,
-            path: lock_dep_path(root, &dep_path),
+            path: lock_dep_path(project_root, &dep_path),
         });
     }
 
     let Some(path) = &dependency.path else {
         return Err("У зависимости не указан источник".into());
     };
-    let source_path = resolve_local_source_path(root, path)?;
-    let dep_path = copy_local_dependency(root, name, &source_path)?;
+    let source_path = resolve_local_source_path(source_root, path)?;
+    let dep_path = copy_local_dependency(project_root, name, &source_path)?;
     Ok(ResolvedDependency {
         source: format!("path+{}", source_path.display()),
         revision: "local".into(),
-        path: lock_dep_path(root, &dep_path),
+        path: lock_dep_path(project_root, &dep_path),
     })
+}
+
+fn build_installed_dependency(root: &Path) -> Result<Vec<String>, String> {
+    let manifest_path = root.join(MANIFEST_FILE);
+    if !manifest_path.is_file() {
+        return Ok(Vec::new());
+    }
+    let manifest = read_manifest(root)?;
+    build_package(root, &manifest)
+}
+
+fn build_package(root: &Path, manifest: &Manifest) -> Result<Vec<String>, String> {
+    validate_build_config(&manifest.build)?;
+    let selected = manifest
+        .build
+        .artifacts
+        .iter()
+        .filter(|artifact| artifact_matches_platform(artifact))
+        .collect::<Vec<_>>();
+
+    if !manifest.build.command.is_empty() {
+        run_build_command(root, &manifest.build)?;
+    }
+
+    let mut installed = Vec::with_capacity(selected.len());
+    for artifact in selected {
+        let source = resolve_package_path(root, &artifact.source, true)?;
+        if !source.is_file() {
+            let mode = if manifest.build.command.is_empty() {
+                "prebuilt package"
+            } else {
+                "build command"
+            };
+            return Err(format!(
+                "{mode} '{}' did not provide required artifact '{}' for {}",
+                manifest.package.name,
+                artifact.source,
+                current_platform()
+            ));
+        }
+
+        let destination = resolve_package_path(root, &artifact.destination, false)?;
+        if source != destination {
+            prepare_artifact_destination(root, &destination)?;
+            fs::copy(&source, &destination).map_err(|err| {
+                format!(
+                    "Failed to install native artifact '{}' to '{}': {err}",
+                    source.display(),
+                    destination.display()
+                )
+            })?;
+        }
+        installed.push(
+            destination
+                .strip_prefix(root)
+                .expect("validated package path")
+                .to_string_lossy()
+                .replace('\\', "/"),
+        );
+    }
+    Ok(installed)
+}
+
+fn prepare_artifact_destination(root: &Path, destination: &Path) -> Result<(), String> {
+    let parent = destination
+        .parent()
+        .ok_or_else(|| format!("Invalid artifact destination '{}'", destination.display()))?;
+    fs::create_dir_all(parent).map_err(|err| {
+        format!(
+            "Failed to create artifact directory '{}': {err}",
+            parent.display()
+        )
+    })?;
+
+    let canonical_root = root
+        .canonicalize()
+        .map_err(|err| format!("Failed to resolve package root '{}': {err}", root.display()))?;
+    let canonical_parent = parent.canonicalize().map_err(|err| {
+        format!(
+            "Failed to resolve artifact directory '{}': {err}",
+            parent.display()
+        )
+    })?;
+    if !canonical_parent.starts_with(canonical_root) {
+        return Err(format!(
+            "Artifact destination '{}' escapes the package",
+            destination.display()
+        ));
+    }
+    if fs::symlink_metadata(destination).is_ok_and(|metadata| metadata.file_type().is_symlink()) {
+        return Err(format!(
+            "Artifact destination '{}' must not be a symbolic link",
+            destination.display()
+        ));
+    }
+    Ok(())
+}
+
+fn validate_build_config(build: &BuildConfig) -> Result<(), String> {
+    if build
+        .command
+        .first()
+        .is_some_and(|program| program.is_empty())
+    {
+        return Err("build.command program must not be empty".into());
+    }
+    for artifact in &build.artifacts {
+        if artifact.source.is_empty() || artifact.destination.is_empty() {
+            return Err("build artifact source and destination must not be empty".into());
+        }
+    }
+    Ok(())
+}
+
+fn run_build_command(root: &Path, build: &BuildConfig) -> Result<(), String> {
+    let workdir = match &build.workdir {
+        Some(path) => resolve_package_path(root, path, true)?,
+        None => root.to_path_buf(),
+    };
+    if !workdir.is_dir() {
+        return Err(format!(
+            "Build workdir '{}' is not a directory",
+            workdir.display()
+        ));
+    }
+
+    let (program, args) = build
+        .command
+        .split_first()
+        .ok_or_else(|| "build.command must contain a program".to_string())?;
+    let status = Command::new(program)
+        .args(args)
+        .current_dir(&workdir)
+        .env("GOIDA_PACKAGE_ROOT", root)
+        .env("GOIDA_TARGET_PLATFORM", current_platform())
+        .status()
+        .map_err(|err| format!("Failed to start build command '{}': {err}", program))?;
+    if status.success() {
+        Ok(())
+    } else {
+        Err(format!(
+            "Build command for '{}' failed with status {status}",
+            root.display()
+        ))
+    }
+}
+
+fn artifact_matches_platform(artifact: &BuildArtifact) -> bool {
+    artifact.platforms.is_empty()
+        || artifact.platforms.iter().any(|platform| {
+            platform == "*" || platform == std::env::consts::OS || platform == &current_platform()
+        })
+}
+
+fn current_platform() -> String {
+    format!("{}-{}", std::env::consts::OS, std::env::consts::ARCH)
+}
+
+fn resolve_package_path(root: &Path, path: &str, must_exist: bool) -> Result<PathBuf, String> {
+    let relative = Path::new(path);
+    if relative.is_absolute()
+        || relative
+            .components()
+            .any(|component| matches!(component, Component::ParentDir | Component::Prefix(_)))
+    {
+        return Err(format!(
+            "Package path '{}' must stay inside the package",
+            path
+        ));
+    }
+
+    let joined = root.join(relative);
+    if must_exist {
+        let canonical = joined.canonicalize().map_err(|err| {
+            format!(
+                "Failed to resolve package path '{}': {err}",
+                joined.display()
+            )
+        })?;
+        let canonical_root = root
+            .canonicalize()
+            .map_err(|err| format!("Failed to resolve package root '{}': {err}", root.display()))?;
+        if !canonical.starts_with(&canonical_root) {
+            return Err(format!("Package path '{}' escapes the package", path));
+        }
+        Ok(canonical)
+    } else {
+        Ok(joined)
+    }
+}
+
+fn current_project_root() -> Result<PathBuf, String> {
+    let root = std::env::current_dir().map_err(|err| format!("Failed to get cwd: {err}"))?;
+    if root.join(MANIFEST_FILE).is_file() {
+        Ok(root)
+    } else {
+        Err(format!(
+            "Current directory does not contain {MANIFEST_FILE}: '{}'",
+            root.display()
+        ))
+    }
 }
 
 fn resolve_git_revision(git: &str, dependency: &Dependency) -> Result<String, String> {

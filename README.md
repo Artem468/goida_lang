@@ -7,6 +7,9 @@
 
 Мультиязычный язык программирования с C-подобными блоками, функциями, классами, модулями, исключениями, потоками и интеграцией с native-библиотеками.
 
+Стандарт пакетов, сборки и распространения DLL/SO описан в
+[`docs/packages.md`](docs/packages.md).
+
 ## Сборка и запуск
 
 [![Linux CI](https://github.com/Artem468/goida_lang/actions/workflows/linux_build.yml/badge.svg)](https://github.com/Artem468/goida_lang/actions/workflows/linux_build.yml)
