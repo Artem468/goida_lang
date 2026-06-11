@@ -9,6 +9,7 @@ use crate::shared::SharedMut;
 use crate::traits::prelude::CoreOperations;
 use crate::vm::Vm;
 use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
 use string_interner::DefaultSymbol as Symbol;
 
 impl CoreOperations for Interpreter {
@@ -22,6 +23,7 @@ impl CoreOperations for Interpreter {
             environment: SharedMut::new(Environment::new()),
             background_threads: Vec::new(),
             method_depth: 0,
+            heap: Arc::new(crate::interpreter::heap::ObjectHeap::default()),
             source_manager: SourceManager::new(),
         }
     }
@@ -191,7 +193,7 @@ impl Interpreter {
             }
         }
 
-        self.scoped_environment(Environment::new(), |interpreter| {
+        let result = self.scoped_environment(Environment::new(), |interpreter| {
             if let Some(mod_entry) = interpreter.modules.get(&module.name) {
                 for (name, value) in mod_entry.globals.clone() {
                     interpreter.environment.write(|env| env.define(name, value));
@@ -262,7 +264,9 @@ impl Interpreter {
             interpreter.join_background_threads(module.name, Span::default())?;
 
             Ok(())
-        })
+        });
+        self.heap.collect_cycles();
+        result
     }
 
     pub(crate) fn resolve_module_member_value(
@@ -320,7 +324,44 @@ impl Interpreter {
             environment: self.environment.clone(),
             background_threads: Vec::new(),
             method_depth: self.method_depth,
+            heap: self.heap.clone(),
             source_manager: SourceManager::new(),
         }
+    }
+
+    pub fn manage_value(&self, value: Value) -> Value {
+        self.adopt_value(&value);
+        value
+    }
+
+    pub fn adopt_value(&self, value: &Value) {
+        self.heap.adopt(value);
+        if Arc::strong_count(&self.heap) == 1 {
+            self.heap.collect_if_needed();
+        }
+    }
+
+    pub fn manage_result(
+        &self,
+        result: Result<Value, RuntimeError>,
+    ) -> Result<Value, RuntimeError> {
+        result.map(|value| self.manage_value(value))
+    }
+
+    pub fn collect_cycles(&self) -> crate::interpreter::heap::CollectionStats {
+        self.heap.collect_cycles()
+    }
+
+    pub fn object_id(&self, value: &Value) -> Option<crate::interpreter::heap::ObjectId> {
+        self.heap.object_id(value)
+    }
+}
+
+impl Drop for Interpreter {
+    fn drop(&mut self) {
+        self.modules.clear();
+        self.std_classes.clear();
+        self.environment = SharedMut::new(Environment::new());
+        self.heap.collect_cycles();
     }
 }

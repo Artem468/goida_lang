@@ -76,6 +76,7 @@ impl Interpreter {
     ) -> Result<Value, RuntimeError> {
         let class = self.set_class_module(class, definition_module);
         let instance = SharedMut::new(RuntimeClassDefinition::create_instance(class.clone()));
+        self.adopt_value(&Value::Object(instance.clone()));
         if let Some(constructor) = class.read(|class| class.constructor.clone()) {
             let module = constructor.get_module().unwrap_or(definition_module);
             self.call_method(

@@ -1,0 +1,13 @@
+function leaf(a, b, c) {
+    return (a + b) * c
+}
+
+function calls(limit) {
+    total = 0
+    for (i = 0, i < limit, i += 1) {
+        total += leaf(i, 2, 3)
+    }
+    return total
+}
+
+calls(20000)

@@ -7,6 +7,9 @@
 
 Мультиязычный язык программирования с C-подобными блоками, функциями, классами, модулями, исключениями, потоками и интеграцией с native-библиотеками.
 
+Стандарт пакетов, сборки и распространения DLL/SO описан в
+[`docs/packages.md`](docs/packages.md).
+
 ## Сборка и запуск
 
 [![Linux CI](https://github.com/Artem468/goida_lang/actions/workflows/linux_build.yml/badge.svg)](https://github.com/Artem468/goida_lang/actions/workflows/linux_build.yml)
@@ -24,6 +27,20 @@ cargo test
 
 `goida-cli` is the Cargo package name. The produced executable remains `goida`
 (`goida.exe` on Windows).
+
+## Benchmarks
+
+The benchmark suite measures parser/compiler time and runtime performance for
+arithmetic, calls, collections, objects, allocations, cyclic GC and iterators.
+Run it in release mode and compare results against a saved baseline:
+
+```bash
+cargo run --release -p xtask -- benchmark-suite --iterations 15 --save benchmarks/baseline.tsv
+cargo run --release -p xtask -- benchmark-suite --iterations 15 --compare benchmarks/baseline.tsv
+```
+
+Detailed usage and measurement guidance are in
+[`benchmarks/README.md`](benchmarks/README.md).
 
 ## Базовый синтаксис
 

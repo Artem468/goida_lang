@@ -1,4 +1,5 @@
 use crate::builtins::registry::BUILTINS;
+use crate::interpreter::heap::CollectionStats;
 use crate::interpreter::prelude::{Interpreter, Module, RuntimeError, SharedInterner};
 use crate::traits::prelude::CoreOperations;
 
@@ -35,6 +36,11 @@ impl Session {
     /// Read-only access for diagnostics and embedding integrations.
     pub fn runtime(&self) -> &Interpreter {
         &self.runtime
+    }
+
+    /// Runs cycle collection and returns heap statistics.
+    pub fn collect_cycles(&self) -> CollectionStats {
+        self.runtime.collect_cycles()
     }
 }
 

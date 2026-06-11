@@ -243,6 +243,196 @@ fn package_manager_creates_venv_and_installs_active_dependencies_there() {
     assert_eq!("41\n", String::from_utf8_lossy(&run_output.stdout));
 }
 
+#[test]
+fn package_manager_installs_declared_prebuilt_native_artifacts() {
+    let workspace = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let temp = fresh_test_dir(&workspace, "package_manager_prebuilt_native_test");
+    let dependency = temp.join("native_dep");
+    let library_name = native_library_name("beacon");
+    fs::create_dir_all(dependency.join("prebuilt")).expect("failed to create prebuilt directory");
+    fs::write(dependency.join("mod.goida"), "value = 1\n").expect("failed to write module");
+    fs::write(dependency.join("prebuilt").join(&library_name), "native")
+        .expect("failed to write prebuilt library");
+    write_package_manifest(
+        &dependency,
+        &format!(
+            r#"[package]
+name = "native-dep"
+description = ""
+version = "0.1.0"
+
+[[build.artifacts]]
+source = "prebuilt/{library_name}"
+destination = "native/{library_name}"
+platforms = ["{}"]
+"#,
+            std::env::consts::OS
+        ),
+    );
+
+    let project = create_project_with_venv(&workspace, &temp);
+    let output = run_goida(
+        &workspace,
+        &project,
+        &["add", "native_dep", "--path", dependency.to_str().unwrap()],
+    );
+    assert_success(&output, "goida add prebuilt native dependency");
+    assert!(project
+        .join(".goida/deps/native_dep/native")
+        .join(&library_name)
+        .is_file());
+    let lock = fs::read_to_string(project.join("goida.lock")).expect("missing lock");
+    assert!(lock.contains(&format!("native/{library_name}")));
+}
+
+#[test]
+fn package_manager_builds_native_dependency_and_syncs_transitive_dependencies() {
+    let workspace = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let temp = fresh_test_dir(&workspace, "package_manager_native_build_test");
+    let dependency = temp.join("native_dep");
+    let transitive = dependency.join("vendor/helper");
+    let library_name = native_library_name("generated");
+
+    fs::create_dir_all(transitive.join("src")).expect("failed to create transitive dependency");
+    fs::write(transitive.join("mod.goida"), "value = 7\n").expect("failed to write helper module");
+    write_package_manifest(
+        &transitive,
+        "[package]\nname = \"helper\"\ndescription = \"\"\nversion = \"0.1.0\"\n",
+    );
+
+    fs::create_dir_all(dependency.join("src")).expect("failed to create native dependency");
+    fs::write(dependency.join("src/lib.rs"), "").expect("failed to write Rust library");
+    fs::write(
+        dependency.join("build.rs"),
+        format!(
+            r#"fn main() {{
+    let root = std::path::PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
+    std::fs::create_dir_all(root.join("generated")).unwrap();
+    std::fs::write(root.join("generated/{library_name}"), b"native").unwrap();
+}}
+"#
+        ),
+    )
+    .expect("failed to write build script");
+    fs::write(
+        dependency.join("Cargo.toml"),
+        "[package]\nname = \"goida_native_build_test\"\nversion = \"0.1.0\"\nedition = \"2021\"\nbuild = \"build.rs\"\n\n[workspace]\n",
+    )
+    .expect("failed to write Cargo manifest");
+    write_package_manifest(
+        &dependency,
+        &format!(
+            r#"[package]
+name = "native-dep"
+description = ""
+version = "0.1.0"
+
+[dependencies.helper]
+path = "vendor/helper"
+
+[build]
+command = ["cargo", "build", "--quiet"]
+
+[[build.artifacts]]
+source = "generated/{library_name}"
+destination = "native/{library_name}"
+"#
+        ),
+    );
+
+    let project = create_project_with_venv(&workspace, &temp);
+    fs::write(
+        project.join("goida.toml"),
+        format!(
+            r#"[package]
+name = "demo"
+description = ""
+version = "0.1.0"
+
+[dependencies.native_dep]
+path = "{}"
+"#,
+            dependency.to_string_lossy().replace('\\', "/")
+        ),
+    )
+    .expect("failed to update project manifest");
+
+    let sync = run_goida(&workspace, &project, &["sync"]);
+    assert_success(&sync, "goida sync");
+    assert!(project
+        .join(".goida/deps/native_dep/native")
+        .join(&library_name)
+        .is_file());
+    assert!(project.join(".goida/deps/helper/mod.goida").is_file());
+
+    fs::remove_dir_all(project.join(".goida/deps/native_dep"))
+        .expect("failed to remove installed dependency");
+    let build = run_goida(&workspace, &project, &["build"]);
+    assert_success(&build, "goida build");
+    assert!(project
+        .join(".goida/deps/native_dep/native")
+        .join(&library_name)
+        .is_file());
+}
+
+#[test]
+fn package_manager_rejects_missing_prebuilt_native_artifact() {
+    let workspace = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let temp = fresh_test_dir(&workspace, "package_manager_missing_native_test");
+    let dependency = temp.join("native_dep");
+    fs::create_dir_all(&dependency).expect("failed to create dependency");
+    write_package_manifest(
+        &dependency,
+        r#"[package]
+name = "native-dep"
+description = ""
+version = "0.1.0"
+
+[[build.artifacts]]
+source = "prebuilt/missing.dll"
+destination = "native/missing.dll"
+"#,
+    );
+
+    let project = create_project_with_venv(&workspace, &temp);
+    let output = run_goida(
+        &workspace,
+        &project,
+        &["add", "native_dep", "--path", dependency.to_str().unwrap()],
+    );
+    assert_failure(&output, "goida add missing native dependency");
+}
+
+fn fresh_test_dir(workspace: &Path, name: &str) -> PathBuf {
+    let temp = workspace.join("target").join(name);
+    if temp.exists() {
+        fs::remove_dir_all(&temp).expect("failed to clear test directory");
+    }
+    fs::create_dir_all(&temp).expect("failed to create test directory");
+    temp
+}
+
+fn create_project_with_venv(workspace: &Path, temp: &Path) -> PathBuf {
+    let output = run_goida(workspace, temp, &["new", "demo"]);
+    assert_success(&output, "goida new");
+    let project = temp.join("demo");
+    let output = run_goida(workspace, &project, &["venv"]);
+    assert_success(&output, "goida venv");
+    project
+}
+
+fn write_package_manifest(root: &Path, content: &str) {
+    fs::write(root.join("goida.toml"), content).expect("failed to write goida manifest");
+}
+
+fn native_library_name(stem: &str) -> String {
+    match std::env::consts::OS {
+        "windows" => format!("{stem}.dll"),
+        "macos" => format!("lib{stem}.dylib"),
+        _ => format!("lib{stem}.so"),
+    }
+}
+
 fn create_git_dependency(path: &Path) {
     fs::create_dir_all(path).expect("failed to create git dependency directory");
     run_git(path, &["init"]);

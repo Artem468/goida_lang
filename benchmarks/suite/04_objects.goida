@@ -1,0 +1,21 @@
+class Counter {
+    public value: number = 0
+
+    public function add(this, amount) {
+        this.value += amount
+    }
+
+    public function get(this) {
+        return this.value
+    }
+}
+
+function objects(limit) {
+    counter = new Counter()
+    for (i = 0, i < limit, i += 1) {
+        counter.add(i)
+    }
+    return counter.get()
+}
+
+objects(15000)

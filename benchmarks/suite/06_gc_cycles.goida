@@ -1,0 +1,15 @@
+function cyclic_allocations(rounds, width) {
+    checksum = 0
+    for (round = 0, round < rounds, round += 1) {
+        for (i = 0, i < width, i += 1) {
+            left = list()
+            right = dict()
+            left.push(right)
+            right.set("left", left)
+        }
+        checksum += round
+    }
+    return checksum
+}
+
+cyclic_allocations(40, 250)

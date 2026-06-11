@@ -12,6 +12,7 @@ impl Interpreter {
         module: Symbol,
         span: Span,
     ) -> Result<(), RuntimeError> {
+        self.adopt_value(&value);
         if self.try_assign_native_identifier(name, value.clone(), module, span)? {
             return Ok(());
         }
@@ -66,6 +67,7 @@ impl Interpreter {
         module: Symbol,
         span: Span,
     ) -> Result<(), RuntimeError> {
+        self.adopt_value(&value);
         if self
             .environment
             .read(|environment| environment.contains(name))

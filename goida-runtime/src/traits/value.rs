@@ -4,9 +4,17 @@ use crate::interpreter::structs::Value;
 use crate::shared::SharedMut;
 use crate::traits::runtime::CoreOperations;
 use crate::{bail_runtime, runtime_error};
+use std::collections::HashSet;
 use std::fmt;
 use std::sync::Arc;
 use string_interner::Symbol;
+
+#[derive(Clone, Copy, Eq, Hash, PartialEq)]
+enum FormatNode {
+    List(usize),
+    Array(usize),
+    Dict(usize),
+}
 
 pub trait ValueOperations {
     fn add_values(&self, left: Value, right: Value, span: Span) -> Result<Value, RuntimeError>;
@@ -135,6 +143,10 @@ impl Value {
 impl Interpreter {
     /// Formats a runtime value using names from this interpreter's interner.
     pub fn format_value(&self, value: &Value) -> String {
+        self.format_value_inner(value, &mut HashSet::new())
+    }
+
+    fn format_value_inner(&self, value: &Value, path: &mut HashSet<FormatNode>) -> String {
         match value {
             Value::Object(obj) => {
                 let name = self
@@ -160,36 +172,53 @@ impl Interpreter {
                     .unwrap_or_else(|| "неизвестно".into());
                 format!("<Модуль {}>", name)
             }
-            Value::List(list) => list.read(|items| {
-                format!(
-                    "[{}]",
-                    items
-                        .iter()
-                        .map(|item| self.format_value(item))
-                        .collect::<Vec<_>>()
-                        .join(", ")
-                )
-            }),
-            Value::Array(items) => format!(
-                "[{}]",
-                items
-                    .iter()
-                    .map(|item| self.format_value(item))
-                    .collect::<Vec<_>>()
-                    .join(", ")
+            Value::List(list) => {
+                self.format_container(FormatNode::List(list.identity()), value, path, |path| {
+                    list.read(|items| {
+                        format!(
+                            "[{}]",
+                            items
+                                .iter()
+                                .map(|item| self.format_value_inner(item, path))
+                                .collect::<Vec<_>>()
+                                .join(", ")
+                        )
+                    })
+                })
+            }
+            Value::Array(items) => self.format_container(
+                FormatNode::Array(Arc::as_ptr(items) as usize),
+                value,
+                path,
+                |path| {
+                    format!(
+                        "[{}]",
+                        items
+                            .iter()
+                            .map(|item| self.format_value_inner(item, path))
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    )
+                },
             ),
-            Value::Dict(dict) => dict.read(|items| {
-                let mut pairs = items.iter().collect::<Vec<_>>();
-                pairs.sort_by_key(|(key, _)| *key);
-                format!(
-                    "{{{}}}",
-                    pairs
-                        .into_iter()
-                        .map(|(key, value)| format!("\"{}\": {}", key, self.format_value(value)))
-                        .collect::<Vec<_>>()
-                        .join(", ")
-                )
-            }),
+            Value::Dict(dict) => {
+                self.format_container(FormatNode::Dict(dict.identity()), value, path, |path| {
+                    dict.read(|items| {
+                        let mut pairs = items.iter().collect::<Vec<_>>();
+                        pairs.sort_by_key(|(key, _)| *key);
+                        format!(
+                            "{{{}}}",
+                            pairs
+                                .into_iter()
+                                .map(|(key, value)| {
+                                    format!("\"{}\": {}", key, self.format_value_inner(value, path))
+                                })
+                                .collect::<Vec<_>>()
+                                .join(", ")
+                        )
+                    })
+                })
+            }
             Value::NativeGlobal(binding) => {
                 let name = self
                     .resolve_symbol(binding.symbol_name)
@@ -199,10 +228,33 @@ impl Interpreter {
             _ => value.to_string(),
         }
     }
+
+    fn format_container(
+        &self,
+        node: FormatNode,
+        value: &Value,
+        path: &mut HashSet<FormatNode>,
+        format: impl FnOnce(&mut HashSet<FormatNode>) -> String,
+    ) -> String {
+        if !path.insert(node) {
+            return self
+                .object_id(value)
+                .map_or_else(|| "<cycle>".to_string(), |id| format!("<cycle #{id}>"));
+        }
+        let output = format(path);
+        path.remove(&node);
+        output
+    }
 }
 
 impl fmt::Display for Value {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.fmt_inner(f, &mut HashSet::new())
+    }
+}
+
+impl Value {
+    fn fmt_inner(&self, f: &mut fmt::Formatter<'_>, path: &mut HashSet<FormatNode>) -> fmt::Result {
         match self {
             Value::Number(n) => write!(f, "{}", n),
             Value::Float(n) => write!(f, "{}", n),
@@ -221,38 +273,52 @@ impl fmt::Display for Value {
             Value::Function(func) => write!(f, "<Функция #{} {:p}>", func.name.to_usize(), func),
             Value::Builtin(func) => write!(f, "<Встроенная функция {:p}>", func),
             Value::Module(module) => write!(f, "<Модуль #{}>", module.to_usize()),
-            Value::List(list) => list.read(|items| {
-                write!(f, "[")?;
-                for (i, item) in items.iter().enumerate() {
-                    if i > 0 {
-                        write!(f, ", ")?;
-                    }
-                    write!(f, "{}", item)?;
-                }
-                write!(f, "]")
-            }),
-            Value::Array(array) => {
-                write!(f, "[")?;
-                for (i, item) in array.iter().enumerate() {
-                    if i > 0 {
-                        write!(f, ", ")?;
-                    }
-                    write!(f, "{}", item)?;
-                }
-                write!(f, "]")
+            Value::List(list) => {
+                fmt_container(f, FormatNode::List(list.identity()), path, |f, path| {
+                    list.read(|items| {
+                        write!(f, "[")?;
+                        for (i, item) in items.iter().enumerate() {
+                            if i > 0 {
+                                write!(f, ", ")?;
+                            }
+                            item.fmt_inner(f, path)?;
+                        }
+                        write!(f, "]")
+                    })
+                })
             }
-            Value::Dict(dict) => dict.read(|items| {
-                let mut pairs: Vec<_> = items.iter().collect();
-                pairs.sort_by_key(|(k, _)| *k);
-                write!(f, "{{")?;
-                for (i, (k, v)) in pairs.iter().enumerate() {
-                    if i > 0 {
-                        write!(f, ", ")?;
+            Value::Array(array) => fmt_container(
+                f,
+                FormatNode::Array(Arc::as_ptr(array) as usize),
+                path,
+                |f, path| {
+                    write!(f, "[")?;
+                    for (i, item) in array.iter().enumerate() {
+                        if i > 0 {
+                            write!(f, ", ")?;
+                        }
+                        item.fmt_inner(f, path)?;
                     }
-                    write!(f, "\"{}\": {}", k, v)?;
-                }
-                write!(f, "}}")
-            }),
+                    write!(f, "]")
+                },
+            ),
+            Value::Dict(dict) => {
+                fmt_container(f, FormatNode::Dict(dict.identity()), path, |f, path| {
+                    dict.read(|items| {
+                        let mut pairs: Vec<_> = items.iter().collect();
+                        pairs.sort_by_key(|(k, _)| *k);
+                        write!(f, "{{")?;
+                        for (i, (k, v)) in pairs.iter().enumerate() {
+                            if i > 0 {
+                                write!(f, ", ")?;
+                            }
+                            write!(f, "\"{}\": ", k)?;
+                            v.fmt_inner(f, path)?;
+                        }
+                        write!(f, "}}")
+                    })
+                })
+            }
             Value::Iterator(iterator) => write!(f, "<Итератор {}>", iterator.source.len()),
             Value::Thread(thread) => write!(f, "<Поток {:p}>", thread),
             Value::Mutex(mutex) => write!(f, "<Мьютекс {:p}>", mutex),
@@ -268,6 +334,20 @@ impl fmt::Display for Value {
             Value::Empty => write!(f, "пустота"),
         }
     }
+}
+
+fn fmt_container(
+    f: &mut fmt::Formatter<'_>,
+    node: FormatNode,
+    path: &mut HashSet<FormatNode>,
+    format: impl FnOnce(&mut fmt::Formatter<'_>, &mut HashSet<FormatNode>) -> fmt::Result,
+) -> fmt::Result {
+    if !path.insert(node) {
+        return write!(f, "<cycle>");
+    }
+    let result = format(f, path);
+    path.remove(&node);
+    result
 }
 
 impl TryFrom<Value> for f64 {
@@ -369,5 +449,38 @@ impl PartialEq for Value {
 impl From<SharedMut<Value>> for RuntimeFieldData {
     fn from(lock: SharedMut<Value>) -> Self {
         RuntimeFieldData::Value(lock)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::interpreter::prelude::Interpreter;
+    use crate::traits::runtime::CoreOperations;
+
+    #[test]
+    fn interpreter_formats_self_referencing_list_without_recursing_forever() {
+        let interpreter = Interpreter::new(goida_model::new_interner());
+        let list = SharedMut::new(Vec::new());
+        let value = interpreter.manage_value(Value::List(list.clone()));
+        list.write(|items| items.push(value.clone()));
+
+        assert_eq!(interpreter.format_value(&value), "[<cycle #0>]");
+    }
+
+    #[test]
+    fn display_formats_mutually_referencing_dicts_without_recursing_forever() {
+        let left = Value::Dict(SharedMut::new(std::collections::HashMap::new()));
+        let right = Value::Dict(SharedMut::new(std::collections::HashMap::new()));
+        let Value::Dict(left_dict) = &left else {
+            unreachable!()
+        };
+        let Value::Dict(right_dict) = &right else {
+            unreachable!()
+        };
+        left_dict.write(|dict| dict.insert("right".into(), right.clone()));
+        right_dict.write(|dict| dict.insert("left".into(), left.clone()));
+
+        assert_eq!(left.to_string(), "{\"right\": {\"left\": <cycle>}}");
     }
 }
