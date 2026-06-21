@@ -34,6 +34,7 @@ fn package_manager_creates_project_and_updates_git_dependencies() {
     assert!(manifest.contains("name = \"demo\""));
     assert!(manifest.contains("description = \"test\""));
     assert!(manifest.contains("version = \"0.1.0\""));
+    assert!(manifest.contains("entry = \"главный.goida\""));
 
     let add_output = run_goida(
         &workspace,

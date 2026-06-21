@@ -172,6 +172,41 @@ fn test_class_inheritance_reuses_base_members() {
 }
 
 #[test]
+fn test_system_args_returns_script_arguments() {
+    let dir = Path::new("target/system_args_test");
+    fs::create_dir_all(dir).expect("Не удалось создать временную папку теста");
+    let source = r#"
+печать(Система.аргументы().объединить("|"))
+"#;
+    let main_file = dir.join("main.goida");
+    fs::write(&main_file, source).expect("Не удалось записать временный файл");
+
+    let output = common::goida_command()
+        .args([
+            "run",
+            "-q",
+            "-p",
+            "goida-cli",
+            "--",
+            "run",
+            main_file.to_str().unwrap(),
+            "one",
+            "два",
+            "--flag",
+        ])
+        .output()
+        .expect("Не удалось запустить cargo run");
+
+    assert!(
+        output.status.success(),
+        "аргументы скрипта завершились с ошибкой\nSTDOUT: {}\nSTDERR: {}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!("one|два|--flag\n", String::from_utf8_lossy(&output.stdout));
+}
+
+#[test]
 fn test_try_catch_catches_by_base_error_class() {
     let dir = Path::new("target/try_catch_test");
     fs::create_dir_all(dir).expect("Не удалось создать временную папку теста");

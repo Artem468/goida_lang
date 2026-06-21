@@ -21,6 +21,11 @@ impl Session {
         self.runtime.interner.clone()
     }
 
+    /// Sets arguments exposed to source code through `Система.аргументы()`.
+    pub fn set_script_args(&mut self, args: Vec<String>) {
+        self.runtime.script_args = args;
+    }
+
     /// Executes an already parsed and lowered module tree.
     pub fn execute(&mut self, module: Module) -> Result<(), RuntimeError> {
         let module_id = module.name;

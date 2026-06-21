@@ -1,4 +1,4 @@
-use crate::ast::prelude::Span;
+use crate::ast::prelude::{ErrorData, Span};
 use crate::ast::source::SourceManager;
 use crate::import_paths::resolve_import_path;
 use crate::interpreter::prelude::{Environment, SharedInterner};
@@ -25,6 +25,7 @@ impl CoreOperations for Interpreter {
             method_depth: 0,
             heap: Arc::new(crate::interpreter::heap::ObjectHeap::default()),
             source_manager: SourceManager::new(),
+            script_args: Vec::new(),
         }
     }
 
@@ -173,7 +174,12 @@ impl Interpreter {
             return Ok(());
         }
 
-        let module = self.modules.get(&module_id).unwrap().clone();
+        let module = self.modules.get(&module_id).cloned().ok_or_else(|| {
+            RuntimeError::InvalidOperation(ErrorData::new(
+                Span::default(),
+                format!("Module '{}' is not loaded", self.get_file_path(&module_id)),
+            ))
+        })?;
 
         for import in &module.imports {
             if let Some(imported_module_id) =
@@ -194,21 +200,48 @@ impl Interpreter {
         }
 
         let result = self.scoped_environment(Environment::new(), |interpreter| {
+            let mut environment_bindings = Vec::new();
+            let mut module_globals = Vec::new();
+
             if let Some(mod_entry) = interpreter.modules.get(&module.name) {
-                for (name, value) in mod_entry.globals.clone() {
-                    interpreter.environment.write(|env| env.define(name, value));
-                }
+                environment_bindings.extend(mod_entry.globals.clone());
             }
 
             for (class_name, class_def) in &module.classes {
                 let class_value = Value::Class(class_def.clone());
-                interpreter
-                    .environment
-                    .write(|env| env.define(*class_name, class_value.clone()));
-                if let Some(mod_entry) = interpreter.modules.get_mut(&module.name) {
-                    mod_entry.set_global(*class_name, class_value);
-                }
+                environment_bindings.push((*class_name, class_value.clone()));
+                module_globals.push((*class_name, class_value));
+            }
 
+            for (function_name, function_fn) in &module.functions {
+                let func_value = Value::Function(function_fn.clone());
+                environment_bindings.push((*function_name, func_value.clone()));
+                module_globals.push((*function_name, func_value));
+            }
+
+            for (builtin_name, builtin_fn) in &interpreter.builtins {
+                environment_bindings.push((*builtin_name, Value::Builtin(builtin_fn.clone())));
+            }
+
+            for (name_symbol, class_def) in &interpreter.std_classes {
+                let class_value = Value::Class(class_def.clone());
+                environment_bindings.push((*name_symbol, class_value.clone()));
+                module_globals.push((*name_symbol, class_value));
+            }
+
+            interpreter.environment.write(|env| {
+                for (name, value) in environment_bindings {
+                    env.define(name, value);
+                }
+            });
+
+            if let Some(mod_entry) = interpreter.modules.get_mut(&module.name) {
+                for (name, value) in module_globals {
+                    mod_entry.set_global(name, value);
+                }
+            }
+
+            for class_def in module.classes.values() {
                 let fields = class_def.read(|i| i.fields.clone());
                 for (name, (_, is_static, data)) in fields {
                     if is_static {
@@ -222,32 +255,6 @@ impl Interpreter {
                             });
                         }
                     }
-                }
-            }
-
-            for (function_name, function_fn) in &module.functions {
-                let func_value = Value::Function(function_fn.clone());
-                interpreter
-                    .environment
-                    .write(|env| env.define(*function_name, func_value.clone()));
-                if let Some(mod_entry) = interpreter.modules.get_mut(&module.name) {
-                    mod_entry.set_global(*function_name, func_value);
-                }
-            }
-
-            for (builtin_name, builtin_fn) in &interpreter.builtins.clone() {
-                interpreter
-                    .environment
-                    .write(|env| env.define(*builtin_name, Value::Builtin(builtin_fn.clone())));
-            }
-
-            for (name_symbol, class_def) in &interpreter.std_classes.clone() {
-                interpreter
-                    .environment
-                    .write(|env| env.define(*name_symbol, Value::Class(class_def.clone())));
-
-                if let Some(mod_entry) = interpreter.modules.get_mut(&module.name) {
-                    mod_entry.set_global(*name_symbol, Value::Class(class_def.clone()));
                 }
             }
 
@@ -326,6 +333,7 @@ impl Interpreter {
             method_depth: self.method_depth,
             heap: self.heap.clone(),
             source_manager: SourceManager::new(),
+            script_args: self.script_args.clone(),
         }
     }
 

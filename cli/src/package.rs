@@ -116,7 +116,7 @@ pub(crate) fn new_project(name: &str, description: &str, version: &str) -> Resul
             name: name.to_string(),
             description: description.to_string(),
             version: version.to_string(),
-            entry: Some("РіР»Р°РІРЅС‹Р№.goida".to_string()),
+            entry: Some("главный.goida".to_string()),
         },
         dependencies: BTreeMap::new(),
         build: BuildConfig::default(),

@@ -43,10 +43,11 @@ pub fn setup_system_class(
     });
 
     // --- Система.аргументы() -> List ---
-    define_method!(class_def, interner_ref, @static method::ARGS.canonical => (_, _, _) {
-        let args_os: Vec<Value> = std::env::args()
-            .skip_while(|arg| arg != "--")
-            .skip(1)
+    define_method!(class_def, interner_ref, @static method::ARGS.canonical => (interp, _, _) {
+        let args_os: Vec<Value> = interp
+            .script_args
+            .iter()
+            .cloned()
             .map(Value::Text)
             .collect();
 

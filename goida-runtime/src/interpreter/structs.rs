@@ -370,6 +370,7 @@ pub struct Interpreter {
     pub(crate) method_depth: usize,
     pub(crate) heap: Arc<crate::interpreter::heap::ObjectHeap>,
     pub source_manager: SourceManager,
+    pub(crate) script_args: Vec<String>,
 }
 
 #[derive(Clone, Debug)]

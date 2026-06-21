@@ -113,8 +113,8 @@ fn main() {
     let cli = Cli::parse();
     let mut session = Session::new();
     match &cli.command {
-        Some(Commands::Run { file, .. }) => {
-            if let Err((err, _)) = run_file(&mut session, file) {
+        Some(Commands::Run { file, script_args }) => {
+            if let Err((err, _)) = run_file(&mut session, file, script_args) {
                 println!("{}", err.lines().next().unwrap_or(&err));
                 std::process::exit(1);
             }
@@ -220,11 +220,16 @@ fn format_parse_error(err: &ParseError) -> String {
     format!("{kind}: {}", data.message)
 }
 
-fn run_file(session: &mut Session, filename: &str) -> Result<(), (String, ErrorData)> {
+fn run_file(
+    session: &mut Session,
+    filename: &str,
+    script_args: &[String],
+) -> Result<(), (String, ErrorData)> {
     let content = fs::read_to_string(filename).map_err(|e| {
         let msg = format!("{}: '{}'", e, filename);
         (msg.clone(), ErrorData::new(Span::default(), msg))
     })?;
+    session.set_script_args(script_args.to_vec());
     execute_code(session, &content, filename)
 }
 
