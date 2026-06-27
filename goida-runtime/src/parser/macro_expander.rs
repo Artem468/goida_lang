@@ -318,10 +318,12 @@ impl MacroExpander {
                 object,
                 method,
                 args,
+                is_static_access,
             } => syn::ExprKind::MethodCall {
                 object: Box::new(self.expand_expr(*object, module_name)?),
                 method,
                 args: self.expand_call_args(args, module_name)?,
+                is_static_access,
             },
             syn::ExprKind::PropertyAccess { object, property } => syn::ExprKind::PropertyAccess {
                 object: Box::new(self.expand_expr(*object, module_name)?),

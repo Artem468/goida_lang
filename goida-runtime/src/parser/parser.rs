@@ -285,6 +285,7 @@ pub(super) fn token_source_text(token: &Token) -> String {
         Token::Bang => "!".into(),
         Token::Dollar => "$".into(),
         Token::Dot | Token::MethodDot => ".".into(),
+        Token::DoubleColon => "::".into(),
         Token::Comma => ",".into(),
         Token::Colon => ":".into(),
         Token::LParen | Token::LambdaLParen => "(".into(),

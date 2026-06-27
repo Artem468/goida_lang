@@ -6,6 +6,7 @@ use std::{
     path::PathBuf,
 };
 
+use goida_runtime::diagnostics::{localize_message, DiagnosticLanguage};
 use goida_runtime::interpreter::prelude::RuntimeError;
 use goida_runtime::parser::prelude::{FormatLanguage, ParseError, Parser as ProgramParser};
 use goida_runtime::session::Session;
@@ -168,7 +169,7 @@ fn main() {
 
 fn exit_on_package_error(result: Result<(), String>) {
     if let Err(err) = result {
-        eprintln!("{err}");
+        eprintln!("{}", localize_message(&err, DiagnosticLanguage::Russian));
         std::process::exit(1);
     }
 }
@@ -200,24 +201,116 @@ fn expand_macros_file(session: &Session, file: &str) -> Result<(), String> {
             println!("{preview}");
             Ok(())
         }
-        Err(err) => {
-            let (kind, data) = match err {
-                ParseError::TypeError(e) => ("Ошибка типов", e),
-                ParseError::InvalidSyntax(e) => ("Ошибка синтаксиса", e),
-                ParseError::ImportError(e) => ("Ошибка импорта", e),
-            };
-            Err(format!("{kind}: {}", data.message))
-        }
+        Err(err) => Err(format_parse_error_with_language(
+            &err,
+            DiagnosticLanguage::detect(&source),
+        )),
     }
 }
 
 fn format_parse_error(err: &ParseError) -> String {
+    format_parse_error_with_language(err, DiagnosticLanguage::English)
+}
+
+fn format_parse_error_with_language(err: &ParseError, language: DiagnosticLanguage) -> String {
     let (kind, data) = match err {
-        ParseError::TypeError(e) => ("Ошибка типов", e),
-        ParseError::InvalidSyntax(e) => ("Ошибка синтаксиса", e),
-        ParseError::ImportError(e) => ("Ошибка импорта", e),
+        ParseError::TypeError(e) => (parse_error_title(err, language), e),
+        ParseError::InvalidSyntax(e) => (parse_error_title(err, language), e),
+        ParseError::ImportError(e) => (parse_error_title(err, language), e),
     };
-    format!("{kind}: {}", data.message)
+    format!("{kind}: {}", localize_message(&data.message, language))
+}
+
+fn parse_error_title(error: &ParseError, language: DiagnosticLanguage) -> &'static str {
+    match error {
+        ParseError::TypeError(_) => language.select("Type error", "Ошибка типов"),
+        ParseError::InvalidSyntax(_) => language.select("Syntax error", "Ошибка синтаксиса"),
+        ParseError::ImportError(_) => language.select("Import error", "Ошибка импорта"),
+    }
+}
+
+fn runtime_error_title(error: &RuntimeError, language: DiagnosticLanguage) -> String {
+    match error {
+        RuntimeError::UndefinedVariable(err) => format!(
+            "{}: {}",
+            language.select("Undefined variable", "Неопределенная переменная"),
+            localize_message(&err.message, language)
+        ),
+        RuntimeError::UndefinedFunction(err) => format!(
+            "{}: {}",
+            language.select("Undefined function", "Неопределенная функция"),
+            localize_message(&err.message, language)
+        ),
+        RuntimeError::UndefinedMethod(err) => format!(
+            "{}: {}",
+            language.select("Undefined method", "Неопределенный метод"),
+            localize_message(&err.message, language)
+        ),
+        RuntimeError::TypeMismatch(err) => format!(
+            "{}: {}",
+            language.select("Type mismatch", "Несоответствие типов"),
+            localize_message(&err.message, language)
+        ),
+        RuntimeError::Panic(err) => {
+            format!(
+                "{}: {}",
+                language.select("Panic", "Паника"),
+                localize_message(&err.message, language)
+            )
+        }
+        RuntimeError::Raised(err, class_name) => {
+            format!(
+                "{}: {}",
+                class_name,
+                localize_message(&err.message, language)
+            )
+        }
+        RuntimeError::DivisionByZero(_) => language
+            .select("Division by zero", "Деление на ноль")
+            .to_string(),
+        RuntimeError::InvalidOperation(err) => format!(
+            "{}: {}",
+            language.select("Invalid operation", "Недопустимая операция"),
+            localize_message(&err.message, language)
+        ),
+        RuntimeError::IOError(err) => format!(
+            "{}: {}",
+            language.select("I/O error", "Ошибка ввода-вывода"),
+            localize_message(&err.message, language)
+        ),
+        RuntimeError::TypeError(err) => {
+            format!(
+                "{}: {}",
+                language.select("Type error", "Ошибка типа"),
+                localize_message(&err.message, language)
+            )
+        }
+        RuntimeError::Return(..) => language
+            .select("Unexpected return", "Неожиданный return")
+            .to_string(),
+        RuntimeError::ImportError(err) => parse_error_title(err, language).to_string(),
+    }
+}
+
+fn runtime_error_data(error: RuntimeError) -> ErrorData {
+    match error {
+        RuntimeError::UndefinedVariable(err)
+        | RuntimeError::UndefinedFunction(err)
+        | RuntimeError::UndefinedMethod(err)
+        | RuntimeError::TypeMismatch(err)
+        | RuntimeError::DivisionByZero(err)
+        | RuntimeError::InvalidOperation(err)
+        | RuntimeError::TypeError(err)
+        | RuntimeError::IOError(err)
+        | RuntimeError::Panic(err)
+        | RuntimeError::Raised(err, _)
+        | RuntimeError::Return(err, _) => err,
+        RuntimeError::ImportError(err) => match err {
+            ParseError::TypeError(err)
+            | ParseError::InvalidSyntax(err)
+            | ParseError::ImportError(err) => err,
+        },
+    }
 }
 
 fn run_file(
@@ -229,6 +322,7 @@ fn run_file(
         let msg = format!("{}: '{}'", e, filename);
         (msg.clone(), ErrorData::new(Span::default(), msg))
     })?;
+    session.set_diagnostic_language(DiagnosticLanguage::detect(&content));
     session.set_script_args(script_args.to_vec());
     execute_code(session, &content, filename)
 }
@@ -248,50 +342,21 @@ fn execute_code(
             let interpret_result = session.execute(program);
 
             interpret_result.map_err(|e| {
-                let (msg, error_data) = match e {
-                    RuntimeError::UndefinedVariable(err) => {
-                        (format!("Неопределенная переменная: {}", err.message), err)
-                    }
-                    RuntimeError::UndefinedFunction(err) => {
-                        (format!("Неопределенная функция: {}", err.message), err)
-                    }
-                    RuntimeError::UndefinedMethod(err) => {
-                        (format!("Неопределенный метод: {}", err.message), err)
-                    }
-                    RuntimeError::TypeMismatch(err) => {
-                        (format!("Несоответствие типов: {}", err.message), err)
-                    }
-                    RuntimeError::Panic(err) => (format!("Паника: {}", err.message), err),
-                    RuntimeError::Raised(err, class_name) => {
-                        (format!("{}: {}", class_name, err.message), err)
-                    }
-                    RuntimeError::DivisionByZero(err) => ("Деление на ноль".to_string(), err),
-                    RuntimeError::InvalidOperation(err) => {
-                        (format!("Недопустимая операция: {}", err.message), err)
-                    }
-                    RuntimeError::IOError(err) => {
-                        (format!("Ошибка чтения файла: {}", err.message), err)
-                    }
-                    RuntimeError::TypeError(err) => {
-                        (format!("Недопустимый тип данных: {}", err.message), err)
-                    }
-                    RuntimeError::Return(err, ..) => ("Неожиданный return".to_string(), err),
-                    RuntimeError::ImportError(err) => match err {
-                        ParseError::TypeError(e) => ("Ошибка типов".to_string(), e),
-                        ParseError::InvalidSyntax(e) => ("Ошибка синтаксиса".to_string(), e),
-                        ParseError::ImportError(e) => ("Ошибка импорта".to_string(), e),
-                    },
-                };
+                let language = session.diagnostic_language();
+                let msg = runtime_error_title(&e, language);
+                let error_data = runtime_error_data(e);
                 render_error(session, &msg, &error_data);
                 (msg, error_data)
             })?;
         }
         Err(err) => {
             session.register_diagnostic_module(_module);
-            let (msg, data): (&'static str, ErrorData) = match err {
-                ParseError::TypeError(e) => ("Ошибка типов", e),
-                ParseError::InvalidSyntax(e) => ("Ошибка синтаксиса", e),
-                ParseError::ImportError(e) => ("Ошибка импорта", e),
+            let language = session.diagnostic_language();
+            let msg = parse_error_title(&err, language);
+            let data = match err {
+                ParseError::TypeError(e)
+                | ParseError::InvalidSyntax(e)
+                | ParseError::ImportError(e) => e,
             };
             render_error(session, msg, &data);
             return Err((msg.to_string(), data));
@@ -306,10 +371,11 @@ fn render_error(session: &Session, msg: &str, error: &ErrorData) {
     let file_code = intp.source_manager.get_file_content(file_name.as_str());
     let ariadne_span = error.location.as_ariadne(file_code.as_str());
     let display_msg = msg.lines().next().unwrap_or(msg);
-    let mut note = error.message.clone();
+    let language = session.diagnostic_language();
+    let mut note = localize_message(&error.message, language);
 
     if !error.stack_trace.is_empty() {
-        note.push_str("\n\nСтек вызовов:");
+        note.push_str(language.select("\n\nStack trace:", "\n\nСтек вызовов:"));
         for frame in &error.stack_trace {
             let frame_file = intp.get_file_path(&frame.location.file_id);
             let frame_code = intp.source_manager.get_file_content(frame_file.as_str());
@@ -318,7 +384,11 @@ fn render_error(session: &Session, msg: &str, error: &ErrorData) {
                 .map(|prefix| prefix.lines().count())
                 .unwrap_or(0)
                 + 1;
-            note.push_str(&format!("\n  в {} ({}:{})", frame.name, frame_file, line));
+            let at = language.select("at", "в");
+            note.push_str(&format!(
+                "\n  {at} {} ({}:{})",
+                frame.name, frame_file, line
+            ));
         }
     }
 

@@ -6,6 +6,7 @@ use crate::ast::prelude::{
 };
 use crate::ast::source::SourceManager;
 use crate::bytecode::BytecodeModule;
+use crate::diagnostics::DiagnosticLanguage;
 use crate::hir::HirModule;
 use crate::parser::structs::ParseError;
 use crate::shared::SharedMut;
@@ -371,6 +372,7 @@ pub struct Interpreter {
     pub(crate) heap: Arc<crate::interpreter::heap::ObjectHeap>,
     pub source_manager: SourceManager,
     pub(crate) script_args: Vec<String>,
+    pub(crate) diagnostic_language: DiagnosticLanguage,
 }
 
 #[derive(Clone, Debug)]

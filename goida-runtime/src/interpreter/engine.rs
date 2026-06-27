@@ -1,5 +1,6 @@
 use crate::ast::prelude::{ErrorData, Span};
 use crate::ast::source::SourceManager;
+use crate::diagnostics::DiagnosticLanguage;
 use crate::import_paths::resolve_import_path;
 use crate::interpreter::prelude::{Environment, SharedInterner};
 use crate::interpreter::structs::{
@@ -26,6 +27,7 @@ impl CoreOperations for Interpreter {
             heap: Arc::new(crate::interpreter::heap::ObjectHeap::default()),
             source_manager: SourceManager::new(),
             script_args: Vec::new(),
+            diagnostic_language: DiagnosticLanguage::English,
         }
     }
 
@@ -334,6 +336,7 @@ impl Interpreter {
             heap: self.heap.clone(),
             source_manager: SourceManager::new(),
             script_args: self.script_args.clone(),
+            diagnostic_language: self.diagnostic_language,
         }
     }
 

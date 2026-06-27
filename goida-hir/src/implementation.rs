@@ -532,6 +532,7 @@ impl Visitor for Materializer<'_> {
                 object,
                 method,
                 args,
+                is_static_access,
             } => HirExpressionKind::MethodCall {
                 object: *object,
                 resolution: self
@@ -541,6 +542,7 @@ impl Visitor for Materializer<'_> {
                     .copied()
                     .unwrap_or(MethodResolution::Dynamic(*method)),
                 args: Self::args(args),
+                is_static_access: *is_static_access,
             },
             ExpressionKind::ObjectCreation { class_name, args } => {
                 HirExpressionKind::ObjectCreation {

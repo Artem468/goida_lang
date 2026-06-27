@@ -277,6 +277,7 @@ fn normalize_expr(
             object,
             method,
             args,
+            ..
         } => format!(
             "method({},{},{})",
             normalize_expr(module, interner, *object),

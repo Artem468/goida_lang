@@ -1,6 +1,7 @@
 pub use goida_syntax::ast;
 pub(crate) use goida_syntax::import_paths;
 pub mod builtins;
+pub mod diagnostics;
 pub(crate) use goida_bytecode as bytecode;
 pub(crate) use goida_hir as hir;
 pub mod interpreter;

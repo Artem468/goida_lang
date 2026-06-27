@@ -127,6 +127,7 @@ impl<'a> ChunkCompiler<'a> {
                 object,
                 resolution,
                 args,
+                is_static_access,
             } => {
                 let receiver_is_this = matches!(
                     self.hir.arena.expression(*object).map(|e| &e.kind),
@@ -144,6 +145,7 @@ impl<'a> ChunkCompiler<'a> {
                         resolution: *resolution,
                         args,
                         receiver_is_this,
+                        is_static_access: *is_static_access,
                     },
                     span,
                 );

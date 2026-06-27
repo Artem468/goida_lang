@@ -160,6 +160,7 @@ impl<'a> Vm<'a> {
                     resolution,
                     args,
                     receiver_is_this,
+                    is_static_access,
                 } => {
                     let method = match resolution {
                         MethodResolution::Static(method) | MethodResolution::Dynamic(method) => {
@@ -172,6 +173,7 @@ impl<'a> Vm<'a> {
                         method,
                         args,
                         *receiver_is_this,
+                        *is_static_access,
                         span,
                     )?;
                     Self::set(&mut registers, *dst, value);

@@ -144,10 +144,13 @@ pub(super) fn expr_with_parent_prec(
             object,
             method,
             args,
+            is_static_access,
         } => {
+            let access = if *is_static_access { "::" } else { "." };
             format!(
-                "{}.{}({})",
+                "{}{}{}({})",
                 expr_with_parent_prec(object, own_prec, false, language),
+                access,
                 method,
                 format_args(args, language)
             )

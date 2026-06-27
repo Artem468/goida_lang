@@ -81,6 +81,7 @@ pub enum Instruction {
         resolution: MethodResolution,
         args: Vec<RegisterArg>,
         receiver_is_this: bool,
+        is_static_access: bool,
     },
     NewObject {
         dst: Register,

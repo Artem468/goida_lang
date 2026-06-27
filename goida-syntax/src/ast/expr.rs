@@ -47,6 +47,7 @@ pub enum ExpressionKind {
         object: ExprId,
         method: Symbol,
         args: Vec<CallArg>,
+        is_static_access: bool,
     },
     ObjectCreation {
         class_name: Symbol,

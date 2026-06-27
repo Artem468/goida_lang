@@ -35,10 +35,12 @@ impl ParserTrait {
                 object,
                 method,
                 args,
+                is_static_access,
             } => ExpressionKind::MethodCall {
                 object: self.build_expr(*object)?,
                 method: self.intern(&method),
                 args: self.build_call_args(args)?,
+                is_static_access,
             },
             syn::ExprKind::PropertyAccess { object, property } => ExpressionKind::PropertyAccess {
                 object: self.build_expr(*object)?,

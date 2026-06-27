@@ -147,6 +147,8 @@ pub(crate) enum Token {
     Dollar,
     #[token(".")]
     Dot,
+    #[token("::")]
+    DoubleColon,
     MethodDot,
     #[token(",")]
     Comma,
@@ -278,6 +280,7 @@ fn can_start_statement_after_newline(previous: Option<&Token>, token: &Token) ->
     !matches!(
         token,
         Token::Dot
+            | Token::DoubleColon
             | Token::MethodDot
             | Token::Plus
             | Token::Minus

@@ -742,7 +742,8 @@ PostfixOps: Vec<PostfixOp> = {
 
 PostfixOp: PostfixOp = {
     <l:@L> "(" <args:ArgListOpt> ")" <r:@R> => PostfixOp::FunctionCall(args, l..r),
-    <l:@L> "method." <method:IdentName> "(" <args:ArgListOpt> ")" <r:@R> => PostfixOp::MethodCall(method, args, l..r),
+    <l:@L> "method." <method:IdentName> "(" <args:ArgListOpt> ")" <r:@R> => PostfixOp::MethodCall(method, args, l..r, false),
+    <l:@L> "::" <method:IdentName> "(" <args:ArgListOpt> ")" <r:@R> => PostfixOp::MethodCall(method, args, l..r, true),
     <l:@L> "." <property:IdentName> <r:@R> => PostfixOp::PropertyAccess(property, l..r),
     <l:@L> "[" <index:Expr> "]" <r:@R> => PostfixOp::Index(index, l..r),
 };
@@ -816,6 +817,7 @@ MacroPlainToken: MacroToken = {
     <l:@L> "%" <r:@R> => MacroToken { token: Token::Percent, span: l..r },
     <l:@L> "!" <r:@R> => MacroToken { token: Token::Bang, span: l..r },
     <l:@L> "." <r:@R> => MacroToken { token: Token::Dot, span: l..r },
+    <l:@L> "::" <r:@R> => MacroToken { token: Token::DoubleColon, span: l..r },
     <l:@L> "method." <r:@R> => MacroToken { token: Token::MethodDot, span: l..r },
     <l:@L> "," <r:@R> => MacroToken { token: Token::Comma, span: l..r },
     <l:@L> ":" <r:@R> => MacroToken { token: Token::Colon, span: l..r },
@@ -883,6 +885,7 @@ extern {
         "!" => Token::Bang,
         "$" => Token::Dollar,
         "." => Token::Dot,
+        "::" => Token::DoubleColon,
         "method." => Token::MethodDot,
         "," => Token::Comma,
         ":" => Token::Colon,

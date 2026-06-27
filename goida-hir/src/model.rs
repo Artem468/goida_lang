@@ -99,6 +99,7 @@ pub enum HirExpressionKind {
         object: ExprId,
         resolution: MethodResolution,
         args: Vec<HirCallArg>,
+        is_static_access: bool,
     },
     ObjectCreation {
         class_name: Symbol,

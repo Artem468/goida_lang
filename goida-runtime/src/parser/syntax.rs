@@ -382,6 +382,7 @@ pub(crate) enum ExprKind {
         object: Box<Expr>,
         method: String,
         args: Vec<CallArg>,
+        is_static_access: bool,
     },
     PropertyAccess {
         object: Box<Expr>,
@@ -411,7 +412,7 @@ pub(crate) enum LambdaBody {
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum PostfixOp {
     FunctionCall(Vec<CallArg>, Range<usize>),
-    MethodCall(String, Vec<CallArg>, Range<usize>),
+    MethodCall(String, Vec<CallArg>, Range<usize>, bool),
     PropertyAccess(String, Range<usize>),
     Index(Expr, Range<usize>),
 }
@@ -457,11 +458,12 @@ pub(crate) fn apply_postfix(mut expr: Expr, ops: Vec<PostfixOp>) -> Expr {
                 start,
                 span.end,
             ),
-            PostfixOp::MethodCall(method, args, span) => Spanned::new(
+            PostfixOp::MethodCall(method, args, span, is_static_access) => Spanned::new(
                 ExprKind::MethodCall {
                     object: Box::new(expr),
                     method,
                     args,
+                    is_static_access,
                 },
                 start,
                 span.end,

@@ -1,4 +1,5 @@
 use crate::builtins::registry::BUILTINS;
+use crate::diagnostics::DiagnosticLanguage;
 use crate::interpreter::heap::CollectionStats;
 use crate::interpreter::prelude::{Interpreter, Module, RuntimeError, SharedInterner};
 use crate::traits::prelude::CoreOperations;
@@ -21,9 +22,17 @@ impl Session {
         self.runtime.interner.clone()
     }
 
-    /// Sets arguments exposed to source code through `Система.аргументы()`.
+    /// Sets arguments exposed to source code through `Система::аргументы()`.
     pub fn set_script_args(&mut self, args: Vec<String>) {
         self.runtime.script_args = args;
+    }
+
+    pub fn set_diagnostic_language(&mut self, language: DiagnosticLanguage) {
+        self.runtime.diagnostic_language = language;
+    }
+
+    pub fn diagnostic_language(&self) -> DiagnosticLanguage {
+        self.runtime.diagnostic_language
     }
 
     /// Executes an already parsed and lowered module tree.

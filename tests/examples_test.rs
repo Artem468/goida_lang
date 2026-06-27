@@ -176,7 +176,7 @@ fn test_system_args_returns_script_arguments() {
     let dir = Path::new("target/system_args_test");
     fs::create_dir_all(dir).expect("Не удалось создать временную папку теста");
     let source = r#"
-печать(Система.аргументы().объединить("|"))
+печать(Система::аргументы().объединить("|"))
 "#;
     let main_file = dir.join("main.goida");
     fs::write(&main_file, source).expect("Не удалось записать временный файл");

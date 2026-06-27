@@ -1,5 +1,6 @@
 use crate::ast::prelude::{BinaryOperator, ErrorData, Span, Visibility};
 use crate::bytecode::{Chunk, Instruction, Register, RegisterArg};
+use crate::diagnostics::DiagnosticMessage;
 use crate::hir::Binding;
 use crate::interpreter::prelude::{
     CallArgValue, Interpreter, RuntimeError, RuntimeFieldData, Value,
@@ -444,8 +445,10 @@ impl<'a> Vm<'a> {
         method: Symbol,
         args: Vec<CallArgValue>,
         receiver_is_this: bool,
+        is_static_access: bool,
         span: Span,
     ) -> Result<Value, RuntimeError> {
+        let target_is_class = matches!(target, Value::Class(_));
         if let Some(class) = self.interpreter.get_class_for_value(&target) {
             if let Some((visibility, is_static, method_type)) = class.read(|class| {
                 class
@@ -453,11 +456,29 @@ impl<'a> Vm<'a> {
                     .get(&method)
                     .map(|(v, s, m)| (v.clone(), *s, m.clone()))
             }) {
-                if matches!(target, Value::Class(_)) && !is_static {
+                if target_is_class && !is_static {
                     return bail_runtime!(
                         InvalidOperation,
                         span,
                         "Instance method needs an object"
+                    );
+                }
+                if target_is_class && is_static && !is_static_access {
+                    return bail_runtime!(
+                        InvalidOperation,
+                        span,
+                        "{}",
+                        DiagnosticMessage::StaticMethodRequiresDoubleColon
+                            .render(self.interpreter.diagnostic_language)
+                    );
+                }
+                if !target_is_class && is_static_access {
+                    return bail_runtime!(
+                        InvalidOperation,
+                        span,
+                        "{}",
+                        DiagnosticMessage::InstanceMethodRequiresDot
+                            .render(self.interpreter.diagnostic_language)
                     );
                 }
                 if !receiver_is_this && matches!(visibility, Visibility::Private) {

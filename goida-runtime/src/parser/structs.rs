@@ -90,12 +90,19 @@ impl FormatLanguage {
             russian += usize::from(RUSSIAN.contains(&word));
         }
 
-        if russian > english {
+        if russian > english || (english == 0 && source.chars().any(is_cyrillic)) {
             Self::Russian
         } else {
             Self::English
         }
     }
+}
+
+fn is_cyrillic(ch: char) -> bool {
+    ('\u{0400}'..='\u{04FF}').contains(&ch)
+        || ('\u{0500}'..='\u{052F}').contains(&ch)
+        || ('\u{2DE0}'..='\u{2DFF}').contains(&ch)
+        || ('\u{A640}'..='\u{A69F}').contains(&ch)
 }
 
 #[derive(Debug)]
