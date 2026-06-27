@@ -29,6 +29,36 @@ fn assert_type_error(source: &str, message_fragment: &str) {
 }
 
 #[test]
+fn type_checker_rejects_wrong_method_access_operator_for_user_classes() {
+    assert_type_error(
+        r#"
+class Counter {
+    public static function make() -> number {
+        return 1
+    }
+}
+
+Counter.make()
+"#,
+        "Static method must be called with '::'",
+    );
+
+    assert_type_error(
+        r#"
+class Counter {
+    public function value(self) -> number {
+        return 1
+    }
+}
+
+counter = new Counter()
+counter::value()
+"#,
+        "Instance method must be called with '.'",
+    );
+}
+
+#[test]
 fn macro_expansion_preview_contains_expanded_source_without_macro_definition() {
     let interner: SharedInterner = SharedMut::new(StringInterner::new());
     let parser = Parser::new(interner, "preview_test", PathBuf::from("preview.goida"));

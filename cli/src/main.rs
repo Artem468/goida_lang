@@ -6,7 +6,7 @@ use std::{
     path::PathBuf,
 };
 
-use goida_runtime::diagnostics::{localize_message, DiagnosticLanguage};
+use goida_runtime::diagnostics::{localize_message, DiagnosticLanguage, DiagnosticTitle};
 use goida_runtime::interpreter::prelude::RuntimeError;
 use goida_runtime::parser::prelude::{FormatLanguage, ParseError, Parser as ProgramParser};
 use goida_runtime::session::Session;
@@ -223,9 +223,9 @@ fn format_parse_error_with_language(err: &ParseError, language: DiagnosticLangua
 
 fn parse_error_title(error: &ParseError, language: DiagnosticLanguage) -> &'static str {
     match error {
-        ParseError::TypeError(_) => language.select("Type error", "Ошибка типов"),
-        ParseError::InvalidSyntax(_) => language.select("Syntax error", "Ошибка синтаксиса"),
-        ParseError::ImportError(_) => language.select("Import error", "Ошибка импорта"),
+        ParseError::TypeError(_) => DiagnosticTitle::ParseTypeError.render(language),
+        ParseError::InvalidSyntax(_) => DiagnosticTitle::SyntaxError.render(language),
+        ParseError::ImportError(_) => DiagnosticTitle::ImportError.render(language),
     }
 }
 
@@ -233,63 +233,59 @@ fn runtime_error_title(error: &RuntimeError, language: DiagnosticLanguage) -> St
     match error {
         RuntimeError::UndefinedVariable(err) => format!(
             "{}: {}",
-            language.select("Undefined variable", "Неопределенная переменная"),
+            DiagnosticTitle::UndefinedVariable.render(language),
             localize_message(&err.message, language)
         ),
         RuntimeError::UndefinedFunction(err) => format!(
             "{}: {}",
-            language.select("Undefined function", "Неопределенная функция"),
+            DiagnosticTitle::UndefinedFunction.render(language),
             localize_message(&err.message, language)
         ),
         RuntimeError::UndefinedMethod(err) => format!(
             "{}: {}",
-            language.select("Undefined method", "Неопределенный метод"),
+            DiagnosticTitle::UndefinedMethod.render(language),
             localize_message(&err.message, language)
         ),
         RuntimeError::TypeMismatch(err) => format!(
             "{}: {}",
-            language.select("Type mismatch", "Несоответствие типов"),
+            DiagnosticTitle::TypeMismatch.render(language),
             localize_message(&err.message, language)
         ),
         RuntimeError::Panic(err) => {
             format!(
                 "{}: {}",
-                language.select("Panic", "Паника"),
+                DiagnosticTitle::Panic.render(language),
                 localize_message(&err.message, language)
             )
         }
         RuntimeError::Raised(err, class_name) => {
-            format!(
-                "{}: {}",
-                class_name,
-                localize_message(&err.message, language)
-            )
+            format!("{}: {}", class_name, err.message)
         }
-        RuntimeError::DivisionByZero(_) => language
-            .select("Division by zero", "Деление на ноль")
-            .to_string(),
+        RuntimeError::DivisionByZero(_) => DiagnosticTitle::DivisionByZero.render(language).into(),
         RuntimeError::InvalidOperation(err) => format!(
             "{}: {}",
-            language.select("Invalid operation", "Недопустимая операция"),
+            DiagnosticTitle::InvalidOperation.render(language),
             localize_message(&err.message, language)
         ),
         RuntimeError::IOError(err) => format!(
             "{}: {}",
-            language.select("I/O error", "Ошибка ввода-вывода"),
+            DiagnosticTitle::IoError.render(language),
             localize_message(&err.message, language)
         ),
         RuntimeError::TypeError(err) => {
             format!(
                 "{}: {}",
-                language.select("Type error", "Ошибка типа"),
+                DiagnosticTitle::TypeError.render(language),
                 localize_message(&err.message, language)
             )
         }
-        RuntimeError::Return(..) => language
-            .select("Unexpected return", "Неожиданный return")
-            .to_string(),
+        RuntimeError::Return(..) => DiagnosticTitle::UnexpectedReturn.render(language).into(),
         RuntimeError::ImportError(err) => parse_error_title(err, language).to_string(),
     }
+}
+
+fn should_localize_runtime_note(error: &RuntimeError) -> bool {
+    !matches!(error, RuntimeError::Raised(..))
 }
 
 fn runtime_error_data(error: RuntimeError) -> ErrorData {
@@ -344,8 +340,9 @@ fn execute_code(
             interpret_result.map_err(|e| {
                 let language = session.diagnostic_language();
                 let msg = runtime_error_title(&e, language);
+                let localize_note = should_localize_runtime_note(&e);
                 let error_data = runtime_error_data(e);
-                render_error(session, &msg, &error_data);
+                render_error(session, &msg, &error_data, localize_note);
                 (msg, error_data)
             })?;
         }
@@ -358,24 +355,29 @@ fn execute_code(
                 | ParseError::InvalidSyntax(e)
                 | ParseError::ImportError(e) => e,
             };
-            render_error(session, msg, &data);
+            render_error(session, msg, &data, true);
             return Err((msg.to_string(), data));
         }
     }
     Ok(())
 }
 
-fn render_error(session: &Session, msg: &str, error: &ErrorData) {
+fn render_error(session: &Session, msg: &str, error: &ErrorData, localize_note: bool) {
     let intp = session.runtime();
     let file_name = intp.get_file_path(&error.location.file_id);
     let file_code = intp.source_manager.get_file_content(file_name.as_str());
     let ariadne_span = error.location.as_ariadne(file_code.as_str());
     let display_msg = msg.lines().next().unwrap_or(msg);
     let language = session.diagnostic_language();
-    let mut note = localize_message(&error.message, language);
+    let mut note = if localize_note {
+        localize_message(&error.message, language)
+    } else {
+        error.message.clone()
+    };
 
     if !error.stack_trace.is_empty() {
-        note.push_str(language.select("\n\nStack trace:", "\n\nСтек вызовов:"));
+        note.push_str("\n\n");
+        note.push_str(DiagnosticTitle::StackTrace.render(language));
         for frame in &error.stack_trace {
             let frame_file = intp.get_file_path(&frame.location.file_id);
             let frame_code = intp.source_manager.get_file_content(frame_file.as_str());
@@ -384,7 +386,7 @@ fn render_error(session: &Session, msg: &str, error: &ErrorData) {
                 .map(|prefix| prefix.lines().count())
                 .unwrap_or(0)
                 + 1;
-            let at = language.select("at", "в");
+            let at = DiagnosticTitle::At.render(language);
             note.push_str(&format!(
                 "\n  {at} {} ({}:{})",
                 frame.name, frame_file, line

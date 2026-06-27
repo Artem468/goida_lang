@@ -3,8 +3,8 @@ use crate::ast::prelude::{
     Span, StmtId, UnaryOperator,
 };
 use crate::{
-    walk_hir_expression, CallableSignature, HirCallArg, HirExpressionKind, HirModule,
-    HirStatementKind, HirVisitor,
+    walk_hir_expression, CallableSignature, ClassMethodMetadata, HirCallArg, HirExpressionKind,
+    HirModule, HirStatementKind, HirVisitor, MethodResolution,
 };
 use std::collections::HashMap;
 use string_interner::DefaultSymbol as Symbol;
@@ -17,6 +17,7 @@ pub struct TypeCheckError {
 pub struct TypeChecker {
     inferred_types: HashMap<ExprId, DataType>,
     signatures: HashMap<Symbol, CallableSignature>,
+    class_methods: HashMap<(Symbol, Symbol), ClassMethodMetadata>,
     scopes: Vec<HashMap<Symbol, DataType>>,
     expected_return: Option<DataType>,
     error: Option<TypeCheckError>,
@@ -30,11 +31,18 @@ impl TypeChecker {
             .cloned()
             .map(|signature| (signature.name, signature))
             .collect();
+        let class_methods = hir
+            .class_methods
+            .iter()
+            .copied()
+            .map(|method| ((method.class_name, method.method_name), method))
+            .collect();
         let (result, inferred_types) = {
             let lowered = &*hir;
             let mut checker = Self {
                 inferred_types: HashMap::new(),
                 signatures,
+                class_methods,
                 scopes: vec![HashMap::new()],
                 expected_return: None,
                 error: None,
@@ -128,6 +136,14 @@ impl TypeChecker {
         }
     }
 
+    fn fail_message(&mut self, span: Span, message: impl Into<String>) {
+        if self.error.is_none() {
+            self.error = Some(TypeCheckError {
+                data: ErrorData::new(span, message.into()),
+            });
+        }
+    }
+
     fn infer_expression(&mut self, module: &HirModule, id: ExprId) -> DataType {
         if let Some(data_type) = self.inferred_types.get(&id) {
             return data_type.clone();
@@ -187,15 +203,39 @@ impl TypeChecker {
                     _ => DataType::Any,
                 }
             }
-            HirExpressionKind::ObjectCreation { args, .. } => {
+            HirExpressionKind::ObjectCreation { class_name, args } => {
                 for arg in args {
                     self.infer_expression(module, arg.value);
                 }
-                DataType::Any
+                if self
+                    .class_methods
+                    .values()
+                    .any(|method| method.class_name == *class_name)
+                {
+                    DataType::Object(*class_name)
+                } else {
+                    DataType::Any
+                }
             }
             HirExpressionKind::Lambda { .. } => DataType::Any,
-            HirExpressionKind::PropertyAccess { object, .. }
-            | HirExpressionKind::MethodCall { object, .. } => {
+            HirExpressionKind::PropertyAccess { object, .. } => {
+                self.infer_expression(module, *object);
+                walk_hir_expression(self, module, id);
+                DataType::Any
+            }
+            HirExpressionKind::MethodCall {
+                object,
+                resolution,
+                is_static_access,
+                ..
+            } => {
+                self.check_method_access(
+                    module,
+                    *object,
+                    *resolution,
+                    *is_static_access,
+                    node.span,
+                );
                 self.infer_expression(module, *object);
                 walk_hir_expression(self, module, id);
                 DataType::Any
@@ -205,6 +245,57 @@ impl TypeChecker {
 
         self.inferred_types.insert(id, inferred.clone());
         inferred
+    }
+
+    fn check_method_access(
+        &mut self,
+        module: &HirModule,
+        object: ExprId,
+        resolution: MethodResolution,
+        is_static_access: bool,
+        span: Span,
+    ) {
+        if self.error.is_some() {
+            return;
+        }
+        let method_name = match resolution {
+            MethodResolution::Static(method) | MethodResolution::Dynamic(method) => method,
+        };
+        let object_type = self.infer_expression(module, object);
+        if let DataType::Object(class_name) = object_type {
+            if let Some(method) = self.class_methods.get(&(class_name, method_name)).copied() {
+                if method.is_static && !is_static_access {
+                    self.fail_message(span, "Static method must be called with '::'");
+                } else if !method.is_static && is_static_access {
+                    self.fail_message(span, "Instance method must be called with '.'");
+                }
+            }
+            return;
+        }
+
+        let Some(object) = module.arena.expression(object) else {
+            return;
+        };
+        let HirExpressionKind::Identifier { name, binding, .. } = &object.kind else {
+            if is_static_access {
+                self.fail_message(span, "Instance method must be called with '.'");
+            }
+            return;
+        };
+        if !matches!(
+            binding,
+            crate::Binding::GlobalSlot(_) | crate::Binding::Dynamic(_)
+        ) {
+            return;
+        }
+        let Some(method) = self.class_methods.get(&(*name, method_name)).copied() else {
+            return;
+        };
+        if method.is_static && !is_static_access {
+            self.fail_message(span, "Static method must be called with '::'");
+        } else if !method.is_static && is_static_access {
+            self.fail_message(span, "Instance method must be called with '.'");
+        }
     }
 
     fn check_call(
@@ -316,7 +407,11 @@ impl HirVisitor for TypeChecker {
                 } else if let Some(expected) = self.lookup(*name) {
                     self.check_compatible(node.span, "присваивания", &expected, &actual);
                 } else {
-                    self.declare(*name, DataType::Any);
+                    let declared = match actual {
+                        DataType::Object(_) => actual,
+                        _ => DataType::Any,
+                    };
+                    self.declare(*name, declared);
                 }
             }
             HirStatementKind::Return(value) => {

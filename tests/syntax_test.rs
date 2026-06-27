@@ -537,6 +537,52 @@ list().get()
 }
 
 #[test]
+fn test_user_raised_message_is_not_localized() {
+    let dir = std::path::Path::new("target/user_raise_message_not_localized_test");
+    std::fs::create_dir_all(dir).expect("failed to create temporary test directory");
+
+    let source = r#"
+класс МояОшибка {
+}
+
+выбросить МояОшибка("number class module")
+"#;
+    let main_file = dir.join("main.goida");
+    std::fs::write(&main_file, source).expect("failed to write temporary file");
+
+    let output = common::goida_command()
+        .args([
+            "run",
+            "-q",
+            "-p",
+            "goida-cli",
+            "--",
+            "run",
+            main_file.to_str().unwrap(),
+        ])
+        .output()
+        .expect("failed to run cargo");
+
+    assert!(
+        !output.status.success(),
+        "user raise unexpectedly succeeded"
+    );
+    let diagnostics = format!(
+        "{}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        diagnostics.contains("МояОшибка: number class module"),
+        "unexpected diagnostics: {diagnostics}"
+    );
+    assert!(
+        !diagnostics.contains("число класс модуль"),
+        "user message was localized unexpectedly: {diagnostics}"
+    );
+}
+
+#[test]
 fn test_top_level_thread_block_executes_and_updates_outer_variable() {
     let dir = std::path::Path::new("target/top_level_thread_block_test");
     std::fs::create_dir_all(dir).expect("Не удалось создать временную папку теста");

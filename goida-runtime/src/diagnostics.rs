@@ -53,6 +53,51 @@ impl DiagnosticMessage {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DiagnosticTitle {
+    ParseTypeError,
+    TypeError,
+    SyntaxError,
+    ImportError,
+    UndefinedVariable,
+    UndefinedFunction,
+    UndefinedMethod,
+    TypeMismatch,
+    Panic,
+    DivisionByZero,
+    InvalidOperation,
+    IoError,
+    UnexpectedReturn,
+    StackTrace,
+    At,
+}
+
+impl DiagnosticTitle {
+    pub fn render(self, language: DiagnosticLanguage) -> &'static str {
+        match self {
+            Self::ParseTypeError => language.select("Type error", "Ошибка типов"),
+            Self::TypeError => language.select("Type error", "Ошибка типа"),
+            Self::SyntaxError => language.select("Syntax error", "Ошибка синтаксиса"),
+            Self::ImportError => language.select("Import error", "Ошибка импорта"),
+            Self::UndefinedVariable => {
+                language.select("Undefined variable", "Неопределенная переменная")
+            }
+            Self::UndefinedFunction => {
+                language.select("Undefined function", "Неопределенная функция")
+            }
+            Self::UndefinedMethod => language.select("Undefined method", "Неопределенный метод"),
+            Self::TypeMismatch => language.select("Type mismatch", "Несоответствие типов"),
+            Self::Panic => language.select("Panic", "Паника"),
+            Self::DivisionByZero => language.select("Division by zero", "Деление на ноль"),
+            Self::InvalidOperation => language.select("Invalid operation", "Недопустимая операция"),
+            Self::IoError => language.select("I/O error", "Ошибка ввода-вывода"),
+            Self::UnexpectedReturn => language.select("Unexpected return", "Неожиданный return"),
+            Self::StackTrace => language.select("Stack trace:", "Стек вызовов:"),
+            Self::At => language.select("at", "в"),
+        }
+    }
+}
+
 pub fn localize_message(message: &str, language: DiagnosticLanguage) -> String {
     if message.is_empty() {
         return String::new();

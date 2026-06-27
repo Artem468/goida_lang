@@ -124,6 +124,27 @@ impl HirSource for Module {
         self.classes.keys().copied().collect()
     }
 
+    fn class_method_metadata(&self) -> Vec<goida_hir::ClassMethodMetadata> {
+        let mut metadata = Vec::new();
+        for (class_name, class) in &self.classes {
+            class.read(|class| {
+                metadata.extend(
+                    class
+                        .methods
+                        .iter()
+                        .map(
+                            |(method_name, (_, is_static, _))| goida_hir::ClassMethodMetadata {
+                                class_name: *class_name,
+                                method_name: *method_name,
+                                is_static: *is_static,
+                            },
+                        ),
+                );
+            });
+        }
+        metadata
+    }
+
     fn is_module_name(&self, name: Symbol) -> bool {
         self.modules.contains_key(&name)
     }

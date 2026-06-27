@@ -16,8 +16,16 @@ pub trait HirSource {
     fn functions(&self) -> Vec<Arc<FunctionDefinition>>;
     fn functions_to_type_check(&self) -> Vec<Arc<FunctionDefinition>>;
     fn class_names(&self) -> Vec<Symbol>;
+    fn class_method_metadata(&self) -> Vec<ClassMethodMetadata>;
     fn is_module_name(&self, name: Symbol) -> bool;
     fn callable_signatures(&self) -> Vec<CallableSignature>;
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct ClassMethodMetadata {
+    pub class_name: Symbol,
+    pub method_name: Symbol,
+    pub is_static: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -48,6 +56,7 @@ pub struct HirModule {
     pub body: Vec<StmtId>,
     pub functions: Vec<Arc<FunctionDefinition>>,
     pub callable_signatures: Vec<CallableSignature>,
+    pub class_methods: Vec<ClassMethodMetadata>,
     pub type_definitions: Vec<DataType>,
     pub global_names: Vec<Symbol>,
     pub inferred_types: HashMap<ExprId, DataType>,
@@ -266,6 +275,7 @@ impl Lowerer {
             body: module.body().to_vec(),
             functions: module.functions_to_type_check(),
             callable_signatures: module.callable_signatures(),
+            class_methods: module.class_method_metadata(),
             type_definitions: module.arena().types.clone(),
             ..HirModule::default()
         };
