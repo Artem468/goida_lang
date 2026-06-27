@@ -1,5 +1,5 @@
 use crate::ast::prelude::{ErrorData, Span};
-use crate::builtins::iterator::collect_iterator;
+use crate::builtins::iterator::for_each_iterator;
 use crate::interpreter::prelude::{Interpreter, RuntimeError, Value};
 use crate::{bail_runtime, runtime_error};
 use string_interner::DefaultSymbol as Symbol;
@@ -87,24 +87,47 @@ impl Interpreter {
         Ok(())
     }
 
-    pub(crate) fn iterable_values(
+    pub(crate) fn for_each_iterable(
         &mut self,
         value: Value,
         span: Span,
-    ) -> Result<Vec<Value>, RuntimeError> {
+        mut visit: impl FnMut(&mut Self, Value) -> Result<(), RuntimeError>,
+    ) -> Result<(), RuntimeError> {
         match value {
-            Value::List(values) => Ok(values.read(Clone::clone)),
-            Value::Array(values) => Ok(values.as_ref().clone()),
-            Value::Text(value) => Ok(value
-                .chars()
-                .map(|character| Value::Text(character.to_string()))
-                .collect()),
-            Value::Dict(values) => Ok(values.read(|values| {
-                let mut keys = values.keys().cloned().collect::<Vec<_>>();
-                keys.sort();
-                keys.into_iter().map(Value::Text).collect()
-            })),
-            Value::Iterator(iterator) => collect_iterator(self, &iterator, span),
+            Value::List(values) => {
+                let len = values.read(Vec::len);
+                for index in 0..len {
+                    let Some(value) = values.read(|values| values.get(index).cloned()) else {
+                        continue;
+                    };
+                    visit(self, value)?;
+                }
+                Ok(())
+            }
+            Value::Array(values) => {
+                for value in values.iter().cloned() {
+                    visit(self, value)?;
+                }
+                Ok(())
+            }
+            Value::Text(value) => {
+                for character in value.chars() {
+                    visit(self, Value::Text(character.to_string()))?;
+                }
+                Ok(())
+            }
+            Value::Dict(values) => {
+                let keys = values.read(|values| {
+                    let mut keys = values.keys().cloned().collect::<Vec<_>>();
+                    keys.sort();
+                    keys
+                });
+                for key in keys {
+                    visit(self, Value::Text(key))?;
+                }
+                Ok(())
+            }
+            Value::Iterator(iterator) => for_each_iterator(self, &iterator, span, visit),
             _ => bail_runtime!(TypeError, span, "Value is not iterable"),
         }
     }

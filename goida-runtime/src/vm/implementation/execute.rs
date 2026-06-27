@@ -276,19 +276,17 @@ impl<'a> Vm<'a> {
                     iterable,
                     body,
                 } => {
-                    let values = self
-                        .interpreter
-                        .iterable_values(Self::get(&registers, *iterable), span)?;
+                    let iterable = Self::get(&registers, *iterable);
                     let module = self.module;
                     self.interpreter.scoped_child_environment(
                         |_| {},
                         |interpreter| {
-                            for value in values {
+                            interpreter.for_each_iterable(iterable, span, |interpreter, value| {
                                 interpreter
                                     .environment
                                     .write(|environment| environment.define(*variable, value));
-                                Vm::new(interpreter, module).run(body)?;
-                            }
+                                Vm::new(interpreter, module).run(body)
+                            })?;
                             Ok(())
                         },
                     )?;

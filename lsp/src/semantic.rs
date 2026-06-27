@@ -354,6 +354,7 @@ fn collect_expression_tokens(
             object,
             method,
             args,
+            ..
         } => {
             collect_expression_tokens(module, interner, *object, text, line_starts, out);
             if let Some(name) = module.arena.resolve_symbol(interner, *method) {

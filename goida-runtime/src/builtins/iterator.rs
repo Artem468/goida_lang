@@ -59,6 +59,20 @@ pub(crate) fn collect_iterator(
 ) -> Result<Vec<Value>, RuntimeError> {
     let mut output = Vec::new();
 
+    for_each_iterator(interp, iterator, span, |_, value| {
+        output.push(value);
+        Ok(())
+    })?;
+
+    Ok(output)
+}
+
+pub(crate) fn for_each_iterator(
+    interp: &mut Interpreter,
+    iterator: &RuntimeIterator,
+    span: Span,
+    mut visit: impl FnMut(&mut Interpreter, Value) -> Result<(), RuntimeError>,
+) -> Result<(), RuntimeError> {
     'items: for source_item in iterator.source.iter() {
         let mut current = source_item.clone();
         for step in iterator.steps.iter() {
@@ -75,10 +89,10 @@ pub(crate) fn collect_iterator(
                 }
             }
         }
-        output.push(current);
+        visit(interp, current)?;
     }
 
-    Ok(output)
+    Ok(())
 }
 
 pub fn setup_iterator_class(
