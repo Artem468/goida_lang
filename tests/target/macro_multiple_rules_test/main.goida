@@ -1,0 +1,8 @@
+
+macro choose {
+    () => { "empty" };
+    ($value:expr) => { $value };
+}
+
+печать(choose!())
+печать(choose!("value"))

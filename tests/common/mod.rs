@@ -6,14 +6,14 @@ use std::sync::OnceLock;
 static RELEASE_BINARY: OnceLock<PathBuf> = OnceLock::new();
 
 pub fn goida_command() -> GoidaCommand {
-    GoidaCommand {
-        command: Command::new(release_binary()),
-    }
+    let mut command = Command::new(release_binary());
+    command.current_dir(workspace_root());
+    GoidaCommand { command }
 }
 
 fn release_binary() -> &'static Path {
     RELEASE_BINARY.get_or_init(|| {
-        let workspace = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let workspace = workspace_root();
         let status = Command::new(env!("CARGO"))
             .current_dir(&workspace)
             .args(["build", "--release", "-p", "goida-cli"])
@@ -36,6 +36,13 @@ fn release_binary() -> &'static Path {
             .join("release")
             .join(format!("goida{}", std::env::consts::EXE_SUFFIX))
     })
+}
+
+pub fn workspace_root() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .expect("test crate should live under workspace root")
+        .to_path_buf()
 }
 
 pub struct GoidaCommand {

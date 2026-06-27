@@ -315,13 +315,14 @@ impl<'a> Vm<'a> {
                         let error_message = error.error_message();
                         let mut handled = false;
                         for handler in handlers {
-                            if handler.error_type.is_none()
-                                || self.interpreter.runtime_error_matches(
+                            if match handler.error_type {
+                                None => true,
+                                Some(error_type) => self.interpreter.runtime_error_matches(
                                     &error_class,
-                                    handler.error_type.unwrap(),
+                                    error_type,
                                     self.module,
-                                )
-                            {
+                                ),
+                            } {
                                 let module = self.module;
                                 self.interpreter.scoped_child_environment(
                                     |environment| {

@@ -1,0 +1,6 @@
+
+macro twice {
+    ($x:expr) => { $x + $x };
+}
+
+print(twice!(2))

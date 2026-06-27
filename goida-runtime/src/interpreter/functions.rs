@@ -59,7 +59,9 @@ impl InterpreterFunctions for Interpreter {
         current_module_id: Symbol,
         span: Span,
     ) -> Result<Value, RuntimeError> {
-        let name_str = self.resolve_symbol(name).unwrap();
+        let name_str = self
+            .resolve_symbol(name)
+            .unwrap_or_else(|| "<unknown>".to_string());
 
         if let Some(val) = self.environment.read(|env| env.get(&name)) {
             match val {
@@ -267,9 +269,19 @@ impl Interpreter {
             }
         }
 
-        Ok(final_args
+        final_args
             .into_iter()
-            .map(|val| val.expect("argument binding should be complete"))
-            .collect())
+            .enumerate()
+            .map(|(index, val)| {
+                val.ok_or_else(|| {
+                    runtime_error!(
+                        InvalidOperation,
+                        span,
+                        "argument {} was not bound",
+                        index + 1
+                    )
+                })
+            })
+            .collect()
     }
 }

@@ -2,8 +2,8 @@ mod common;
 
 #[test]
 fn test_english_syntax_aliases() {
-    let dir = std::path::Path::new("target/english_syntax_aliases_test");
-    std::fs::create_dir_all(dir).expect("Не удалось создать временную папку теста");
+    let dir = common::workspace_root().join("target/english_syntax_aliases_test");
+    std::fs::create_dir_all(&dir).expect("Не удалось создать временную папку теста");
     let main_file = dir.join("main.goida");
     std::fs::write(
         &main_file,
@@ -114,8 +114,8 @@ fn test_classes_example() {
 
 #[test]
 fn test_method_chain_can_continue_on_new_lines() {
-    let dir = std::path::Path::new("target/multiline_method_chain_test");
-    std::fs::create_dir_all(dir).expect("Не удалось создать временную папку теста");
+    let dir = common::workspace_root().join("target/multiline_method_chain_test");
+    std::fs::create_dir_all(&dir).expect("Не удалось создать временную папку теста");
     let main_file = dir.join("main.goida");
     std::fs::write(
         &main_file,
@@ -180,8 +180,8 @@ fn test_method_chain_can_continue_on_new_lines() {
 
 #[test]
 fn test_binary_expressions_can_continue_on_new_lines() {
-    let dir = std::path::Path::new("target/multiline_binary_expression_test");
-    std::fs::create_dir_all(dir).expect("Не удалось создать временную папку теста");
+    let dir = common::workspace_root().join("target/multiline_binary_expression_test");
+    std::fs::create_dir_all(&dir).expect("Не удалось создать временную папку теста");
     let main_file = dir.join("main.goida");
     std::fs::write(
         &main_file,
@@ -302,8 +302,8 @@ fn test_thread_example() {
 
 #[test]
 fn test_static_method_call_with_double_colon() {
-    let dir = std::path::Path::new("target/static_method_double_colon_test");
-    std::fs::create_dir_all(dir).expect("failed to create temporary test directory");
+    let dir = common::workspace_root().join("target/static_method_double_colon_test");
+    std::fs::create_dir_all(&dir).expect("failed to create temporary test directory");
 
     let source = r#"
 args = System::args()
@@ -336,8 +336,8 @@ print(1)
 
 #[test]
 fn test_static_method_call_with_dot_is_rejected() {
-    let dir = std::path::Path::new("target/static_method_dot_rejected_test");
-    std::fs::create_dir_all(dir).expect("failed to create temporary test directory");
+    let dir = common::workspace_root().join("target/static_method_dot_rejected_test");
+    std::fs::create_dir_all(&dir).expect("failed to create temporary test directory");
 
     let source = r#"
 System.args()
@@ -375,8 +375,8 @@ System.args()
 
 #[test]
 fn test_static_method_call_with_dot_uses_detected_russian_error() {
-    let dir = std::path::Path::new("target/static_method_dot_russian_error_test");
-    std::fs::create_dir_all(dir).expect("failed to create temporary test directory");
+    let dir = common::workspace_root().join("target/static_method_dot_russian_error_test");
+    std::fs::create_dir_all(&dir).expect("failed to create temporary test directory");
 
     let source = r#"
 Система.аргументы()
@@ -414,8 +414,8 @@ fn test_static_method_call_with_dot_uses_detected_russian_error() {
 
 #[test]
 fn test_instance_method_call_with_double_colon_is_rejected() {
-    let dir = std::path::Path::new("target/instance_method_double_colon_rejected_test");
-    std::fs::create_dir_all(dir).expect("failed to create temporary test directory");
+    let dir = common::workspace_root().join("target/instance_method_double_colon_rejected_test");
+    std::fs::create_dir_all(&dir).expect("failed to create temporary test directory");
 
     let source = r#"
 class Counter {
@@ -460,8 +460,8 @@ counter::value()
 
 #[test]
 fn test_runtime_errors_are_localized_from_existing_messages() {
-    let dir = std::path::Path::new("target/runtime_error_localization_test");
-    std::fs::create_dir_all(dir).expect("failed to create temporary test directory");
+    let dir = common::workspace_root().join("target/runtime_error_localization_test");
+    std::fs::create_dir_all(&dir).expect("failed to create temporary test directory");
 
     let russian_file = dir.join("russian.goida");
     std::fs::write(
@@ -538,8 +538,8 @@ list().get()
 
 #[test]
 fn test_user_raised_message_is_not_localized() {
-    let dir = std::path::Path::new("target/user_raise_message_not_localized_test");
-    std::fs::create_dir_all(dir).expect("failed to create temporary test directory");
+    let dir = common::workspace_root().join("target/user_raise_message_not_localized_test");
+    std::fs::create_dir_all(&dir).expect("failed to create temporary test directory");
 
     let source = r#"
 класс МояОшибка {
@@ -584,8 +584,8 @@ fn test_user_raised_message_is_not_localized() {
 
 #[test]
 fn test_top_level_thread_block_executes_and_updates_outer_variable() {
-    let dir = std::path::Path::new("target/top_level_thread_block_test");
-    std::fs::create_dir_all(dir).expect("Не удалось создать временную папку теста");
+    let dir = common::workspace_root().join("target/top_level_thread_block_test");
+    std::fs::create_dir_all(&dir).expect("Не удалось создать временную папку теста");
 
     let source = r#"
 значение = 1

@@ -82,7 +82,10 @@ pub fn setup_list_class(interner: &SharedInterner) -> (Symbol, SharedMut<Runtime
                     let idx = raw_idx.resolve_index(vec.len(), span)?;
                     vec.remove(idx)
                 } else {
-                    vec.pop().unwrap()
+                    let Some(value) = vec.pop() else {
+                        return bail_runtime!(InvalidOperation, span, "удаление у пустого списка");
+                    };
+                    value
                 };
 
                 Ok(val)

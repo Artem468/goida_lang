@@ -1,11 +1,10 @@
 use std::fs;
-use std::path::Path;
 
 mod common;
 
 #[test]
 fn test_all_examples() {
-    let examples_dir = Path::new("examples");
+    let examples_dir = common::workspace_root().join("examples");
 
     assert!(examples_dir.exists(), "Папка examples не найдена");
 
@@ -92,8 +91,8 @@ fn test_imported_top_level_globals_are_available() {
 
 #[test]
 fn test_local_binding_shadows_import_alias_for_property_access() {
-    let dir = Path::new("target/import_shadow_property_access");
-    fs::create_dir_all(dir).expect("Не удалось создать временную папку теста");
+    let dir = common::workspace_root().join("target/import_shadow_property_access");
+    fs::create_dir_all(&dir).expect("Не удалось создать временную папку теста");
     fs::write(dir.join("mod.goida"), "value = 41\n").expect("Не удалось записать временный модуль");
     fs::write(
         dir.join("main.goida"),
@@ -125,8 +124,8 @@ fn test_local_binding_shadows_import_alias_for_property_access() {
 
 #[test]
 fn test_class_inheritance_reuses_base_members() {
-    let dir = Path::new("target/class_inheritance_test");
-    fs::create_dir_all(dir).expect("Не удалось создать временную папку теста");
+    let dir = common::workspace_root().join("target/class_inheritance_test");
+    fs::create_dir_all(&dir).expect("Не удалось создать временную папку теста");
     let source = r#"
 класс База {
     публичный значение: число = 7
@@ -173,8 +172,8 @@ fn test_class_inheritance_reuses_base_members() {
 
 #[test]
 fn test_system_args_returns_script_arguments() {
-    let dir = Path::new("target/system_args_test");
-    fs::create_dir_all(dir).expect("Не удалось создать временную папку теста");
+    let dir = common::workspace_root().join("target/system_args_test");
+    fs::create_dir_all(&dir).expect("Не удалось создать временную папку теста");
     let source = r#"
 печать(Система::аргументы().объединить("|"))
 "#;
@@ -208,8 +207,8 @@ fn test_system_args_returns_script_arguments() {
 
 #[test]
 fn test_try_catch_catches_by_base_error_class() {
-    let dir = Path::new("target/try_catch_test");
-    fs::create_dir_all(dir).expect("Не удалось создать временную папку теста");
+    let dir = common::workspace_root().join("target/try_catch_test");
+    fs::create_dir_all(&dir).expect("Не удалось создать временную папку теста");
     let source = r#"
 класс Ошибка {
 }
@@ -250,8 +249,8 @@ fn test_try_catch_catches_by_base_error_class() {
 
 #[test]
 fn test_raise_can_be_caught_by_base_class() {
-    let dir = Path::new("target/raise_test");
-    fs::create_dir_all(dir).expect("Не удалось создать временную папку теста");
+    let dir = common::workspace_root().join("target/raise_test");
+    fs::create_dir_all(&dir).expect("Не удалось создать временную папку теста");
     let source = r#"
 класс Ошибка {
 }
@@ -292,8 +291,8 @@ fn test_raise_can_be_caught_by_base_class() {
 
 #[test]
 fn test_builtin_error_classes_do_not_need_declarations() {
-    let dir = Path::new("target/builtin_error_classes_test");
-    fs::create_dir_all(dir).expect("Не удалось создать временную папку теста");
+    let dir = common::workspace_root().join("target/builtin_error_classes_test");
+    fs::create_dir_all(&dir).expect("Не удалось создать временную папку теста");
     let source = r#"
 попробовать {
     печать(10 / 0)
@@ -334,8 +333,8 @@ fn test_builtin_error_classes_do_not_need_declarations() {
 
 #[test]
 fn test_catch_can_receive_error_text_and_try_multiple_handlers() {
-    let dir = Path::new("target/catch_error_text_test");
-    fs::create_dir_all(dir).expect("Не удалось создать временную папку теста");
+    let dir = common::workspace_root().join("target/catch_error_text_test");
+    fs::create_dir_all(&dir).expect("Не удалось создать временную папку теста");
     let source = r#"
 попробовать {
     выбросить ОшибкаОперации("важный текст")
@@ -381,8 +380,8 @@ fn test_catch_can_receive_error_text_and_try_multiple_handlers() {
 
 #[test]
 fn test_unknown_variable_is_reported_while_parsing() {
-    let dir = Path::new("target/parse_unknown_name_test");
-    fs::create_dir_all(dir).expect("Не удалось создать временную папку теста");
+    let dir = common::workspace_root().join("target/parse_unknown_name_test");
+    fs::create_dir_all(&dir).expect("Не удалось создать временную папку теста");
     let main_file = dir.join("main.goida");
     fs::write(&main_file, "печать(не_существует)\n").expect("Не удалось записать временный файл");
 

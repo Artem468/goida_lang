@@ -80,12 +80,13 @@ impl ParserTrait {
     }
 
     fn install_builtins(&mut self) {
-        BUILTINS
-            .install(&mut BuiltinParserTarget {
-                module: &mut self.module,
-                interner: &self.interner,
-            })
-            .unwrap();
+        match BUILTINS.install(&mut BuiltinParserTarget {
+            module: &mut self.module,
+            interner: &self.interner,
+        }) {
+            Ok(()) => {}
+            Err(error) => match error {},
+        }
     }
 
     fn parse_into_module(&mut self, code: &str) -> Result<(), ParseError> {

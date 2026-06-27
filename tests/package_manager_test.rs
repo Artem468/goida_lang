@@ -8,7 +8,7 @@ mod common;
 
 #[test]
 fn package_manager_creates_project_and_updates_git_dependencies() {
-    let workspace = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let workspace = common::workspace_root();
     let temp = workspace.join("target/package_manager_test");
     if temp.exists() {
         fs::remove_dir_all(&temp).expect("failed to clear package manager test directory");
@@ -68,7 +68,7 @@ fn package_manager_creates_project_and_updates_git_dependencies() {
 
 #[test]
 fn package_manager_adds_local_path_dependencies() {
-    let workspace = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let workspace = common::workspace_root();
     let temp = workspace.join("target/package_manager_path_test");
     if temp.exists() {
         fs::remove_dir_all(&temp).expect("failed to clear path dependency test directory");
@@ -115,7 +115,7 @@ fn package_manager_adds_local_path_dependencies() {
 
 #[test]
 fn package_manager_rejects_add_without_venv() {
-    let workspace = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let workspace = common::workspace_root();
     let temp = workspace.join("target/package_manager_requires_venv_test");
     if temp.exists() {
         fs::remove_dir_all(&temp).expect("failed to clear requires venv test directory");
@@ -142,7 +142,7 @@ fn package_manager_rejects_add_without_venv() {
 
 #[test]
 fn package_manager_accepts_legacy_active_venv_without_config() {
-    let workspace = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let workspace = common::workspace_root();
     let temp = workspace.join("target/package_manager_legacy_venv_test");
     if temp.exists() {
         fs::remove_dir_all(&temp).expect("failed to clear legacy venv test directory");
@@ -178,7 +178,7 @@ fn package_manager_accepts_legacy_active_venv_without_config() {
 
 #[test]
 fn package_manager_creates_venv_and_installs_active_dependencies_there() {
-    let workspace = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let workspace = common::workspace_root();
     let temp = workspace.join("target/package_manager_venv_test");
     if temp.exists() {
         fs::remove_dir_all(&temp).expect("failed to clear venv test directory");
@@ -246,7 +246,7 @@ fn package_manager_creates_venv_and_installs_active_dependencies_there() {
 
 #[test]
 fn package_manager_installs_declared_prebuilt_native_artifacts() {
-    let workspace = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let workspace = common::workspace_root();
     let temp = fresh_test_dir(&workspace, "package_manager_prebuilt_native_test");
     let dependency = temp.join("native_dep");
     let library_name = native_library_name("beacon");
@@ -288,7 +288,7 @@ platforms = ["{}"]
 
 #[test]
 fn package_manager_builds_native_dependency_and_syncs_transitive_dependencies() {
-    let workspace = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let workspace = common::workspace_root();
     let temp = fresh_test_dir(&workspace, "package_manager_native_build_test");
     let dependency = temp.join("native_dep");
     let transitive = dependency.join("vendor/helper");
@@ -378,7 +378,7 @@ path = "{}"
 
 #[test]
 fn package_manager_rejects_missing_prebuilt_native_artifact() {
-    let workspace = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let workspace = common::workspace_root();
     let temp = fresh_test_dir(&workspace, "package_manager_missing_native_test");
     let dependency = temp.join("native_dep");
     fs::create_dir_all(&dependency).expect("failed to create dependency");

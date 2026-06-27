@@ -1,0 +1,8 @@
+
+macro twice {
+    ($x:expr) => { $x + $x };
+}
+
+печать(twice!(3))
+печать(twice![4])
+печать(twice!{5})

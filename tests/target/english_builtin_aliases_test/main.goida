@@ -1,0 +1,22 @@
+
+print("a", "b", sep="-", end="!\n")
+
+items = list(1, 2)
+items.push(3)
+print(items.length())
+print(items.join(":"))
+print(items.get(1))
+
+created = new List(4, 5)
+created.push(6)
+print(created.length())
+print(created.join(","))
+
+text = string("  Hi ")
+print(text.trim().lower())
+
+pattern = regex("[a-z]+")
+print(pattern.matches("abc"))
+
+first = items.get(0)
+print(format!("{} {}", "ok", first))

@@ -14,7 +14,10 @@ impl Session {
     pub fn new() -> Self {
         let interner = goida_model::new_interner();
         let mut runtime = Interpreter::new(interner);
-        BUILTINS.install(&mut runtime).unwrap();
+        match BUILTINS.install(&mut runtime) {
+            Ok(()) => {}
+            Err(error) => match error {},
+        }
         Self { runtime }
     }
 

@@ -486,6 +486,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "goida-integration-tests"
+version = "0.1.0"
+
+[[package]]
 name = "goida-lsp"
 version = "0.1.0"
 dependencies = [
@@ -531,10 +535,6 @@ dependencies = [
  "goida-model",
  "string-interner",
 ]
-
-[[package]]
-name = "goida_lang"
-version = "0.1.0"
 
 [[package]]
 name = "hashbrown"

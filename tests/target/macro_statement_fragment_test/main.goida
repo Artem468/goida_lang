@@ -1,0 +1,8 @@
+
+macro when {
+    ($condition:expr, $statement:stmt) => { if ($condition) { $statement } };
+}
+
+value = 0
+when!(true, value = 7)
+печать(value)

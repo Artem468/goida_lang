@@ -43,8 +43,8 @@ fn test_assignment_type_hints() {
 
 #[test]
 fn test_compound_assignment_in_statements() {
-    let dir = std::path::Path::new("target/compound_assignment_test");
-    std::fs::create_dir_all(dir).expect("Не удалось создать временную папку теста");
+    let dir = common::workspace_root().join("target/compound_assignment_test");
+    std::fs::create_dir_all(&dir).expect("Не удалось создать временную папку теста");
 
     let source = r#"
 класс Счетчик {
@@ -104,8 +104,8 @@ fn test_compound_assignment_in_statements() {
 
 #[test]
 fn test_foreach_statement_iterates_collections() {
-    let dir = std::path::Path::new("target/foreach_statement_test");
-    std::fs::create_dir_all(dir).expect("Не удалось создать временную папку теста");
+    let dir = common::workspace_root().join("target/foreach_statement_test");
+    std::fs::create_dir_all(&dir).expect("Не удалось создать временную папку теста");
 
     let source = r#"
 сумма = 0
@@ -147,8 +147,8 @@ fn test_foreach_statement_iterates_collections() {
 
 #[test]
 fn test_constant_assignment_cannot_be_changed() {
-    let dir = std::path::Path::new("target/constant_assignment_test");
-    std::fs::create_dir_all(dir).expect("Не удалось создать временную папку теста");
+    let dir = common::workspace_root().join("target/constant_assignment_test");
+    std::fs::create_dir_all(&dir).expect("Не удалось создать временную папку теста");
 
     let main_file = dir.join("main.goida");
     std::fs::write(
@@ -187,8 +187,8 @@ fn test_constant_assignment_cannot_be_changed() {
 
 #[test]
 fn test_lazy_iterator_map_filter_reduce() {
-    let dir = std::path::Path::new("target/lazy_iterator_test");
-    std::fs::create_dir_all(dir).expect("Не удалось создать временную папку теста");
+    let dir = common::workspace_root().join("target/lazy_iterator_test");
+    std::fs::create_dir_all(&dir).expect("Не удалось создать временную папку теста");
 
     let source = r#"
 функция удвоить(x) {
@@ -242,8 +242,8 @@ fn test_lazy_iterator_map_filter_reduce() {
 
 #[test]
 fn test_string_utilities_and_regular_expressions() {
-    let dir = std::path::Path::new("target/string_regex_test");
-    std::fs::create_dir_all(dir).expect("Не удалось создать временную папку теста");
+    let dir = common::workspace_root().join("target/string_regex_test");
+    std::fs::create_dir_all(&dir).expect("Не удалось создать временную папку теста");
 
     let source = r##"
 текст = "  abc-123 def-45  "
@@ -278,8 +278,8 @@ fn test_string_utilities_and_regular_expressions() {
 
 #[test]
 fn test_regex_class_uses_russian_name() {
-    let dir = std::path::Path::new("target/russian_regex_test");
-    std::fs::create_dir_all(dir).expect("Не удалось создать временную папку теста");
+    let dir = common::workspace_root().join("target/russian_regex_test");
+    std::fs::create_dir_all(&dir).expect("Не удалось создать временную папку теста");
 
     let main_file = dir.join("main.goida");
     std::fs::write(
@@ -316,8 +316,8 @@ fn test_regex_class_uses_russian_name() {
 
 #[test]
 fn test_lambda_expression_and_block_forms() {
-    let dir = std::path::Path::new("target/lambda_expression_test");
-    std::fs::create_dir_all(dir).expect("Не удалось создать временную папку теста");
+    let dir = common::workspace_root().join("target/lambda_expression_test");
+    std::fs::create_dir_all(&dir).expect("Не удалось создать временную папку теста");
 
     let main_file = dir.join("main.goida");
     std::fs::write(
@@ -368,8 +368,8 @@ fn test_lambda_expression_and_block_forms() {
 
 #[test]
 fn test_lambda_arguments_defaults_named_args_and_shadowing() {
-    let dir = std::path::Path::new("target/lambda_arguments_test");
-    std::fs::create_dir_all(dir).expect("Не удалось создать временную папку теста");
+    let dir = common::workspace_root().join("target/lambda_arguments_test");
+    std::fs::create_dir_all(&dir).expect("Не удалось создать временную папку теста");
 
     let main_file = dir.join("main.goida");
     std::fs::write(
@@ -421,8 +421,8 @@ x = 100
 
 #[test]
 fn test_inline_lambdas_in_iterator_pipeline() {
-    let dir = std::path::Path::new("target/inline_lambda_iterator_test");
-    std::fs::create_dir_all(dir).expect("Не удалось создать временную папку теста");
+    let dir = common::workspace_root().join("target/inline_lambda_iterator_test");
+    std::fs::create_dir_all(&dir).expect("Не удалось создать временную папку теста");
 
     let main_file = dir.join("main.goida");
     std::fs::write(
@@ -467,8 +467,8 @@ fn test_inline_lambdas_in_iterator_pipeline() {
 
 #[test]
 fn test_foreach_array_dict_and_constant_compound_assignment() {
-    let dir = std::path::Path::new("target/foreach_constant_extended_test");
-    std::fs::create_dir_all(dir).expect("Не удалось создать временную папку теста");
+    let dir = common::workspace_root().join("target/foreach_constant_extended_test");
+    std::fs::create_dir_all(&dir).expect("Не удалось создать временную папку теста");
 
     let ok_source = r#"
 сумма = 0
