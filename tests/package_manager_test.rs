@@ -130,6 +130,8 @@ fn package_manager_rejects_add_without_venv() {
     let new_output = run_goida(&workspace, &temp, &["new", "demo"]);
     assert_success(&new_output, "goida new");
     let project = temp.join("demo");
+    let manifest_before = fs::read_to_string(project.join("goida.toml")).expect("missing manifest");
+    let lock_before = fs::read_to_string(project.join("goida.lock")).expect("missing lock");
 
     let add_output = run_goida(
         &workspace,
@@ -138,6 +140,50 @@ fn package_manager_rejects_add_without_venv() {
     );
     assert_failure(&add_output, "goida add without venv");
     assert!(!project.join(".goida/deps/lib").exists());
+    assert_eq!(
+        fs::read_to_string(project.join("goida.toml")).expect("missing manifest"),
+        manifest_before
+    );
+    assert_eq!(
+        fs::read_to_string(project.join("goida.lock")).expect("missing lock"),
+        lock_before
+    );
+}
+
+#[test]
+fn package_manager_rejects_path_like_dependency_name() {
+    let workspace = common::workspace_root();
+    let temp = workspace.join("target/package_manager_invalid_dep_name_test");
+    if temp.exists() {
+        fs::remove_dir_all(&temp).expect("failed to clear invalid dep name test directory");
+    }
+    fs::create_dir_all(&temp).expect("failed to create invalid dep name test directory");
+
+    let local_dep = temp.join("local_dep");
+    fs::create_dir_all(&local_dep).expect("failed to create local dependency");
+    fs::write(local_dep.join("mod.goida"), "значение = 7\n")
+        .expect("failed to write local dependency module");
+
+    let new_output = run_goida(&workspace, &temp, &["new", "demo"]);
+    assert_success(&new_output, "goida new");
+    let project = temp.join("demo");
+    let manifest_before = fs::read_to_string(project.join("goida.toml")).expect("missing manifest");
+    let lock_before = fs::read_to_string(project.join("goida.lock")).expect("missing lock");
+
+    let add_output = run_goida(
+        &workspace,
+        &project,
+        &["add", "../bad", "--path", local_dep.to_str().unwrap()],
+    );
+    assert_failure(&add_output, "goida add invalid dependency name");
+    assert_eq!(
+        fs::read_to_string(project.join("goida.toml")).expect("missing manifest"),
+        manifest_before
+    );
+    assert_eq!(
+        fs::read_to_string(project.join("goida.lock")).expect("missing lock"),
+        lock_before
+    );
 }
 
 #[test]

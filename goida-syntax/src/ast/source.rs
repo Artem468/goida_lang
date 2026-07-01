@@ -1,7 +1,7 @@
 use ariadne::{Cache, Source};
 use std::collections::{hash_map::Entry, HashMap};
 use std::fmt::{Debug, Display};
-use std::sync::RwLock;
+use std::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 #[derive(Debug)]
 /// File cache used by diagnostics to retrieve source text by path.
@@ -19,16 +19,25 @@ impl SourceManager {
 
     /// Loads a file into the cache if it is not present yet.
     pub fn load_file(&self, path: &str) {
-        let mut files = self.files.write().unwrap();
-        if let Entry::Vacant(entry) = files.entry(path.to_string()) {
-            if let Ok(content) = std::fs::read_to_string(entry.key()) {
-                entry.insert(Box::new(Source::from(content)));
-            }
+        if self.files_read().contains_key(path) {
+            return;
+        }
+
+        let Ok(content) = std::fs::read_to_string(path) else {
+            return;
+        };
+
+        if let Entry::Vacant(entry) = self.files_write().entry(path.to_string()) {
+            entry.insert(Box::new(Source::from(content)));
         }
     }
 
     /// Reads the current file content from disk.
     pub fn get_file_content(&self, path: &str) -> String {
+        if let Some(source) = self.files_read().get(path) {
+            return source.text().to_string();
+        }
+
         std::fs::read_to_string(path).unwrap_or_default()
     }
 
@@ -50,6 +59,18 @@ impl SourceManager {
         }
         (line, col)
     }
+
+    fn files_read(&self) -> RwLockReadGuard<'_, HashMap<String, Box<Source<String>>>> {
+        self.files
+            .read()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+
+    fn files_write(&self) -> RwLockWriteGuard<'_, HashMap<String, Box<Source<String>>>> {
+        self.files
+            .write()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
 }
 
 impl Default for SourceManager {
@@ -67,7 +88,7 @@ impl<'a> Cache<&'a String> for &SourceManager {
     ) -> Result<&Source<<Self as Cache<&'a String>>::Storage>, impl Debug> {
         let path_str: &str = path;
 
-        if let Some(source) = self.files.read().unwrap().get(path_str) {
+        if let Some(source) = self.files_read().get(path_str) {
             let source = source.as_ref() as *const Source<String>;
             // Sources are boxed, never replaced or removed, and cannot outlive the manager.
             return Ok::<&Source, String>(unsafe { &*source });
@@ -76,7 +97,7 @@ impl<'a> Cache<&'a String> for &SourceManager {
         let content =
             std::fs::read_to_string(path).map_err(|e| format!("Ошибка чтения {}: {}", path, e))?;
 
-        let mut map = self.files.write().unwrap();
+        let mut map = self.files_write();
         let source = map
             .entry(path_str.to_string())
             .or_insert_with(|| Box::new(Source::from(content)))

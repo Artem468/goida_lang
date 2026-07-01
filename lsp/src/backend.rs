@@ -549,26 +549,39 @@ fn span_to_location(document: &Document, uri: Url, span: Span) -> Option<Locatio
 }
 
 fn module_alias_before_completion(text: &str, char_offset: usize) -> Option<String> {
-    let chars = text.chars().collect::<Vec<_>>();
-    let mut pos = char_offset.min(chars.len());
+    let byte_offset = text
+        .char_indices()
+        .nth(char_offset)
+        .map(|(index, _)| index)
+        .unwrap_or(text.len());
+    let mut end = byte_offset;
 
-    while pos > 0 && is_identifier_continue(chars[pos - 1]) {
-        pos -= 1;
+    while let Some((index, ch)) = text[..end].char_indices().next_back() {
+        if !is_identifier_continue(ch) {
+            break;
+        }
+        end = index;
     }
-    if pos == 0 || chars[pos - 1] != '.' {
+
+    let Some((dot_index, '.')) = text[..end].char_indices().next_back() else {
         return None;
-    }
+    };
 
-    let alias_end = pos - 1;
+    let alias_end = dot_index;
     let mut alias_start = alias_end;
-    while alias_start > 0 && is_identifier_continue(chars[alias_start - 1]) {
-        alias_start -= 1;
+    while let Some((index, ch)) = text[..alias_start].char_indices().next_back() {
+        if !is_identifier_continue(ch) {
+            break;
+        }
+        alias_start = index;
     }
-    if alias_start == alias_end || !is_identifier_start(chars[alias_start]) {
+
+    let alias = &text[alias_start..alias_end];
+    if alias.is_empty() || !alias.chars().next().is_some_and(is_identifier_start) {
         return None;
     }
 
-    Some(chars[alias_start..alias_end].iter().collect())
+    Some(alias.to_string())
 }
 
 fn is_identifier_start(ch: char) -> bool {
@@ -606,5 +619,22 @@ mod tests {
             panic!("sync capability should include save options");
         };
         assert_eq!(save.include_text, Some(true));
+    }
+
+    #[test]
+    fn completion_alias_detection_does_not_require_full_document_chars() {
+        assert_eq!(
+            module_alias_before_completion("web.", 4),
+            Some("web".into())
+        );
+        assert_eq!(
+            module_alias_before_completion("печать(web.val", 14),
+            Some("web".into())
+        );
+        assert_eq!(
+            module_alias_before_completion("модуль.знач", 11),
+            Some("модуль".into())
+        );
+        assert_eq!(module_alias_before_completion("value", 5), None);
     }
 }

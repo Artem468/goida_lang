@@ -3,7 +3,7 @@ use std::{collections::BTreeMap, fs, path::Path};
 
 use super::MANIFEST_FILE;
 
-const LOCK_FILE: &str = "goida.lock";
+pub(super) const LOCK_FILE: &str = "goida.lock";
 
 #[derive(Debug, Serialize, Deserialize)]
 pub(super) struct Manifest {

@@ -90,9 +90,16 @@ pub fn setup_system_class(
     });
 
     // --- Система.сигнал() ---
-    define_method!(class_def, interner_ref, @static method::BEEP.canonical => (_, _, _) {
+    define_method!(class_def, interner_ref, @static method::BEEP.canonical => (_, _, span) {
         print!("\x07");
-        let _ = std::io::stdout().flush();
+        std::io::stdout().flush().map_err(|err| {
+            runtime_error!(
+                IOError,
+                span,
+                "Ошибка вывода {}",
+                err
+            )
+        })?;
         Ok(Value::Empty)
     });
 

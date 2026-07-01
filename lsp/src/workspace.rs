@@ -3,6 +3,18 @@ use std::path::{Path, PathBuf};
 
 use goida_syntax::import_paths::resolve_import_path as resolve_direct_import_path;
 
+const IGNORED_WORKSPACE_DIRS: &[&str] = &[
+    ".git",
+    ".goida",
+    ".idea",
+    ".vscode",
+    "build",
+    "dist",
+    "node_modules",
+    "target",
+    "tmp",
+];
+
 pub(crate) fn resolve_import_path(
     current_file: &Path,
     import_path: &str,
@@ -42,7 +54,7 @@ fn walk_goida_files(dir: &Path, files: &mut Vec<PathBuf>) {
     if dir
         .file_name()
         .and_then(|name| name.to_str())
-        .map(|name| matches!(name, ".git" | "target" | "node_modules" | ".idea"))
+        .map(|name| IGNORED_WORKSPACE_DIRS.contains(&name))
         .unwrap_or(false)
     {
         return;
@@ -57,15 +69,19 @@ fn walk_goida_files(dir: &Path, files: &mut Vec<PathBuf>) {
             continue;
         };
         let path = entry.path();
-        if path.is_dir() {
+        let Ok(file_type) = entry.file_type() else {
+            continue;
+        };
+        if file_type.is_dir() {
             walk_goida_files(&path, files);
             continue;
         }
-        if path
-            .extension()
-            .and_then(|v| v.to_str())
-            .map(|ext| ext.eq_ignore_ascii_case("goida"))
-            .unwrap_or(false)
+        if file_type.is_file()
+            && path
+                .extension()
+                .and_then(|v| v.to_str())
+                .map(|ext| ext.eq_ignore_ascii_case("goida"))
+                .unwrap_or(false)
         {
             files.push(path);
         }
@@ -74,7 +90,7 @@ fn walk_goida_files(dir: &Path, files: &mut Vec<PathBuf>) {
 
 #[cfg(test)]
 mod tests {
-    use super::resolve_import_path;
+    use super::{collect_goida_files, resolve_import_path};
     use std::fs;
     use std::path::PathBuf;
 
@@ -109,5 +125,29 @@ mod tests {
             deps_dir.join("главный.goida").canonicalize().unwrap(),
             resolved.canonicalize().unwrap()
         );
+    }
+
+    #[test]
+    fn workspace_scan_skips_goida_environment() {
+        let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("..")
+            .join("target")
+            .join("lsp_workspace_scan_test");
+        if root.exists() {
+            fs::remove_dir_all(&root).expect("failed to clear lsp scan test dir");
+        }
+
+        fs::create_dir_all(root.join(".goida/deps/package"))
+            .expect("failed to create ignored deps dir");
+        fs::write(root.join("main.goida"), "значение = 1\n").expect("failed to write main file");
+        fs::write(
+            root.join(".goida/deps/package/главный.goida"),
+            "значение = 2\n",
+        )
+        .expect("failed to write ignored dep file");
+
+        let files = collect_goida_files(std::slice::from_ref(&root));
+
+        assert_eq!(files, vec![root.join("main.goida")]);
     }
 }

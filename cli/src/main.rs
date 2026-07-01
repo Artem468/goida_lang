@@ -213,12 +213,25 @@ fn format_parse_error(err: &ParseError) -> String {
 }
 
 fn format_parse_error_with_language(err: &ParseError, language: DiagnosticLanguage) -> String {
-    let (kind, data) = match err {
-        ParseError::TypeError(e) => (parse_error_title(err, language), e),
-        ParseError::InvalidSyntax(e) => (parse_error_title(err, language), e),
-        ParseError::ImportError(e) => (parse_error_title(err, language), e),
-    };
+    let kind = parse_error_title(err, language);
+    let data = parse_error_data(err);
     format!("{kind}: {}", localize_message(&data.message, language))
+}
+
+fn parse_error_data(error: &ParseError) -> &ErrorData {
+    match error {
+        ParseError::TypeError(err)
+        | ParseError::InvalidSyntax(err)
+        | ParseError::ImportError(err) => err,
+    }
+}
+
+fn into_parse_error_data(error: ParseError) -> ErrorData {
+    match error {
+        ParseError::TypeError(err)
+        | ParseError::InvalidSyntax(err)
+        | ParseError::ImportError(err) => err,
+    }
 }
 
 fn parse_error_title(error: &ParseError, language: DiagnosticLanguage) -> &'static str {
@@ -301,11 +314,7 @@ fn runtime_error_data(error: RuntimeError) -> ErrorData {
         | RuntimeError::Panic(err)
         | RuntimeError::Raised(err, _)
         | RuntimeError::Return(err, _) => err,
-        RuntimeError::ImportError(err) => match err {
-            ParseError::TypeError(err)
-            | ParseError::InvalidSyntax(err)
-            | ParseError::ImportError(err) => err,
-        },
+        RuntimeError::ImportError(err) => into_parse_error_data(err),
     }
 }
 
@@ -331,7 +340,7 @@ fn execute_code(
     let path = PathBuf::from(filename);
 
     let parser = ProgramParser::new(session.interner(), filename, path.clone());
-    let _module = parser.module.clone();
+    let diagnostic_module = parser.module.clone();
 
     match parser.parse(code) {
         Ok(program) => {
@@ -347,14 +356,10 @@ fn execute_code(
             })?;
         }
         Err(err) => {
-            session.register_diagnostic_module(_module);
+            session.register_diagnostic_module(diagnostic_module);
             let language = session.diagnostic_language();
             let msg = parse_error_title(&err, language);
-            let data = match err {
-                ParseError::TypeError(e)
-                | ParseError::InvalidSyntax(e)
-                | ParseError::ImportError(e) => e,
-            };
+            let data = into_parse_error_data(err);
             render_error(session, msg, &data, true);
             return Err((msg.to_string(), data));
         }
@@ -394,7 +399,7 @@ fn render_error(session: &Session, msg: &str, error: &ErrorData, localize_note: 
         }
     }
 
-    Report::build(ReportKind::Error, (&file_name, ariadne_span.clone()))
+    if let Err(err) = Report::build(ReportKind::Error, (&file_name, ariadne_span.clone()))
         .with_message(display_msg)
         .with_label(
             Label::new((&file_name, ariadne_span))
@@ -404,26 +409,34 @@ fn render_error(session: &Session, msg: &str, error: &ErrorData, localize_note: 
         .with_note(note)
         .finish()
         .print(&intp.source_manager)
-        .expect("Can't build report message");
+    {
+        eprintln!("Не удалось вывести диагностическое сообщение: {err}");
+    }
 }
 
 fn run_repl(session: &mut Session) {
     println!("Интерактивный режим Гойда. Введите 'выход' для завершения.");
     loop {
         print!("гойда> ");
-        io::stdout().flush().unwrap();
+        if let Err(err) = io::stdout().flush() {
+            eprintln!("Ошибка вывода: {err}");
+            break;
+        }
         let mut input = String::new();
-        if io::stdin().read_line(&mut input).is_ok() {
-            let input = input.trim();
-            if input == "выход" || input == "exit" {
-                break;
-            }
-            if input.is_empty() {
-                continue;
-            }
-            if let Err(e) = execute_code(session, input, "repl") {
-                eprintln!("Ошибка: {}", e.0.lines().next().unwrap_or(&e.0));
-            }
+        if let Err(err) = io::stdin().read_line(&mut input) {
+            eprintln!("Ошибка ввода: {err}");
+            break;
+        }
+
+        let input = input.trim();
+        if input == "выход" || input == "exit" {
+            break;
+        }
+        if input.is_empty() {
+            continue;
+        }
+        if let Err(e) = execute_code(session, input, "repl") {
+            eprintln!("Ошибка: {}", e.0.lines().next().unwrap_or(&e.0));
         }
     }
 }

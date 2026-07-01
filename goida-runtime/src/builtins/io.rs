@@ -79,7 +79,14 @@ pub fn setup_io_func(interpreter: &mut Interpreter, interner: &SharedInterner) {
         expect_args!(arguments, 1, span, "ввод");
 
         print!("{}", interpreter.format_value(&arguments[0].value));
-        let _ = io::stdout().flush();
+        io::stdout().flush().map_err(|e| {
+            runtime_error!(
+                IOError,
+                span,
+                "Ошибка вывода {}",
+                e
+            )
+        })?;
 
         let mut input = String::new();
         if io::stdin().read_line(&mut input).is_ok() {

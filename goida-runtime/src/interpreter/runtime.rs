@@ -95,11 +95,8 @@ impl Interpreter {
     ) -> Result<(), RuntimeError> {
         match value {
             Value::List(values) => {
-                let len = values.read(Vec::len);
-                for index in 0..len {
-                    let Some(value) = values.read(|values| values.get(index).cloned()) else {
-                        continue;
-                    };
+                let values = values.read(Clone::clone);
+                for value in values {
                     visit(self, value)?;
                 }
                 Ok(())

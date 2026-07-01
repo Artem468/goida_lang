@@ -355,47 +355,41 @@ impl ParserTrait {
         let Some(name) = self.module.arena.resolve_symbol(&self.interner, symbol) else {
             return false;
         };
-        let parts = name.split('.').collect::<Vec<_>>();
-        if parts.len() > 1 {
-            let module_symbol = self.module.arena.intern_string(&self.interner, parts[0]);
-            if !scopes
-                .iter()
-                .rev()
-                .any(|scope| scope.contains(&module_symbol))
-            {
+        let mut parts = name.split('.');
+        let Some(first) = parts.next() else {
+            return false;
+        };
+        let Some(mut member_name) = parts.next() else {
+            return false;
+        };
+
+        let module_symbol = self.module.arena.intern_string(&self.interner, first);
+        if !scopes
+            .iter()
+            .rev()
+            .any(|scope| scope.contains(&module_symbol))
+        {
+            return false;
+        }
+
+        let mut module = self.resolve_import_alias_for_validation(&self.module, module_symbol);
+        for part in parts {
+            let Some(current_module) = module else {
                 return false;
-            }
-
-            let member_name = parts.last().copied().unwrap_or_default();
+            };
             let member_symbol = self.module.arena.intern_string(&self.interner, member_name);
-            return self
-                .resolve_module_path_for_validation(&self.module, &parts[..parts.len() - 1])
-                .map(|module| {
-                    module.functions.contains_key(&member_symbol)
-                        || module.classes.contains_key(&member_symbol)
-                        || module.globals.contains_key(&member_symbol)
-                })
-                .unwrap_or(false);
+            module = self.resolve_import_alias_for_validation(current_module, member_symbol);
+            member_name = part;
         }
 
-        false
-    }
-
-    fn resolve_module_path_for_validation<'a>(
-        &'a self,
-        current_module: &'a Module,
-        parts: &[&str],
-    ) -> Option<&'a Module> {
-        let (first, rest) = parts.split_first()?;
-        let first_symbol = self.module.arena.intern_string(&self.interner, first);
-        let mut module = self.resolve_import_alias_for_validation(current_module, first_symbol)?;
-
-        for part in rest {
-            let part_symbol = self.module.arena.intern_string(&self.interner, part);
-            module = self.resolve_import_alias_for_validation(module, part_symbol)?;
-        }
-
-        Some(module)
+        let member_symbol = self.module.arena.intern_string(&self.interner, member_name);
+        module
+            .map(|module| {
+                module.functions.contains_key(&member_symbol)
+                    || module.classes.contains_key(&member_symbol)
+                    || module.globals.contains_key(&member_symbol)
+            })
+            .unwrap_or(false)
     }
 
     fn resolve_import_alias_for_validation<'a>(

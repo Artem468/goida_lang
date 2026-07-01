@@ -1,10 +1,11 @@
-use crate::ast::prelude::{Span, Visibility};
+use crate::ast::prelude::{ErrorData, Span, Visibility};
 use crate::builtins::registry::*;
-use crate::define_method;
+use crate::interpreter::prelude::RuntimeError;
 use crate::interpreter::prelude::{
     CallArgListExt, RuntimeClassDefinition, RuntimeFieldData, SharedInterner, Value,
 };
 use crate::shared::SharedMut;
+use crate::{define_method, runtime_error};
 use std::io::{stdin, stdout, Write};
 use string_interner::DefaultSymbol as Symbol;
 
@@ -77,41 +78,41 @@ pub fn setup_terminal_class(
     }
 
     // --- Терминал.очистить() ---
-    define_method!(class_def, interner_ref, @static method::CLEAR.canonical => (_, _, _) {
+    define_method!(class_def, interner_ref, @static method::CLEAR.canonical => (_, _, span) {
         // ANSI escape-последовательность для очистки экрана и возврата курсора в 1,1
         print!("\x1B[2J\x1B[1;1H");
-        let _ = stdout().flush();
+        flush_stdout(span)?;
         Ok(Value::Empty)
     });
 
     // Метод: Терминал.заголовок(текст)
-    define_method!(class_def, interner_ref, @static method::TITLE.canonical => (interpreter, args, _) {
+    define_method!(class_def, interner_ref, @static method::TITLE.canonical => (interpreter, args, span) {
         let title = CallArgListExt::get_value(&args, 1)
             .map(|v| interpreter.format_value(v))
             .unwrap_or_default();
         print!("\x1b]0;{}\x07", title);
-        let _ = stdout().flush();
+        flush_stdout(span)?;
         Ok(Value::Empty)
     });
 
     // Метод: Терминал.скрыть_курсор()
-    define_method!(class_def, interner_ref, @static method::HIDE_CURSOR.canonical => (_, _, _) {
+    define_method!(class_def, interner_ref, @static method::HIDE_CURSOR.canonical => (_, _, span) {
         // ANSI последовательность: скрыть курсор
         print!("\x1b[?25l");
-        let _ = stdout().flush();
+        flush_stdout(span)?;
         Ok(Value::Empty)
     });
 
     // Метод: Терминал.показать_курсор()
-    define_method!(class_def, interner_ref, @static method::SHOW_CURSOR.canonical => (_, _, _) {
+    define_method!(class_def, interner_ref, @static method::SHOW_CURSOR.canonical => (_, _, span) {
         // ANSI последовательность: показать курсор
         print!("\x1b[?25h");
-        let _ = stdout().flush();
+        flush_stdout(span)?;
         Ok(Value::Empty)
     });
 
     // --- Терминал.позиция(х, у) ---
-    define_method!(class_def, interner_ref, @static method::POSITION.canonical => (_, args, _span) {
+    define_method!(class_def, interner_ref, @static method::POSITION.canonical => (_, args, span) {
         let x = CallArgListExt::get_value(&args, 1)
             .and_then(|v| v.as_i64())
             .unwrap_or(1);
@@ -120,25 +121,38 @@ pub fn setup_terminal_class(
             .unwrap_or(1);
         // ANSI: \x1b[Y;XH (отсчет с 1)
         print!("\x1b[{};{}H", y, x);
-        let _ = stdout().flush();
+        flush_stdout(span)?;
         Ok(Value::Empty)
     });
 
     // --- Терминал.пауза(сообщение) ---
-    define_method!(class_def, interner_ref, @static method::PAUSE.canonical => (_, args, _) {
+    define_method!(class_def, interner_ref, @static method::PAUSE.canonical => (_, args, span) {
         let msg = CallArgListExt::get_value(&args, 1)
             .and_then(|v| v.as_str())
             .map(|s| s.as_str())
             .unwrap_or("Нажмите Enter, чтобы продолжить...");
 
         print!("{}", msg);
-        let _ = stdout().flush();
+        flush_stdout(span)?;
 
         let mut buffer = String::new();
-        let _ = stdin().read_line(&mut buffer);
+        stdin().read_line(&mut buffer).map_err(|err| {
+            runtime_error!(
+                IOError,
+                span,
+                "Не удалось прочитать ввод: {}",
+                err
+            )
+        })?;
 
         Ok(Value::Empty)
     });
 
     (name_sym, SharedMut::new(class_def))
+}
+
+fn flush_stdout(span: Span) -> Result<(), RuntimeError> {
+    stdout()
+        .flush()
+        .map_err(|err| runtime_error!(IOError, span, "Ошибка вывода {}", err))
 }

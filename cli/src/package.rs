@@ -5,7 +5,7 @@ pub(crate) use venv::create_venv;
 
 use manifest::{
     read_lock, read_manifest, write_lock, write_manifest, BuildArtifact, BuildConfig, Dependency,
-    LockFile, LockedPackage, Manifest, PackageInfo,
+    LockFile, LockedPackage, Manifest, PackageInfo, LOCK_FILE,
 };
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -61,6 +61,8 @@ pub(crate) fn add_dependency(
     branch: Option<String>,
     tag: Option<String>,
 ) -> Result<(), String> {
+    validate_dependency_name(name)?;
+
     if git.is_some() == path.is_some() {
         return Err("Укажите ровно один источник зависимости: --git или --path".into());
     }
@@ -82,6 +84,12 @@ pub(crate) fn add_dependency(
     let manifest_path = root.join(MANIFEST_FILE);
     let previous_manifest = fs::read_to_string(&manifest_path)
         .map_err(|err| format!("Failed to read '{}': {err}", manifest_path.display()))?;
+    let lock_path = root.join(LOCK_FILE);
+    let previous_lock = match fs::read_to_string(&lock_path) {
+        Ok(content) => Some(content),
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => None,
+        Err(err) => return Err(format!("Failed to read '{}': {err}", lock_path.display())),
+    };
     let mut manifest = read_manifest(&root)?;
     let dependency = Dependency {
         git,
@@ -99,6 +107,24 @@ pub(crate) fn add_dependency(
                 manifest_path.display()
             )
         })?;
+        match previous_lock {
+            Some(content) => fs::write(&lock_path, content).map_err(|restore_error| {
+                format!(
+                    "{error}; additionally failed to restore '{}': {restore_error}",
+                    lock_path.display()
+                )
+            })?,
+            None => {
+                if let Err(restore_error) = fs::remove_file(&lock_path) {
+                    if restore_error.kind() != std::io::ErrorKind::NotFound {
+                        return Err(format!(
+                            "{error}; additionally failed to remove '{}': {restore_error}",
+                            lock_path.display()
+                        ));
+                    }
+                }
+            }
+        }
         return Err(error);
     }
 
@@ -169,6 +195,8 @@ fn sync_manifest_dependencies(
     resolving: &mut BTreeSet<String>,
 ) -> Result<(), String> {
     for (name, dependency) in &manifest.dependencies {
+        validate_dependency_name(name)?;
+
         let identity = dependency_identity(manifest_root, dependency)?;
         if let Some(existing) = sources.get(name) {
             if existing != &identity {
@@ -248,6 +276,8 @@ pub(crate) fn build_project() -> Result<(), String> {
 }
 
 pub(crate) fn remove_dependency(name: &str) -> Result<(), String> {
+    validate_dependency_name(name)?;
+
     let root = std::env::current_dir().map_err(|err| format!("Не удалось получить cwd: {err}"))?;
     let mut manifest = read_manifest(&root)?;
     if manifest.dependencies.remove(name).is_none() {
@@ -369,7 +399,13 @@ fn build_package(root: &Path, manifest: &Manifest) -> Result<Vec<String>, String
         installed.push(
             destination
                 .strip_prefix(root)
-                .expect("validated package path")
+                .map_err(|err| {
+                    format!(
+                        "Failed to make artifact path '{}' relative to '{}': {err}",
+                        destination.display(),
+                        root.display()
+                    )
+                })?
                 .to_string_lossy()
                 .replace('\\', "/"),
         );
@@ -760,4 +796,16 @@ fn ensure_inside(root: &Path, child: &Path) -> Result<(), String> {
 
 fn is_full_git_sha(value: &str) -> bool {
     value.len() == 40 && value.chars().all(|ch| ch.is_ascii_hexdigit())
+}
+
+fn validate_dependency_name(name: &str) -> Result<(), String> {
+    if name.is_empty() || name.starts_with('-') {
+        return Err(format!("Некорректное имя зависимости '{name}'"));
+    }
+
+    let mut components = Path::new(name).components();
+    match (components.next(), components.next()) {
+        (Some(Component::Normal(component)), None) if component == name => Ok(()),
+        _ => Err(format!("Некорректное имя зависимости '{name}'")),
+    }
 }
